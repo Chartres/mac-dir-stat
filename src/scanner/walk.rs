@@ -7,6 +7,21 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+/// Paths to skip when scanning from `/` to avoid APFS firmlink double-counting.
+/// `/System/Volumes/Data` is a firmlink to the data volume (already merged into `/`).
+/// `/Volumes/Macintosh HD` (and variants) are firmlinks back to the root.
+fn should_skip(path: &Path, scan_root: &Path) -> bool {
+    // Always skip /System/Volumes — contains firmlinks that duplicate the entire fs
+    if path.starts_with("/System/Volumes") {
+        return true;
+    }
+    // When scanning from /, skip /Volumes entries (mount points / firmlinks to root)
+    if scan_root == Path::new("/") && path.starts_with("/Volumes") {
+        return true;
+    }
+    false
+}
+
 pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut tree = FileTree::new();
     tree.node_mut(tree.root()).name = OsString::from(root.to_string_lossy().as_ref());
@@ -19,7 +34,7 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut byte_count: u64 = 0;
     let mut progress_counter: usize = 0;
 
-    for entry in WalkDir::new(&root).skip_hidden(false).sort(true) {
+    for entry in WalkDir::new(&root).skip_hidden(false).sort(true).follow_links(false) {
         let entry = match entry {
             Ok(e) => e,
             Err(_) => continue,
@@ -28,6 +43,11 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
         let path = entry.path();
 
         if path == root {
+            continue;
+        }
+
+        // Skip APFS firmlink paths that cause double-counting
+        if should_skip(&path, &root) {
             continue;
         }
 
