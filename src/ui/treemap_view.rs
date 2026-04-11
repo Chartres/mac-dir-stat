@@ -120,13 +120,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
     for cr in &state.colored_rects {
         let rect = Rect::from_min_size(
             Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
-            Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
+            Vec2::new((cr.rect.w as f32).max(0.5), (cr.rect.h as f32).max(0.5)),
         );
-        if rect.width() < 0.5 || rect.height() < 0.5 {
-            continue;
-        }
 
-        let is_hovered = pointer_pos.map_or(false, |p| rect.contains(p));
+        let is_large = rect.width() > 3.0 && rect.height() > 3.0;
+        let is_hovered = is_large && pointer_pos.map_or(false, |p| rect.contains(p));
         let is_selected = state.selected_node == Some(cr.node_id);
 
         let is_ext_highlighted = if let Some(ref sel_ext) = state.selected_extension {
@@ -165,6 +163,13 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             cr.color_start[2],
             alpha,
         );
+
+        // For tiny rects, just fill with solid color (no gradient/overlay/label overhead)
+        if !is_large {
+            painter.rect_filled(rect, 0.0, c_start);
+            continue;
+        }
+
         let c_end = Color32::from_rgba_unmultiplied(
             cr.color_end[0],
             cr.color_end[1],
@@ -184,7 +189,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         painter.add(egui::Shape::mesh(mesh));
 
         // Light overlay for depth
-        if rect.width() > 4.0 && rect.height() > 4.0 {
+        if rect.width() > 6.0 && rect.height() > 6.0 {
             let overlay_rect = Rect::from_min_size(
                 Pos2::new(rect.right() - rect.width() * 0.4, rect.top()),
                 Vec2::new(rect.width() * 0.4, rect.height() * 0.5),

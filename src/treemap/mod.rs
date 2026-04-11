@@ -33,7 +33,7 @@ fn layout_recursive(
     hue_index: usize,
     result: &mut Vec<ColoredRect>,
 ) {
-    if bounds.w < 1.0 || bounds.h < 1.0 {
+    if bounds.w <= 0.0 || bounds.h <= 0.0 {
         return;
     }
     let node = tree.node(node_id);
@@ -90,7 +90,7 @@ fn layout_recursive(
                     child_bounds.w -= gap * 2.0;
                     child_bounds.h -= gap * 2.0;
                 }
-                if child_bounds.w < 0.5 || child_bounds.h < 0.5 {
+                if child_bounds.w <= 0.0 || child_bounds.h <= 0.0 {
                     continue;
                 }
                 let child_hue = if tree.node(child_id).depth <= 1 {
