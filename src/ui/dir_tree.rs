@@ -1,4 +1,147 @@
-use egui::Ui;
 use crate::app::AppState;
+use crate::scanner::tree::{NodeId, NodeKind};
+use crate::ui::theme;
+use egui::{Ui, Vec2};
 
-pub fn show(_ui: &mut Ui, _state: &mut AppState) {}
+pub fn show(ui: &mut Ui, state: &mut AppState) {
+    ui.vertical(|ui| {
+        ui.label(
+            egui::RichText::new("DIRECTORY TREE")
+                .color(theme::SECTION_HEADER)
+                .size(9.0)
+                .strong(),
+        );
+        ui.add_space(4.0);
+
+        let tree = match &state.tree {
+            Some(t) => t,
+            None => {
+                if state.scan_progress.scanning {
+                    ui.spinner();
+                    ui.label(egui::RichText::new("Scanning...").color(theme::TEXT_MUTED));
+                }
+                return;
+            }
+        };
+
+        let root = tree.root();
+        let root_size = tree.node(root).size;
+
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                show_node(ui, state, root, root_size);
+            });
+    });
+}
+
+fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
+    let tree = match &state.tree {
+        Some(t) => t,
+        None => return,
+    };
+
+    let node = tree.node(id);
+    if !tree.is_alive(id) {
+        return;
+    }
+
+    let (children, expanded) = match &node.kind {
+        NodeKind::Directory { children, expanded } => (children.clone(), *expanded),
+        NodeKind::File { .. } => return,
+    };
+
+    let is_selected = state.selected_node == Some(id);
+    let name = node.name.to_string_lossy().to_string();
+    let size = node.size;
+    let depth = node.depth;
+
+    let indent = depth as f32 * 16.0;
+    let has_children = !children.is_empty();
+
+    // Use a unique ID for the row to make it clickable
+    let row_id = ui.make_persistent_id(("dir_row", id));
+
+    let row_response = ui.horizontal(|ui| {
+        ui.add_space(indent);
+
+        if has_children {
+            let arrow = if expanded { "▼" } else { "▶" };
+            let arrow_resp = ui.add(
+                egui::Label::new(
+                    egui::RichText::new(arrow).color(theme::TEXT_MUTED).size(10.0),
+                )
+                .sense(egui::Sense::click()),
+            );
+            if arrow_resp.clicked() {
+                if let Some(tree) = &mut state.tree {
+                    if let NodeKind::Directory { expanded: ref mut exp, .. } =
+                        tree.node_mut(id).kind
+                    {
+                        *exp = !*exp;
+                    }
+                }
+                return;
+            }
+        } else {
+            ui.add_space(14.0);
+        }
+
+        ui.label(egui::RichText::new("📁").color(theme::ACCENT_LIGHT).size(12.0));
+
+        let name_color = if is_selected { theme::ACCENT_LIGHT } else { theme::TEXT_PRIMARY };
+        ui.label(egui::RichText::new(&name).color(name_color).size(12.0));
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if root_size > 0 {
+                let fraction = size as f32 / root_size as f32;
+                let bar_width = 50.0;
+                let (bar_rect, _) =
+                    ui.allocate_exact_size(Vec2::new(bar_width, 4.0), egui::Sense::hover());
+                ui.painter().rect_filled(bar_rect, 2.0, theme::BAR_BG);
+                let filled = egui::Rect::from_min_size(
+                    bar_rect.left_top(),
+                    Vec2::new(bar_width * fraction, 4.0),
+                );
+                ui.painter().rect_filled(filled, 2.0, theme::ACCENT);
+            }
+            ui.label(
+                egui::RichText::new(theme::format_size(size))
+                    .color(theme::TEXT_MUTED)
+                    .size(10.0),
+            );
+        });
+    });
+
+    // Handle row interaction
+    let row_rect = row_response.response.rect;
+    let row_sense = ui.interact(row_rect, row_id, egui::Sense::click());
+
+    // Draw selection background
+    if is_selected {
+        ui.painter().rect_filled(row_rect, 4.0, theme::BG_SELECTION);
+    }
+
+    if row_sense.clicked() {
+        state.selected_node = Some(id);
+        state.selected_extension = None;
+    }
+    if row_sense.double_clicked() {
+        state.view_root = Some(id);
+        state.zoom_stack.push(id);
+        state.treemap_dirty = true;
+    }
+
+    // Show children if expanded
+    if expanded {
+        let tree = match &state.tree {
+            Some(t) => t,
+            None => return,
+        };
+        let mut sorted_children = children;
+        sorted_children.sort_by(|&a, &b| tree.node(b).size.cmp(&tree.node(a).size));
+        for child_id in sorted_children {
+            show_node(ui, state, child_id, root_size);
+        }
+    }
+}
