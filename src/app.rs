@@ -142,6 +142,31 @@ impl App {
             }
         }
     }
+
+    fn perform_delete(&mut self, node_id: NodeId) {
+        if let Some(tree) = &self.state.tree {
+            let path = tree.full_path(node_id);
+            match crate::platform::trash::move_to_trash(&path) {
+                Ok(()) => {
+                    if let Some(tree) = &mut self.state.tree {
+                        tree.remove_node(node_id);
+                        let root = tree.root();
+                        self.state.extension_stats = tree.collect_extensions(root);
+                    }
+                    if self.state.selected_node == Some(node_id) {
+                        self.state.selected_node = None;
+                    }
+                    if self.state.hovered_node == Some(node_id) {
+                        self.state.hovered_node = None;
+                    }
+                    self.state.treemap_dirty = true;
+                }
+                Err(e) => {
+                    eprintln!("Delete failed: {}", e);
+                }
+            }
+        }
+    }
 }
 
 impl AppState {
@@ -178,6 +203,53 @@ impl eframe::App for App {
         if (current_size - self.state.last_screen_size).length() > 1.0 {
             self.state.treemap_dirty = true;
             self.state.last_screen_size = current_size;
+        }
+
+        // Keyboard shortcuts
+        if ctx.input(|i| i.key_pressed(egui::Key::R) && i.modifiers.command) {
+            self.state.request_rescan = true;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::O) && i.modifiers.command) {
+            if let Some(path) = crate::platform::dialogs::pick_folder(&self.state.scan_root) {
+                self.state.scan_root = path;
+                self.state.request_rescan = true;
+            }
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::F) && i.modifiers.command) {
+            self.state.search_active = !self.state.search_active;
+            if !self.state.search_active {
+                self.state.search_query.clear();
+            }
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command) {
+            if let Some(node_id) = self.state.selected_node {
+                if let Some(tree) = &self.state.tree {
+                    let name = tree.node(node_id).name.to_string_lossy().to_string();
+                    let size = tree.node(node_id).size;
+                    self.state.pending_action = Some(PendingAction::ConfirmTrash(node_id, name, size));
+                }
+            }
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+            if let Some(node_id) = self.state.selected_node {
+                if let Some(tree) = &self.state.tree {
+                    let path = tree.full_path(node_id);
+                    crate::platform::finder::reveal_in_finder(&path);
+                }
+            }
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            if self.state.search_active {
+                self.state.search_active = false;
+                self.state.search_query.clear();
+            } else if self.state.zoom_stack.len() > 1 {
+                self.state.zoom_stack.pop();
+                self.state.view_root = self.state.zoom_stack.last().copied();
+                self.state.treemap_dirty = true;
+            } else {
+                self.state.selected_node = None;
+                self.state.selected_extension = None;
+            }
         }
 
         if self.state.scan_progress.scanning {
@@ -263,5 +335,47 @@ impl eframe::App for App {
             }
             ui::treemap_view::show(ui, &mut self.state);
         });
+
+        // Handle pending actions
+        let mut action_to_process: Option<Option<NodeId>> = None;
+        if let Some(action) = &self.state.pending_action {
+            match action {
+                PendingAction::ConfirmTrash(node_id, name, size) => {
+                    let node_id = *node_id;
+                    let name = name.clone();
+                    let size = *size;
+                    egui::Window::new("Confirm Delete")
+                        .collapsible(false)
+                        .resizable(false)
+                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                        .show(ctx, |ui| {
+                            ui.label(format!(
+                                "Move \"{}\" ({}) to Trash?",
+                                name,
+                                ui::theme::format_size(size),
+                            ));
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                if ui.add(egui::Button::new("Cancel").fill(ui::theme::BUTTON_BG)).clicked() {
+                                    action_to_process = Some(None);
+                                }
+                                if ui.add(
+                                    egui::Button::new(egui::RichText::new("Move to Trash").color(egui::Color32::WHITE))
+                                        .fill(egui::Color32::from_rgb(220, 38, 38)),
+                                ).clicked() {
+                                    action_to_process = Some(Some(node_id));
+                                }
+                            });
+                        });
+                }
+                _ => {}
+            }
+        }
+        if let Some(result) = action_to_process {
+            self.state.pending_action = None;
+            if let Some(node_id) = result {
+                self.perform_delete(node_id);
+            }
+        }
     }
 }
