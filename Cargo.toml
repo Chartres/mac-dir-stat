@@ -1,0 +1,16 @@
+[package]
+name = "mac-dir-stat"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.31"
+egui = "0.31"
+jwalk = "0.8"
+crossbeam-channel = "0.5"
+trash = "5"
+rfd = "0.15"
+
+[profile.release]
+opt-level = 3
+lto = true
