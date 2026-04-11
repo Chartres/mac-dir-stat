@@ -7,6 +7,23 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+/// Get total and available bytes for the volume containing `path`.
+fn volume_space(path: &Path) -> Option<(u64, u64)> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    unsafe {
+        let mut stat: libc::statvfs = std::mem::zeroed();
+        if libc::statvfs(c_path.as_ptr(), &mut stat) == 0 {
+            let total = stat.f_blocks as u64 * stat.f_frsize as u64;
+            let avail = stat.f_bavail as u64 * stat.f_frsize as u64;
+            Some((total, avail))
+        } else {
+            None
+        }
+    }
+}
+
 /// Paths to skip when scanning from `/` to avoid APFS firmlink double-counting.
 /// `/System/Volumes/Data` is a firmlink to the data volume (already merged into `/`).
 /// `/Volumes/Macintosh HD` (and variants) are firmlinks back to the root.
@@ -121,6 +138,28 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     }
 
     tree.compute_sizes();
+
+    // Add a "Free Space" node if we can determine volume size
+    if let Some((total, avail)) = volume_space(&root) {
+        let used = tree.node(tree.root()).size;
+        // Free space = total - used (or avail if used > total due to skipped paths)
+        let free = if used < total { total - used } else { avail };
+        if free > 0 {
+            tree.add_node(
+                tree.root(),
+                OsString::from("<Free Space>"),
+                free,
+                NodeKind::File {
+                    extension: Some("__free_space__".to_string()),
+                },
+                SystemTime::now(),
+                1,
+            );
+            // Recompute root size to include free space
+            tree.compute_sizes();
+        }
+    }
+
     let _ = tx.send(ScanProgress::Done(tree));
 }
 

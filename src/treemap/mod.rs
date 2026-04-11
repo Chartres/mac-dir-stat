@@ -77,15 +77,19 @@ fn layout_recursive(
                 })
                 .collect();
             let placed = layout(&items, bounds);
-            let gap = 1.0;
+            // Only add gaps at shallow depths to avoid blank space from accumulation
+            let depth = node.depth;
+            let gap = if depth <= 1 { 1.5 } else if depth <= 3 { 0.5 } else { 0.0 };
 
             for p in &placed {
                 let child_id = kids[p.id];
                 let mut child_bounds = p.rect;
-                child_bounds.x += gap;
-                child_bounds.y += gap;
-                child_bounds.w -= gap * 2.0;
-                child_bounds.h -= gap * 2.0;
+                if gap > 0.0 {
+                    child_bounds.x += gap;
+                    child_bounds.y += gap;
+                    child_bounds.w -= gap * 2.0;
+                    child_bounds.h -= gap * 2.0;
+                }
                 if child_bounds.w < 0.5 || child_bounds.h < 0.5 {
                     continue;
                 }
