@@ -1,8 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-pub mod scanner;
-pub mod app;
-
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -14,6 +11,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "mac-dir-stat",
         options,
-        Box::new(|_cc| Ok(Box::new(app::App::new()))),
+        Box::new(|_cc| Ok(Box::new(mac_dir_stat::app::App::new()))),
     )
 }
