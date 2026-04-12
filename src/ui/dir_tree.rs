@@ -61,12 +61,12 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
 
     // Use Frame to draw selection background BEHIND content
     let frame = if is_selected {
-        egui::Frame::none()
+        egui::Frame::new()
             .fill(theme::BG_SELECTION)
             .inner_margin(egui::Margin::symmetric(2, 1))
-            .rounding(4.0)
+            .corner_radius(4.0)
     } else {
-        egui::Frame::none().inner_margin(egui::Margin::symmetric(2, 1))
+        egui::Frame::new().inner_margin(egui::Margin::symmetric(2, 1))
     };
 
     let frame_response = frame.show(ui, |ui| {
