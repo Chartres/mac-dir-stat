@@ -13,16 +13,30 @@ pub struct ColoredRect {
     pub color_end: Color,
 }
 
+/// Bounding rectangle for a directory in the treemap.
+#[derive(Debug, Clone)]
+pub struct DirRect {
+    pub node_id: NodeId,
+    pub rect: Rect,
+    pub depth: u16,
+}
+
+pub struct TreemapLayout {
+    pub file_rects: Vec<ColoredRect>,
+    pub dir_rects: Vec<DirRect>,
+}
+
 /// Compute the full treemap layout with colors for all files under view_root.
 pub fn compute_treemap(
     tree: &FileTree,
     view_root: NodeId,
     bounds: Rect,
     color_mode: ColorMode,
-) -> Vec<ColoredRect> {
-    let mut result = Vec::new();
-    layout_recursive(tree, view_root, &bounds, color_mode, 0, &mut result);
-    result
+) -> TreemapLayout {
+    let mut file_rects = Vec::new();
+    let mut dir_rects = Vec::new();
+    layout_recursive(tree, view_root, &bounds, color_mode, 0, &mut file_rects, &mut dir_rects);
+    TreemapLayout { file_rects, dir_rects }
 }
 
 fn layout_recursive(
@@ -31,7 +45,8 @@ fn layout_recursive(
     bounds: &Rect,
     color_mode: ColorMode,
     hue_index: usize,
-    result: &mut Vec<ColoredRect>,
+    file_rects: &mut Vec<ColoredRect>,
+    dir_rects: &mut Vec<DirRect>,
 ) {
     if bounds.w <= 0.0 || bounds.h <= 0.0 {
         return;
@@ -50,7 +65,7 @@ fn layout_recursive(
                 ColorMode::Depth => depth_color(hue_index, node.depth),
                 ColorMode::Age => age_color(node.modified),
             };
-            result.push(ColoredRect {
+            file_rects.push(ColoredRect {
                 node_id,
                 rect: *bounds,
                 color_start: cs,
@@ -58,6 +73,13 @@ fn layout_recursive(
             });
         }
         NodeKind::Directory { children, .. } => {
+            // Store this directory's bounding rect
+            dir_rects.push(DirRect {
+                node_id,
+                rect: *bounds,
+                depth: node.depth,
+            });
+
             let mut kids: Vec<NodeId> = children
                 .iter()
                 .copied()
@@ -77,7 +99,6 @@ fn layout_recursive(
                 })
                 .collect();
             let placed = layout(&items, bounds);
-            // Only add gaps at shallow depths to avoid blank space from accumulation
             let depth = node.depth;
             let gap = if depth <= 1 { 1.5 } else if depth <= 3 { 0.5 } else { 0.0 };
 
@@ -104,7 +125,8 @@ fn layout_recursive(
                     &child_bounds,
                     color_mode,
                     child_hue,
-                    result,
+                    file_rects,
+                    dir_rects,
                 );
             }
         }

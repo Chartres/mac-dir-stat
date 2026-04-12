@@ -1,7 +1,7 @@
 use crate::scanner::tree::{FileTree, NodeId, NodeKind};
 use crate::scanner::ScanProgress;
 use crate::treemap::color::ColorMode;
-use crate::treemap::ColoredRect;
+use crate::treemap::{ColoredRect, DirRect};
 use crate::ui;
 use crossbeam_channel::Receiver;
 use std::path::PathBuf;
@@ -26,6 +26,7 @@ pub struct AppState {
 
     // Treemap
     pub colored_rects: Vec<ColoredRect>,
+    pub dir_rects: Vec<DirRect>,
     pub treemap_dirty: bool,
     pub color_mode: ColorMode,
     pub view_root: Option<NodeId>,
@@ -35,6 +36,7 @@ pub struct AppState {
     pub selected_node: Option<NodeId>,
     pub hovered_node: Option<NodeId>,
     pub selected_extension: Option<String>,
+    pub hovered_dir: Option<NodeId>, // deepest directory region under cursor
 
     // Search
     pub search_active: bool,
@@ -76,12 +78,14 @@ impl App {
                 scan_duration_secs: 0.0,
                 extension_stats: vec![],
                 colored_rects: vec![],
+                dir_rects: vec![],
                 treemap_dirty: true,
                 color_mode: ColorMode::Extension,
                 view_root: None,
                 zoom_stack: vec![],
                 selected_node: None,
                 hovered_node: None,
+                hovered_dir: None,
                 selected_extension: None,
                 search_active: false,
                 search_query: String::new(),
@@ -105,6 +109,7 @@ impl App {
         self.state.scan_start = Some(Instant::now());
         self.state.tree = None;
         self.state.colored_rects.clear();
+        self.state.dir_rects.clear();
         self.state.extension_stats.clear();
         self.state.selected_node = None;
         self.state.hovered_node = None;
@@ -291,13 +296,19 @@ impl eframe::App for App {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if let (Some(tree), Some(hovered)) = (&self.state.tree, self.state.hovered_node) {
-                        if tree.is_alive(hovered) {
-                            let path = tree.full_path(hovered);
-                            let node = tree.node(hovered);
+                    if let Some(tree) = &self.state.tree {
+                        // Show hovered file if any, otherwise show hovered directory region
+                        let show_node = self.state.hovered_node
+                            .filter(|&id| tree.is_alive(id))
+                            .or(self.state.hovered_dir.filter(|&id| tree.is_alive(id)));
+                        if let Some(id) = show_node {
+                            let path = tree.full_path(id);
+                            let node = tree.node(id);
+                            let prefix = if self.state.hovered_node.is_some() { "" } else { "📁 " };
                             ui.label(
                                 egui::RichText::new(format!(
-                                    "{}  •  {}",
+                                    "{}{}  •  {}",
+                                    prefix,
                                     path.display(),
                                     ui::theme::format_size(node.size),
                                 ))

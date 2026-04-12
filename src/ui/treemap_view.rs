@@ -54,8 +54,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 w: canvas_rect.width() as f64,
                 h: canvas_rect.height() as f64,
             };
-            state.colored_rects =
-                treemap::compute_treemap(tree, view_root, bounds, state.color_mode);
+            let layout = treemap::compute_treemap(tree, view_root, bounds, state.color_mode);
+            state.colored_rects = layout.file_rects;
+            state.dir_rects = layout.dir_rects;
             state.treemap_dirty = false;
         }
     }
@@ -205,7 +206,64 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
     // Add entire mesh as one shape
     painter.add(egui::Shape::mesh(mesh));
 
-    // Draw hover/selection effects on top (only for specific rects, not batched)
+    // Draw subtle borders on shallow directory regions (depth 1-2) for orientation
+    for dr in &state.dir_rects {
+        if dr.depth >= 3 || dr.rect.w < 10.0 || dr.rect.h < 10.0 {
+            continue;
+        }
+        let rect = Rect::from_min_size(
+            Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
+            Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
+        );
+        let alpha = if dr.depth <= 1 { 40 } else { 20 };
+        painter.rect_stroke(
+            rect,
+            0.0,
+            egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, alpha)),
+            StrokeKind::Inside,
+        );
+    }
+
+    // Hover: highlight the containing directory regions (depth 1-3) and track deepest dir
+    state.hovered_dir = None;
+    if let Some(pos) = pointer_pos {
+        // Find deepest dir containing pointer (for status bar)
+        let mut best_depth = 0u16;
+        for dr in &state.dir_rects {
+            if dr.depth == 0 { continue; }
+            let rect = Rect::from_min_size(
+                Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
+                Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
+            );
+            if rect.contains(pos) && dr.depth > best_depth {
+                best_depth = dr.depth;
+                state.hovered_dir = Some(dr.node_id);
+            }
+        }
+        for dr in &state.dir_rects {
+            if dr.depth == 0 || dr.depth > 3 {
+                continue;
+            }
+            let rect = Rect::from_min_size(
+                Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
+                Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
+            );
+            if rect.contains(pos) && rect.width() > 5.0 && rect.height() > 5.0 {
+                let alpha = if dr.depth == 1 { 50 } else { 30 };
+                painter.rect_stroke(
+                    rect,
+                    0.0,
+                    egui::Stroke::new(
+                        if dr.depth == 1 { 2.0 } else { 1.0 },
+                        Color32::from_rgba_unmultiplied(167, 139, 250, alpha),
+                    ),
+                    StrokeKind::Inside,
+                );
+            }
+        }
+    }
+
+    // Hovered file highlight
     if let Some(hovered_id) = state.hovered_node {
         for cr in &state.colored_rects {
             if cr.node_id == hovered_id {
@@ -233,20 +291,48 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         }
     }
 
+    // Selected node highlight — works for both files AND directories
     if let Some(selected_id) = state.selected_node {
-        for cr in &state.colored_rects {
-            if cr.node_id == selected_id {
+        // First check if it's a directory (selected from tree panel)
+        let mut found = false;
+        for dr in &state.dir_rects {
+            if dr.node_id == selected_id {
                 let rect = Rect::from_min_size(
-                    Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
-                    Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
+                    Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
+                    Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
                 );
                 painter.rect_stroke(
                     rect,
-                    2.0,
-                    egui::Stroke::new(2.0, theme::ACCENT_LIGHT),
-                    StrokeKind::Outside,
+                    0.0,
+                    egui::Stroke::new(2.5, theme::ACCENT_LIGHT),
+                    StrokeKind::Inside,
                 );
+                // Subtle fill overlay to make the region stand out
+                painter.rect_filled(
+                    rect,
+                    0.0,
+                    Color32::from_rgba_unmultiplied(167, 139, 250, 15),
+                );
+                found = true;
                 break;
+            }
+        }
+        // If not a directory, check files
+        if !found {
+            for cr in &state.colored_rects {
+                if cr.node_id == selected_id {
+                    let rect = Rect::from_min_size(
+                        Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
+                        Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
+                    );
+                    painter.rect_stroke(
+                        rect,
+                        2.0,
+                        egui::Stroke::new(2.0, theme::ACCENT_LIGHT),
+                        StrokeKind::Outside,
+                    );
+                    break;
+                }
             }
         }
     }
