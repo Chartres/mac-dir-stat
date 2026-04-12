@@ -41,10 +41,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         }
     }
 
-    let (response, painter) = ui.allocate_painter(
-        ui.available_size(),
-        egui::Sense::click_and_drag(),
-    );
+    let (response, painter) =
+        ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
     let canvas_rect = response.rect;
 
     // Recompute if dirty
@@ -93,7 +91,6 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 egui::FontId::proportional(14.0),
                 theme::TEXT_SECONDARY,
             );
-            // Animated bar
             let bar_width = 200.0;
             let bar_rect = Rect::from_min_size(
                 Pos2::new(center.x - bar_width / 2.0, center.y + 35.0),
@@ -117,45 +114,57 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
     let pointer_pos = response.hover_pos();
     state.hovered_node = None;
 
+    // Pre-compute filter state once (not per-rect)
+    let search_active = state.search_active && !state.search_query.is_empty();
+    let search_query_lower = if search_active {
+        Some(state.search_query.to_lowercase())
+    } else {
+        None
+    };
+
+    // Batch all rects into a single mesh for performance
+    let mut mesh = egui::Mesh::default();
+
     for cr in &state.colored_rects {
+        let w = (cr.rect.w as f32).max(0.5);
+        let h = (cr.rect.h as f32).max(0.5);
         let rect = Rect::from_min_size(
             Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
-            Vec2::new((cr.rect.w as f32).max(0.5), (cr.rect.h as f32).max(0.5)),
+            Vec2::new(w, h),
         );
 
-        let is_large = rect.width() > 3.0 && rect.height() > 3.0;
-        let is_hovered = is_large && pointer_pos.map_or(false, |p| rect.contains(p));
-        let is_selected = state.selected_node == Some(cr.node_id);
+        let is_large = w > 3.0 && h > 3.0;
 
-        let is_ext_highlighted = if let Some(ref sel_ext) = state.selected_extension {
+        // Hover detection only for visible-sized rects
+        if is_large && state.hovered_node.is_none() {
+            if pointer_pos.map_or(false, |p| rect.contains(p)) {
+                state.hovered_node = Some(cr.node_id);
+            }
+        }
+
+        // Compute alpha for filtering
+        let dimmed = if let Some(ref sel_ext) = state.selected_extension {
             if let Some(tree) = &state.tree {
-                tree.node(cr.node_id).extension() == Some(sel_ext.as_str())
+                tree.node(cr.node_id).extension() != Some(sel_ext.as_str())
             } else {
                 false
             }
         } else {
-            true
+            false
         };
 
-        let is_search_match = if state.search_active && !state.search_query.is_empty() {
+        let search_dimmed = if let Some(ref query) = search_query_lower {
             if let Some(tree) = &state.tree {
                 let name = tree.node(cr.node_id).name.to_string_lossy();
-                name.to_lowercase()
-                    .contains(&state.search_query.to_lowercase())
+                !name.to_lowercase().contains(query.as_str())
             } else {
-                true
+                false
             }
         } else {
-            true
+            false
         };
 
-        let alpha = if (!is_ext_highlighted && state.selected_extension.is_some())
-            || !is_search_match
-        {
-            40
-        } else {
-            255
-        };
+        let alpha: u8 = if dimmed || search_dimmed { 40 } else { 255 };
 
         let c_start = Color32::from_rgba_unmultiplied(
             cr.color_start[0],
@@ -164,9 +173,15 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             alpha,
         );
 
-        // For tiny rects, just fill with solid color (no gradient/overlay/label overhead)
         if !is_large {
-            painter.rect_filled(rect, 0.0, c_start);
+            // Tiny rect: 2 triangles, solid color
+            let base = mesh.vertices.len() as u32;
+            mesh.colored_vertex(rect.left_top(), c_start);
+            mesh.colored_vertex(rect.right_top(), c_start);
+            mesh.colored_vertex(rect.right_bottom(), c_start);
+            mesh.colored_vertex(rect.left_bottom(), c_start);
+            mesh.add_triangle(base, base + 1, base + 2);
+            mesh.add_triangle(base, base + 2, base + 3);
             continue;
         }
 
@@ -176,80 +191,95 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             cr.color_end[2],
             alpha,
         );
-
-        // Gradient mesh
-        let mut mesh = egui::Mesh::default();
         let c_mid = lerp_color(&c_start, &c_end, 0.5);
+
+        let base = mesh.vertices.len() as u32;
         mesh.colored_vertex(rect.left_top(), c_start);
         mesh.colored_vertex(rect.right_top(), c_mid);
         mesh.colored_vertex(rect.right_bottom(), c_end);
         mesh.colored_vertex(rect.left_bottom(), c_mid);
-        mesh.add_triangle(0, 1, 2);
-        mesh.add_triangle(0, 2, 3);
-        painter.add(egui::Shape::mesh(mesh));
+        mesh.add_triangle(base, base + 1, base + 2);
+        mesh.add_triangle(base, base + 2, base + 3);
+    }
 
-        // Light overlay for depth
-        if rect.width() > 6.0 && rect.height() > 6.0 {
-            let overlay_rect = Rect::from_min_size(
-                Pos2::new(rect.right() - rect.width() * 0.4, rect.top()),
-                Vec2::new(rect.width() * 0.4, rect.height() * 0.5),
-            );
-            painter.rect_filled(
-                overlay_rect,
-                0.0,
-                Color32::from_rgba_unmultiplied(255, 255, 255, 8),
-            );
+    // Add entire mesh as one shape
+    painter.add(egui::Shape::mesh(mesh));
+
+    // Draw hover/selection effects on top (only for specific rects, not batched)
+    if let Some(hovered_id) = state.hovered_node {
+        for cr in &state.colored_rects {
+            if cr.node_id == hovered_id {
+                let rect = Rect::from_min_size(
+                    Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
+                    Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
+                );
+                painter.rect_stroke(
+                    rect,
+                    2.0,
+                    egui::Stroke::new(2.0, Color32::WHITE),
+                    StrokeKind::Outside,
+                );
+                painter.rect_stroke(
+                    rect.expand(2.0),
+                    3.0,
+                    egui::Stroke::new(
+                        1.0,
+                        Color32::from_rgba_unmultiplied(167, 139, 250, 100),
+                    ),
+                    StrokeKind::Outside,
+                );
+                break;
+            }
         }
+    }
 
-        if is_hovered {
-            state.hovered_node = Some(cr.node_id);
-            painter.rect_stroke(
-                rect,
-                2.0,
-                egui::Stroke::new(2.0, Color32::WHITE),
-                StrokeKind::Outside,
-            );
-            painter.rect_stroke(
-                rect.expand(2.0),
-                3.0,
-                egui::Stroke::new(
-                    1.0,
-                    Color32::from_rgba_unmultiplied(167, 139, 250, 100),
-                ),
-                StrokeKind::Outside,
-            );
+    if let Some(selected_id) = state.selected_node {
+        for cr in &state.colored_rects {
+            if cr.node_id == selected_id {
+                let rect = Rect::from_min_size(
+                    Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
+                    Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
+                );
+                painter.rect_stroke(
+                    rect,
+                    2.0,
+                    egui::Stroke::new(2.0, theme::ACCENT_LIGHT),
+                    StrokeKind::Outside,
+                );
+                break;
+            }
         }
+    }
 
-        if is_selected {
-            painter.rect_stroke(
-                rect,
-                2.0,
-                egui::Stroke::new(2.0, theme::ACCENT_LIGHT),
-                StrokeKind::Outside,
-            );
-        }
-
-        // Labels
-        if rect.width() > 40.0 && rect.height() > 16.0 {
+    // Labels drawn separately (on top of the mesh)
+    for cr in &state.colored_rects {
+        let w = cr.rect.w as f32;
+        let h = cr.rect.h as f32;
+        if w > 40.0 && h > 16.0 {
             if let Some(tree) = &state.tree {
                 let node = tree.node(cr.node_id);
                 let name = node.name.to_string_lossy();
-                let max_chars = (rect.width() / 7.0) as usize;
+                let max_chars = (w / 7.0) as usize;
                 let display_name = if name.len() > max_chars && max_chars > 3 {
-                    format!("{}...", &name[..max_chars.min(name.len()).saturating_sub(3)])
+                    format!(
+                        "{}...",
+                        &name[..max_chars.min(name.len()).saturating_sub(3)]
+                    )
                 } else {
                     name.to_string()
                 };
+                let x = cr.rect.x as f32 + 3.0;
+                let y = cr.rect.y as f32 + 2.0;
                 painter.text(
-                    Pos2::new(rect.left() + 3.0, rect.top() + 2.0),
+                    Pos2::new(x, y),
                     egui::Align2::LEFT_TOP,
                     &display_name,
                     egui::FontId::proportional(10.0),
                     Color32::from_rgba_unmultiplied(255, 255, 255, 220),
                 );
-                if rect.height() > 28.0 {
+                if h > 28.0 {
                     painter.text(
-                        Pos2::new(rect.left() + 3.0, rect.top() + 14.0),
+                        Pos2::new(x, y + 12.0),
                         egui::Align2::LEFT_TOP,
                         theme::format_size(node.size),
                         egui::FontId::proportional(9.0),

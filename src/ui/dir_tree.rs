@@ -59,74 +59,82 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
     let indent = depth as f32 * 16.0;
     let has_children = !children.is_empty();
 
-    // Use a unique ID for the row to make it clickable
-    let row_id = ui.make_persistent_id(("dir_row", id));
+    // Use Frame to draw selection background BEHIND content
+    let frame = if is_selected {
+        egui::Frame::none()
+            .fill(theme::BG_SELECTION)
+            .inner_margin(egui::Margin::symmetric(2, 1))
+            .rounding(4.0)
+    } else {
+        egui::Frame::none().inner_margin(egui::Margin::symmetric(2, 1))
+    };
 
-    let row_response = ui.horizontal(|ui| {
-        ui.add_space(indent);
+    let frame_response = frame.show(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.add_space(indent);
 
-        if has_children {
-            let arrow = if expanded { "▼" } else { "▶" };
-            let arrow_resp = ui.add(
-                egui::Label::new(
-                    egui::RichText::new(arrow).color(theme::TEXT_MUTED).size(10.0),
-                )
-                .sense(egui::Sense::click()),
-            );
-            if arrow_resp.clicked() {
-                if let Some(tree) = &mut state.tree {
-                    if let NodeKind::Directory { expanded: ref mut exp, .. } =
-                        tree.node_mut(id).kind
-                    {
-                        *exp = !*exp;
-                    }
-                }
-                return;
-            }
-        } else {
-            ui.add_space(14.0);
-        }
-
-        ui.label(egui::RichText::new("📁").color(theme::ACCENT_LIGHT).size(12.0));
-
-        let name_color = if is_selected { theme::ACCENT_LIGHT } else { theme::TEXT_PRIMARY };
-        ui.label(egui::RichText::new(&name).color(name_color).size(12.0));
-
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if root_size > 0 {
-                let fraction = size as f32 / root_size as f32;
-                let bar_width = 50.0;
-                let (bar_rect, _) =
-                    ui.allocate_exact_size(Vec2::new(bar_width, 4.0), egui::Sense::hover());
-                ui.painter().rect_filled(bar_rect, 2.0, theme::BAR_BG);
-                let filled = egui::Rect::from_min_size(
-                    bar_rect.left_top(),
-                    Vec2::new(bar_width * fraction, 4.0),
+            if has_children {
+                let arrow = if expanded { "▼" } else { "▶" };
+                let arrow_resp = ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(arrow).color(theme::TEXT_MUTED).size(10.0),
+                    )
+                    .sense(egui::Sense::click()),
                 );
-                ui.painter().rect_filled(filled, 2.0, theme::ACCENT);
+                if arrow_resp.clicked() {
+                    if let Some(tree) = &mut state.tree {
+                        if let NodeKind::Directory {
+                            expanded: ref mut exp,
+                            ..
+                        } = tree.node_mut(id).kind
+                        {
+                            *exp = !*exp;
+                        }
+                    }
+                    return;
+                }
+            } else {
+                ui.add_space(14.0);
             }
-            ui.label(
-                egui::RichText::new(theme::format_size(size))
-                    .color(theme::TEXT_MUTED)
-                    .size(10.0),
-            );
+
+            ui.label(egui::RichText::new("📁").color(theme::ACCENT_LIGHT).size(12.0));
+
+            let name_color = if is_selected {
+                theme::ACCENT_LIGHT
+            } else {
+                theme::TEXT_PRIMARY
+            };
+            ui.label(egui::RichText::new(&name).color(name_color).size(12.0));
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if root_size > 0 {
+                    let fraction = size as f32 / root_size as f32;
+                    let bar_width = 50.0;
+                    let (bar_rect, _) =
+                        ui.allocate_exact_size(Vec2::new(bar_width, 4.0), egui::Sense::hover());
+                    ui.painter().rect_filled(bar_rect, 2.0, theme::BAR_BG);
+                    let filled = egui::Rect::from_min_size(
+                        bar_rect.left_top(),
+                        Vec2::new(bar_width * fraction, 4.0),
+                    );
+                    ui.painter().rect_filled(filled, 2.0, theme::ACCENT);
+                }
+                ui.label(
+                    egui::RichText::new(theme::format_size(size))
+                        .color(theme::TEXT_MUTED)
+                        .size(10.0),
+                );
+            });
         });
     });
 
-    // Handle row interaction
-    let row_rect = row_response.response.rect;
-    let row_sense = ui.interact(row_rect, row_id, egui::Sense::click());
-
-    // Draw selection background
-    if is_selected {
-        ui.painter().rect_filled(row_rect, 4.0, theme::BG_SELECTION);
-    }
-
-    if row_sense.clicked() {
+    // Handle clicks on the frame
+    let row_response = frame_response.response.interact(egui::Sense::click());
+    if row_response.clicked() {
         state.selected_node = Some(id);
         state.selected_extension = None;
     }
-    if row_sense.double_clicked() {
+    if row_response.double_clicked() {
         state.view_root = Some(id);
         state.zoom_stack.push(id);
         state.treemap_dirty = true;
