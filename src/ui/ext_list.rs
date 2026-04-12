@@ -33,34 +33,37 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     let (ext, bytes, _count) = &stats[i];
                     let is_selected = state.selected_extension.as_deref() == Some(ext.as_str());
                     let colors = extension_color(if ext.is_empty() { "" } else { ext });
+                    let swatch_color = Color32::from_rgba_premultiplied(
+                        colors.0[0], colors.0[1], colors.0[2], colors.0[3],
+                    );
 
                     let ext_id = ui.make_persistent_id(("ext_row", i));
 
                     let response = ui.horizontal(|ui| {
+                        // Color swatch
                         let (swatch_rect, _) =
-                            ui.allocate_exact_size(Vec2::new(12.0, 12.0), egui::Sense::hover());
-                        ui.painter().rect_filled(
-                            swatch_rect,
-                            3.0,
-                            Color32::from_rgba_premultiplied(
-                                colors.0[0],
-                                colors.0[1],
-                                colors.0[2],
-                                colors.0[3],
-                            ),
-                        );
+                            ui.allocate_exact_size(Vec2::new(10.0, 10.0), egui::Sense::hover());
+                        ui.painter().rect_filled(swatch_rect, 2.0, swatch_color);
 
+                        // Extension name — fixed width so it doesn't get clipped
                         let ext_display = if ext.is_empty() {
-                            "(no ext)".to_string()
+                            "(none)".to_string()
                         } else {
                             format!(".{}", ext)
                         };
-                        let name_color =
-                            if is_selected { theme::ACCENT_LIGHT } else { theme::TEXT_PRIMARY };
-                        ui.label(
-                            egui::RichText::new(&ext_display).color(name_color).size(12.0),
+                        let name_color = if is_selected {
+                            theme::ACCENT_LIGHT
+                        } else {
+                            theme::TEXT_PRIMARY
+                        };
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(&ext_display).color(name_color).size(11.0),
+                            )
+                            .truncate(),
                         );
 
+                        // Right-aligned: size and percentage only (no bar to save space)
                         ui.with_layout(
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
@@ -79,30 +82,6 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                                         .color(theme::TEXT_SECONDARY)
                                         .size(10.0),
                                 );
-
-                                if total_size > 0 {
-                                    let fraction = *bytes as f32 / total_size as f32;
-                                    let bar_width = 50.0;
-                                    let (bar_rect, _) = ui.allocate_exact_size(
-                                        Vec2::new(bar_width, 5.0),
-                                        egui::Sense::hover(),
-                                    );
-                                    ui.painter().rect_filled(bar_rect, 3.0, theme::BAR_BG);
-                                    let filled = egui::Rect::from_min_size(
-                                        bar_rect.left_top(),
-                                        Vec2::new(bar_width * fraction, 5.0),
-                                    );
-                                    ui.painter().rect_filled(
-                                        filled,
-                                        3.0,
-                                        Color32::from_rgba_premultiplied(
-                                            colors.0[0],
-                                            colors.0[1],
-                                            colors.0[2],
-                                            colors.0[3],
-                                        ),
-                                    );
-                                }
                             },
                         );
                     });

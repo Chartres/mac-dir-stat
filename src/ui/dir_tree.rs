@@ -27,15 +27,32 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         let root = tree.root();
         let root_size = tree.node(root).size;
 
-        egui::ScrollArea::vertical()
+        // Determine which directory to highlight:
+        // If selected node is a file, highlight its parent directory
+        let highlighted_dir = state.selected_node.and_then(|sel| {
+            let tree = state.tree.as_ref()?;
+            if tree.node(sel).is_dir() {
+                Some(sel)
+            } else {
+                tree.node(sel).parent
+            }
+        });
+
+        egui::ScrollArea::both()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                show_node(ui, state, root, root_size);
+                show_node(ui, state, root, root_size, highlighted_dir);
             });
     });
 }
 
-fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
+fn show_node(
+    ui: &mut Ui,
+    state: &mut AppState,
+    id: NodeId,
+    root_size: u64,
+    highlighted_dir: Option<NodeId>,
+) {
     let tree = match &state.tree {
         Some(t) => t,
         None => return,
@@ -51,7 +68,7 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
         NodeKind::File { .. } => return,
     };
 
-    let is_selected = state.selected_node == Some(id);
+    let is_selected = highlighted_dir == Some(id);
     let name = node.name.to_string_lossy().to_string();
     let size = node.size;
     let depth = node.depth;
@@ -59,7 +76,6 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
     let indent = depth as f32 * 16.0;
     let has_children = !children.is_empty();
 
-    // Use Frame to draw selection background BEHIND content
     let frame = if is_selected {
         egui::Frame::new()
             .fill(theme::BG_SELECTION)
@@ -104,12 +120,21 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
             } else {
                 theme::TEXT_PRIMARY
             };
-            ui.label(egui::RichText::new(&name).color(name_color).size(12.0));
+
+            // Truncate name to avoid overflow
+            let avail = (ui.available_width() - 90.0).max(40.0);
+            let max_chars = (avail / 7.0) as usize;
+            let display_name = if name.len() > max_chars && max_chars > 3 {
+                format!("{}…", &name[..max_chars - 1])
+            } else {
+                name.clone()
+            };
+            ui.label(egui::RichText::new(&display_name).color(name_color).size(12.0));
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if root_size > 0 {
                     let fraction = size as f32 / root_size as f32;
-                    let bar_width = 50.0;
+                    let bar_width = 40.0;
                     let (bar_rect, _) =
                         ui.allocate_exact_size(Vec2::new(bar_width, 4.0), egui::Sense::hover());
                     ui.painter().rect_filled(bar_rect, 2.0, theme::BAR_BG);
@@ -128,7 +153,6 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
         });
     });
 
-    // Handle clicks on the frame
     let row_response = frame_response.response.interact(egui::Sense::click());
     if row_response.clicked() {
         state.selected_node = Some(id);
@@ -140,7 +164,6 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
         state.treemap_dirty = true;
     }
 
-    // Show children if expanded
     if expanded {
         let tree = match &state.tree {
             Some(t) => t,
@@ -149,7 +172,7 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, root_size: u64) {
         let mut sorted_children = children;
         sorted_children.sort_by(|&a, &b| tree.node(b).size.cmp(&tree.node(a).size));
         for child_id in sorted_children {
-            show_node(ui, state, child_id, root_size);
+            show_node(ui, state, child_id, root_size, highlighted_dir);
         }
     }
 }
