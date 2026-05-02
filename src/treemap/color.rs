@@ -32,12 +32,19 @@ const SLATE_PAIR: GradientPair = ([88, 102, 122, 255], [136, 148, 168, 255]);
 /// Tuned to sit just above the new off-black background (no purple cast).
 pub const FREE_SPACE_PAIR: GradientPair = ([20, 22, 28, 255], [28, 30, 36, 255]);
 
+/// Skipped / TCC-blocked space — distinct from free; warm muted tone so
+/// the user notices "there's something here we couldn't see."
+pub const SKIPPED_PAIR: GradientPair = ([60, 50, 38, 255], [88, 70, 50, 255]);
+
 pub fn extension_color(ext: &str) -> GradientPair {
     if ext.is_empty() {
         return SLATE_PAIR;
     }
     if ext == "__free_space__" {
         return FREE_SPACE_PAIR;
+    }
+    if ext == "__skipped__" {
+        return SKIPPED_PAIR;
     }
     let hash = simple_hash(ext);
     PALETTE[hash % PALETTE.len()]

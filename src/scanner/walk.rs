@@ -209,19 +209,43 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
 
     tree.compute_sizes();
 
-    // Add a "Free Space" node if we can determine volume size
-    if let Some((total, avail)) = volume_space(&root) {
-        let used = tree.node(tree.root()).size;
-        let free = if used < total { total - used } else { avail };
-        if free > 0 {
-            tree.add_file(
-                tree.root(),
-                b"<Free Space>",
-                free,
-                Some("__free_space__"),
-                SystemTime::now(),
-                1,
-            );
+    // Free Space + Skipped synthetic nodes — only meaningful when scanning a
+    // volume root. For sub-roots (e.g. ~/Downloads), the disk's free space
+    // doesn't belong inside the scanned tree.
+    if root == Path::new("/") {
+        if let Some((total, avail)) = volume_space(&root) {
+            let used = tree.node(tree.root()).size;
+
+            // Real free space — what the filesystem reports as available.
+            // Replaces the previous (total - used) heuristic, which over-
+            // counted whenever any path was unreadable or TCC-skipped.
+            if avail > 0 {
+                tree.add_file(
+                    tree.root(),
+                    b"<Free Space>",
+                    avail,
+                    Some("__free_space__"),
+                    SystemTime::now(),
+                    1,
+                );
+            }
+
+            // The gap between (used + avail) and total is what we couldn't
+            // see — TCC-protected paths, /System/Volumes firmlinks already
+            // skipped, etc. Surface it as its own block so it's obvious
+            // there's data we didn't account for.
+            let counted = used.saturating_add(avail);
+            let skipped = total.saturating_sub(counted);
+            if skipped > 16 * 1024 * 1024 {
+                tree.add_file(
+                    tree.root(),
+                    b"<Hidden / Skipped>",
+                    skipped,
+                    Some("__skipped__"),
+                    SystemTime::now(),
+                    1,
+                );
+            }
             tree.compute_sizes();
         }
     }

@@ -410,20 +410,23 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         }
     }
 
-    // Click handling
+    // Click handling — falls back to the deepest directory under the cursor
+    // when the file rect is too small to be hover-targeted (the is_large
+    // filter above only registers rects > 3px). Without this fallback,
+    // clicking on tiny / dense regions does nothing.
     if response.clicked() {
-        if let Some(hovered) = state.hovered_node {
-            state.selected_node = Some(hovered);
+        let target = state.hovered_node.or(state.hovered_dir);
+        if let Some(node_id) = target {
+            state.selected_node = Some(node_id);
             state.selected_extension = None;
-            state.expand_to_node(hovered);
-            // Reveal in dir tree: scroll to the containing directory row.
+            state.expand_to_node(node_id);
             if let Some(tree) = &state.tree {
-                let target = if tree.node(hovered).is_dir() {
-                    Some(hovered)
+                let dir_target = if tree.node(node_id).is_dir() {
+                    Some(node_id)
                 } else {
-                    tree.node(hovered).parent
+                    tree.node(node_id).parent
                 };
-                state.scroll_dir_tree_to = target;
+                state.scroll_dir_tree_to = dir_target;
             }
         }
     }
@@ -448,7 +451,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
     // file (in the worst case: hovering over /Applications and triggering a
     // delete there).
     if response.secondary_clicked() {
-        state.context_menu_target = state.hovered_node.or(state.selected_node);
+        state.context_menu_target = state
+            .hovered_node
+            .or(state.hovered_dir)
+            .or(state.selected_node);
     }
     response.context_menu(|ui| {
         if let Some(node_id) = state.context_menu_target {
