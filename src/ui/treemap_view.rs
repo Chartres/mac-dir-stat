@@ -100,6 +100,22 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 egui::FontId::proportional(14.0),
                 theme::TEXT_SECONDARY,
             );
+            if let Some(p) = &state.scan_progress.current_path {
+                let truncated = if p.chars().count() > 80 {
+                    let n = p.chars().count();
+                    let tail: String = p.chars().skip(n.saturating_sub(78)).collect();
+                    format!("…{}", tail)
+                } else {
+                    p.clone()
+                };
+                painter.text(
+                    Pos2::new(center.x, center.y + 70.0),
+                    egui::Align2::CENTER_CENTER,
+                    truncated,
+                    egui::FontId::monospace(10.0),
+                    theme::TEXT_MUTED,
+                );
+            }
             let bar_width = 200.0;
             let bar_rect = Rect::from_min_size(
                 Pos2::new(center.x - bar_width / 2.0, center.y + 35.0),

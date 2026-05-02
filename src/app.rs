@@ -70,6 +70,7 @@ pub struct ScanProgressInfo {
     pub dirs: usize,
     pub bytes: u64,
     pub scanning: bool,
+    pub current_path: Option<String>,
 }
 
 pub enum PendingAction {
@@ -94,6 +95,7 @@ impl App {
                     dirs: 0,
                     bytes: 0,
                     scanning: false,
+                    current_path: None,
                 },
                 scan_start: None,
                 scan_duration_secs: 0.0,
@@ -132,6 +134,7 @@ impl App {
             dirs: 0,
             bytes: 0,
             scanning: true,
+            current_path: None,
         };
         self.state.scan_start = Some(Instant::now());
         self.state.tree = None;
@@ -221,10 +224,16 @@ impl App {
         if let Some(rx) = &self.state.scan_receiver {
             while let Ok(msg) = rx.try_recv() {
                 match msg {
-                    ScanProgress::Counting { files, dirs, bytes } => {
+                    ScanProgress::Counting {
+                        files,
+                        dirs,
+                        bytes,
+                        current_path,
+                    } => {
                         self.state.scan_progress.files = files;
                         self.state.scan_progress.dirs = dirs;
                         self.state.scan_progress.bytes = bytes;
+                        self.state.scan_progress.current_path = current_path;
                     }
                     ScanProgress::Done(tree) => {
                         if let Some(start) = self.state.scan_start {

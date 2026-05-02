@@ -199,6 +199,7 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
                 files: file_count,
                 dirs: dir_count,
                 bytes: byte_count,
+                current_path: Some(path.display().to_string()),
             });
         }
     }
