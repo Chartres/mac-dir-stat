@@ -461,6 +461,82 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             crate::ui::context_menu::show(ui, state, node_id);
         }
     });
+
+    // Hover tooltip — pre-extract data so the closure doesn't re-borrow state.
+    let hover_data = {
+        let target = state.hovered_node.or(state.hovered_dir);
+        target.and_then(|id| {
+            state.tree.as_ref().map(|t| {
+                let n = t.node(id);
+                (
+                    t.name(id).to_string(),
+                    n.size,
+                    t.extension(id).map(|s| s.to_string()),
+                    n.modified,
+                    n.is_dir(),
+                )
+            })
+        })
+    };
+    if let Some((name, size, ext, modified, is_dir)) = hover_data {
+        response.on_hover_ui_at_pointer(|ui| {
+            ui.set_max_width(420.0);
+            let display_name = if name.chars().count() > 60 {
+                let mut iter = name.chars();
+                let head: String = iter.by_ref().take(58).collect();
+                format!("{}…", head)
+            } else {
+                name.clone()
+            };
+            ui.label(
+                egui::RichText::new(display_name)
+                    .strong()
+                    .color(theme::TEXT_PRIMARY)
+                    .size(12.5),
+            );
+            ui.label(
+                egui::RichText::new(theme::format_size(size))
+                    .color(theme::ACCENT_LIGHT)
+                    .size(11.5),
+            );
+            if is_dir {
+                ui.label(
+                    egui::RichText::new("Directory")
+                        .color(theme::TEXT_MUTED)
+                        .size(10.0),
+                );
+            } else if let Some(e) = &ext {
+                if !e.is_empty() && !e.starts_with("__") {
+                    ui.label(
+                        egui::RichText::new(format!(".{}", e))
+                            .color(theme::TEXT_MUTED)
+                            .size(10.0),
+                    );
+                }
+            }
+            if let Ok(elapsed) = std::time::SystemTime::now().duration_since(modified) {
+                let secs = elapsed.as_secs();
+                let pretty = if secs < 60 {
+                    format!("{}s ago", secs)
+                } else if secs < 3600 {
+                    format!("{}m ago", secs / 60)
+                } else if secs < 86400 {
+                    format!("{}h ago", secs / 3600)
+                } else if secs < 86400 * 30 {
+                    format!("{}d ago", secs / 86400)
+                } else if secs < 86400 * 365 {
+                    format!("{}mo ago", secs / 86400 / 30)
+                } else {
+                    format!("{}y ago", secs / 86400 / 365)
+                };
+                ui.label(
+                    egui::RichText::new(format!("Modified {}", pretty))
+                        .color(theme::TEXT_MUTED)
+                        .size(10.0),
+                );
+            }
+        });
+    }
 }
 
 fn lerp_color(a: &Color32, b: &Color32, t: f32) -> Color32 {

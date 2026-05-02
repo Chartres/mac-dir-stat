@@ -67,6 +67,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             ) {
                 state.color_mode = current;
                 state.treemap_dirty = true;
+                crate::state::save(&state.scan_root, state.color_mode);
             }
 
             ui.label(

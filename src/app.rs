@@ -81,10 +81,13 @@ pub enum PendingAction {
 
 impl App {
     pub fn new() -> Self {
+        let persisted = crate::state::load();
+        let scan_root = persisted.scan_root.unwrap_or_else(|| PathBuf::from("/"));
+        let color_mode = persisted.color_mode.unwrap_or(ColorMode::Extension);
         App {
             state: AppState {
                 tree: None,
-                scan_root: PathBuf::from("/"),
+                scan_root,
                 scan_receiver: None,
                 scan_progress: ScanProgressInfo {
                     files: 0,
@@ -99,7 +102,7 @@ impl App {
                 colored_rects: vec![],
                 dir_rects: vec![],
                 treemap_dirty: true,
-                color_mode: ColorMode::Extension,
+                color_mode,
                 view_root: None,
                 zoom_stack: vec![],
                 selected_node: None,
@@ -236,6 +239,10 @@ impl App {
                         self.state.tree = Some(tree);
                         self.state.scan_progress.scanning = false;
                         self.state.treemap_dirty = true;
+                        crate::state::save(
+                            &self.state.scan_root,
+                            self.state.color_mode,
+                        );
                     }
                     ScanProgress::Error(msg) => {
                         eprintln!("Scan error: {}", msg);
@@ -301,6 +308,43 @@ impl eframe::App for App {
         if self.state.request_rescan {
             self.state.request_rescan = false;
             self.start_scan();
+        }
+
+        // Drag-and-drop: drop a folder onto the window to scan it.
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|df| df.path.clone())
+                .collect()
+        });
+        for p in dropped {
+            if p.is_dir() {
+                self.state.scan_root = p;
+                self.state.request_rescan = true;
+                break;
+            }
+        }
+        let hovering_files = ctx.input(|i| !i.raw.hovered_files.is_empty());
+        if hovering_files {
+            let screen = ctx.screen_rect();
+            let painter = ctx.layer_painter(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::new("drop_overlay"),
+            ));
+            painter.rect_filled(
+                screen,
+                0.0,
+                egui::Color32::from_rgba_unmultiplied(0, 0, 0, 160),
+            );
+            painter.text(
+                screen.center(),
+                egui::Align2::CENTER_CENTER,
+                "Drop folder to scan",
+                egui::FontId::proportional(22.0),
+                ui::theme::TEXT_PRIMARY,
+            );
+            ctx.request_repaint();
         }
 
         // Mark treemap dirty on resize
