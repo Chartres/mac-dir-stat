@@ -12,8 +12,9 @@ fn main() -> eframe::Result<()> {
         persist_window: true,
         ..Default::default()
     };
+    // app_id is used by eframe for persistence storage; keep it stable.
     eframe::run_native(
-        "MacDirStat",
+        "mac-dir-stat",
         options,
         Box::new(|_cc| Ok(Box::new(mac_dir_stat::app::App::new()))),
     )
