@@ -35,10 +35,14 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             ui.add_space(4.0);
             shortcut(ui, "⌘O", "Pick a directory to scan");
             shortcut(ui, "⌘R", "Re-scan current root");
+            shortcut(ui, "⇧⌘R", "Re-scan only the selected subtree");
+            shortcut(ui, "⌘1", "Color treemap by extension");
+            shortcut(ui, "⌘2", "Color treemap by depth");
+            shortcut(ui, "⌘3", "Color treemap by modified age");
             shortcut(ui, "⌘F", "Search files in scanned tree");
             shortcut(ui, "⌘⌫", "Move selected node to Trash");
             shortcut(ui, "↩", "Reveal selected node in Finder");
-            shortcut(ui, "Esc", "Close search · pop zoom · clear selection");
+            shortcut(ui, "Esc", "Close help/cleanup/search · pop zoom · clear selection");
             shortcut(ui, "?", "Toggle this help");
 
             ui.add_space(10.0);

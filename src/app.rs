@@ -428,8 +428,39 @@ impl eframe::App for App {
         }
 
         // Keyboard shortcuts
-        if ctx.input(|i| i.key_pressed(egui::Key::R) && i.modifiers.command) {
+        if ctx.input(|i| {
+            i.key_pressed(egui::Key::R) && i.modifiers.command && i.modifiers.shift
+        }) {
+            // Refresh just the selected directory (or its parent dir if a file is selected).
+            if let Some(sel) = self.state.selected_node {
+                let target = self.state.tree.as_ref().and_then(|t| {
+                    if t.node(sel).is_dir() {
+                        Some(sel)
+                    } else {
+                        t.node(sel).parent
+                    }
+                });
+                if let Some(t) = target {
+                    self.start_partial_refresh(t);
+                }
+            }
+        } else if ctx.input(|i| i.key_pressed(egui::Key::R) && i.modifiers.command) {
             self.state.request_rescan = true;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Num1) && i.modifiers.command) {
+            self.state.color_mode = ColorMode::Extension;
+            self.state.treemap_dirty = true;
+            crate::state::save(&self.state.scan_root, self.state.color_mode);
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Num2) && i.modifiers.command) {
+            self.state.color_mode = ColorMode::Depth;
+            self.state.treemap_dirty = true;
+            crate::state::save(&self.state.scan_root, self.state.color_mode);
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Num3) && i.modifiers.command) {
+            self.state.color_mode = ColorMode::Age;
+            self.state.treemap_dirty = true;
+            crate::state::save(&self.state.scan_root, self.state.color_mode);
         }
         if ctx.input(|i| i.key_pressed(egui::Key::O) && i.modifiers.command) {
             if let Some(path) = crate::platform::dialogs::pick_folder(&self.state.scan_root) {
