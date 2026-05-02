@@ -234,6 +234,18 @@ impl App {
                 self.state.hovered_dir = None;
                 self.state.context_menu_target = None;
                 self.state.scroll_dir_tree_to = Some(target_id);
+                // Drop any cleanup selections that became dead during graft.
+                let live_check: Vec<NodeId> = self
+                    .state
+                    .cleanup_selected
+                    .iter()
+                    .copied()
+                    .collect();
+                for id in live_check {
+                    if !tree.is_alive(id) {
+                        self.state.cleanup_selected.remove(&id);
+                    }
+                }
             }
             self.state.partial_refresh_receiver = None;
             self.state.treemap_dirty = true;
@@ -268,6 +280,9 @@ impl App {
                         self.state.tree = Some(tree);
                         self.state.scan_progress.scanning = false;
                         self.state.treemap_dirty = true;
+                        // Old NodeIds are gone; reset selection state.
+                        self.state.cleanup_selected.clear();
+                        self.state.context_menu_target = None;
                         crate::state::save(
                             &self.state.scan_root,
                             self.state.color_mode,
