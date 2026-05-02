@@ -22,6 +22,19 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             state.request_rescan = true;
         }
 
+        if state.tree.is_some() {
+            let count = state.cleanup_candidates.len();
+            let total: u64 = state.cleanup_candidates.iter().map(|c| c.size).sum();
+            let label = if count > 0 {
+                format!("Cleanup  ·  {}", theme::format_size(total))
+            } else {
+                "Cleanup".to_string()
+            };
+            if widgets::ghost_button(ui, &label).clicked() {
+                state.cleanup_window_open = !state.cleanup_window_open;
+            }
+        }
+
         ui.add_space(8.0);
 
         let path_text = if state.scan_progress.scanning {

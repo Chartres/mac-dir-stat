@@ -50,6 +50,10 @@ pub struct AppState {
     // hovered as the menu is navigated.
     pub context_menu_target: Option<NodeId>,
 
+    // Cleanup suggestions — recomputed on scan completion / partial refresh.
+    pub cleanup_window_open: bool,
+    pub cleanup_candidates: Vec<crate::cleanup::CleanupCandidate>,
+
     // Search
     pub search_active: bool,
     pub search_query: String,
@@ -104,6 +108,8 @@ impl App {
                 selected_extension: None,
                 scroll_dir_tree_to: None,
                 context_menu_target: None,
+                cleanup_window_open: false,
+                cleanup_candidates: Vec::new(),
                 search_active: false,
                 search_query: String::new(),
                 pending_action: None,
@@ -178,6 +184,8 @@ impl App {
                 tree.graft_under(target_id, new_subtree);
                 let root = tree.root();
                 self.state.extension_stats = tree.collect_extensions(root);
+                self.state.cleanup_candidates =
+                    crate::cleanup::find_candidates(tree, root);
 
                 // Old node IDs under the target are now dead. Sanitize any
                 // state that referenced them.
@@ -221,6 +229,8 @@ impl App {
                         }
                         let root = tree.root();
                         self.state.extension_stats = tree.collect_extensions(root);
+                        self.state.cleanup_candidates =
+                            crate::cleanup::find_candidates(&tree, root);
                         self.state.view_root = Some(root);
                         self.state.zoom_stack = vec![root];
                         self.state.tree = Some(tree);
@@ -245,6 +255,8 @@ impl App {
                         tree.remove_node(node_id);
                         let root = tree.root();
                         self.state.extension_stats = tree.collect_extensions(root);
+                        self.state.cleanup_candidates =
+                            crate::cleanup::find_candidates(tree, root);
                     }
                     if self.state.selected_node == Some(node_id) {
                         self.state.selected_node = None;
@@ -454,6 +466,9 @@ impl eframe::App for App {
             }
             ui::treemap_view::show(ui, &mut self.state);
         });
+
+        // Cleanup-suggestions window (toggleable from the toolbar)
+        ui::cleanup_window::show(ctx, &mut self.state);
 
         // Handle pending actions
         let mut action_to_process: Option<Option<NodeId>> = None;
