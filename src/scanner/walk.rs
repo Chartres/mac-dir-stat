@@ -105,6 +105,7 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut file_count: usize = 0;
     let mut dir_count: usize = 0;
     let mut byte_count: u64 = 0;
+    let mut error_count: usize = 0;
     let mut progress_counter: usize = 0;
 
     let skip_paths = Arc::new(build_skip_paths());
@@ -124,7 +125,10 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     {
         let entry = match entry {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(_) => {
+                error_count += 1;
+                continue;
+            }
         };
 
         let path = entry.path();
@@ -160,7 +164,10 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
 
         let metadata = match entry.metadata() {
             Ok(m) => m,
-            Err(_) => continue,
+            Err(_) => {
+                error_count += 1;
+                continue;
+            }
         };
 
         let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
@@ -199,6 +206,7 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
                 files: file_count,
                 dirs: dir_count,
                 bytes: byte_count,
+                errors: error_count,
                 current_path: Some(path.display().to_string()),
             });
         }
@@ -251,6 +259,16 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
         }
     }
 
+    // Final progress snapshot so the receiver sees the post-loop counts
+    // (in particular the total error count, which may have grown during
+    // the last < 500 entries that didn't trigger a periodic send).
+    let _ = tx.send(ScanProgress::Counting {
+        files: file_count,
+        dirs: dir_count,
+        bytes: byte_count,
+        errors: error_count,
+        current_path: None,
+    });
     let _ = tx.send(ScanProgress::Done(tree));
 }
 

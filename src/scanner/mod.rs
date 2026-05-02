@@ -10,6 +10,7 @@ pub enum ScanProgress {
         files: usize,
         dirs: usize,
         bytes: u64,
+        errors: usize,
         current_path: Option<String>,
     },
     Done(FileTree),

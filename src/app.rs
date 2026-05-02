@@ -81,6 +81,7 @@ pub struct ScanProgressInfo {
     pub files: usize,
     pub dirs: usize,
     pub bytes: u64,
+    pub errors: usize,
     pub scanning: bool,
     pub current_path: Option<String>,
 }
@@ -109,6 +110,7 @@ impl App {
                     files: 0,
                     dirs: 0,
                     bytes: 0,
+                    errors: 0,
                     scanning: false,
                     current_path: None,
                 },
@@ -152,6 +154,7 @@ impl App {
             files: 0,
             dirs: 0,
             bytes: 0,
+            errors: 0,
             scanning: true,
             current_path: None,
         };
@@ -260,11 +263,13 @@ impl App {
                         files,
                         dirs,
                         bytes,
+                        errors,
                         current_path,
                     } => {
                         self.state.scan_progress.files = files;
                         self.state.scan_progress.dirs = dirs;
                         self.state.scan_progress.bytes = bytes;
+                        self.state.scan_progress.errors = errors;
                         self.state.scan_progress.current_path = current_path;
                     }
                     ScanProgress::Done(tree) => {
@@ -565,12 +570,18 @@ impl eframe::App for App {
                     } else {
                         String::new()
                     };
+                    let errors_str = if self.state.scan_progress.errors > 0 {
+                        format!("  •  {} skipped", self.state.scan_progress.errors)
+                    } else {
+                        String::new()
+                    };
                     ui.label(
                         egui::RichText::new(format!(
-                            "{} files  •  {} dirs  •  {:.1}s{}",
+                            "{} files  •  {} dirs  •  {:.1}s{}{}",
                             file_count,
                             self.state.scan_progress.dirs,
                             self.state.scan_duration_secs,
+                            errors_str,
                             freed_str,
                         ))
                         .color(ui::theme::TEXT_MUTED)
