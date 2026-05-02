@@ -328,8 +328,12 @@ impl App {
             }
             let root = tree.root();
             self.state.extension_stats = tree.collect_extensions(root);
-            self.state.cleanup_candidates =
-                crate::cleanup::find_candidates(tree, root);
+            // Cheap: dead candidates can only disappear (not appear),
+            // since find_candidates doesn't recurse into matched dirs.
+            let tree_ref = &*tree;
+            self.state
+                .cleanup_candidates
+                .retain(|c| tree_ref.is_alive(c.node_id));
         }
         for id in &succeeded {
             if self.state.selected_node == Some(*id) {
@@ -355,8 +359,10 @@ impl App {
                         tree.remove_node(node_id);
                         let root = tree.root();
                         self.state.extension_stats = tree.collect_extensions(root);
-                        self.state.cleanup_candidates =
-                            crate::cleanup::find_candidates(tree, root);
+                        let tree_ref = &*tree;
+                        self.state
+                            .cleanup_candidates
+                            .retain(|c| tree_ref.is_alive(c.node_id));
                     }
                     if self.state.selected_node == Some(node_id) {
                         self.state.selected_node = None;
