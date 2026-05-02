@@ -343,4 +343,99 @@ impl FileTree {
     pub fn is_alive(&self, id: NodeId) -> bool {
         self.nodes[id].alive
     }
+
+    /// Marks all descendants of `target` as dead and empties its children
+    /// list. The node itself stays. Used as the first step of grafting a
+    /// freshly-scanned subtree onto an existing tree.
+    pub fn clear_descendants(&mut self, target: NodeId) {
+        let mut stack: Vec<NodeId> = Vec::new();
+        if let NodeKind::Directory { children, .. } = &self.nodes[target].kind {
+            stack.extend_from_slice(children);
+        }
+        while let Some(id) = stack.pop() {
+            self.nodes[id].alive = false;
+            if let NodeKind::Directory { children, .. } = &self.nodes[id].kind {
+                stack.extend_from_slice(children);
+            }
+        }
+        if let NodeKind::Directory { children, .. } = &mut self.nodes[target].kind {
+            children.clear();
+        }
+    }
+
+    /// Recomputes `target`'s size and propagates the change upward to root.
+    /// Cheaper than the full bottom-up `compute_sizes` when only one subtree
+    /// changed.
+    pub fn recompute_sizes_upward(&mut self, target: NodeId) {
+        let mut current = Some(target);
+        while let Some(id) = current {
+            if let NodeKind::Directory { children, .. } = &self.nodes[id].kind {
+                let total: u64 = children
+                    .iter()
+                    .filter(|&&c| self.nodes[c].alive)
+                    .map(|&c| self.nodes[c].size)
+                    .sum();
+                self.nodes[id].size = total;
+            }
+            current = self.nodes[id].parent;
+        }
+    }
+
+    /// Replaces all descendants of `target` with `source`'s root subtree
+    /// (children, grandchildren, …). Source's root node itself is dropped —
+    /// only its content is grafted on.
+    ///
+    /// Used by the "Refresh this folder" action: scan the folder fresh into
+    /// a new FileTree, then graft it back into the live tree to produce the
+    /// updated state.
+    pub fn graft_under(&mut self, target: NodeId, source: FileTree) {
+        self.clear_descendants(target);
+
+        let target_depth = self.nodes[target].depth;
+        // (source_node_id, destination_parent_in_self, depth_in_self)
+        let mut stack: Vec<(NodeId, NodeId, u16)> = Vec::new();
+        if let NodeKind::Directory { children, .. } = &source.nodes[source.root].kind {
+            for &c in children {
+                stack.push((c, target, target_depth.saturating_add(1)));
+            }
+        }
+
+        while let Some((src_id, dst_parent, depth)) = stack.pop() {
+            let src_node = &source.nodes[src_id];
+            if !src_node.alive {
+                continue;
+            }
+            let name_bytes = source.strings.get(src_node.name).to_vec();
+            match &src_node.kind {
+                NodeKind::File { extension } => {
+                    let ext_owned: Option<String> = extension.map(|r| {
+                        String::from_utf8_lossy(source.strings.get(r)).into_owned()
+                    });
+                    let new_id = self.add_file(
+                        dst_parent,
+                        &name_bytes,
+                        src_node.size,
+                        ext_owned.as_deref(),
+                        src_node.modified,
+                        depth,
+                    );
+                    let _ = new_id;
+                }
+                NodeKind::Directory { children, .. } => {
+                    let new_id = self.add_dir(
+                        dst_parent,
+                        &name_bytes,
+                        depth < 2,
+                        src_node.modified,
+                        depth,
+                    );
+                    for &c in children {
+                        stack.push((c, new_id, depth.saturating_add(1)));
+                    }
+                }
+            }
+        }
+
+        self.recompute_sizes_upward(target);
+    }
 }

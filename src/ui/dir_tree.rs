@@ -168,6 +168,12 @@ fn show_node(
         state.scroll_dir_tree_to = None;
     }
 
+    // Right-click → same context menu as the treemap. id is fixed for the
+    // row, so no sticky capture is needed.
+    row_response.context_menu(|ui| {
+        crate::ui::context_menu::show(ui, state, id);
+    });
+
     if expanded {
         let tree = match &state.tree {
             Some(t) => t,

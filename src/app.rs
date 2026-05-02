@@ -21,6 +21,9 @@ pub struct AppState {
     pub scan_start: Option<Instant>,
     pub scan_duration_secs: f32,
 
+    // Partial refresh: scan a single subtree and graft the result back in.
+    pub partial_refresh_receiver: Option<(NodeId, Receiver<ScanProgress>)>,
+
     // Extension stats
     pub extension_stats: Vec<(String, u64, usize)>,
 
@@ -69,6 +72,7 @@ pub enum PendingAction {
     RevealInFinder(PathBuf),
     MoveToTrash(NodeId),
     ConfirmTrash(NodeId, String, u64),
+    RefreshSubtree(NodeId),
 }
 
 impl App {
@@ -86,6 +90,7 @@ impl App {
                 },
                 scan_start: None,
                 scan_duration_secs: 0.0,
+                partial_refresh_receiver: None,
                 extension_stats: vec![],
                 colored_rects: vec![],
                 dir_rects: vec![],
@@ -129,6 +134,76 @@ impl App {
         self.state.view_root = None;
         self.state.zoom_stack.clear();
         crate::scanner::scan(self.state.scan_root.clone(), tx);
+    }
+
+    /// Spawn a fresh scan of just `node_id`'s subtree. Result is grafted
+    /// back into the live tree by `poll_partial_refresh`. No-op if the node
+    /// isn't a directory.
+    pub fn start_partial_refresh(&mut self, node_id: NodeId) {
+        let Some(tree) = &self.state.tree else { return };
+        if !tree.node(node_id).is_dir() {
+            return;
+        }
+        let path = tree.full_path(node_id);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        self.state.partial_refresh_receiver = Some((node_id, rx));
+        crate::scanner::scan(path, tx);
+    }
+
+    fn poll_partial_refresh(&mut self) {
+        let mut completed: Option<(NodeId, crate::scanner::tree::FileTree)> = None;
+        let mut error_occurred = false;
+        if let Some((target_id, rx)) = self.state.partial_refresh_receiver.as_ref() {
+            let target_id = *target_id;
+            while let Ok(msg) = rx.try_recv() {
+                match msg {
+                    ScanProgress::Counting { .. } => {}
+                    ScanProgress::Done(new_subtree) => {
+                        completed = Some((target_id, new_subtree));
+                        break;
+                    }
+                    ScanProgress::Error(e) => {
+                        eprintln!("Partial refresh error: {}", e);
+                        error_occurred = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if error_occurred {
+            self.state.partial_refresh_receiver = None;
+        }
+        if let Some((target_id, new_subtree)) = completed {
+            if let Some(tree) = &mut self.state.tree {
+                tree.graft_under(target_id, new_subtree);
+                let root = tree.root();
+                self.state.extension_stats = tree.collect_extensions(root);
+
+                // Old node IDs under the target are now dead. Sanitize any
+                // state that referenced them.
+                if let Some(vr) = self.state.view_root {
+                    if !tree.is_alive(vr) {
+                        self.state.view_root = Some(target_id);
+                        self.state.zoom_stack
+                            .retain(|id| tree.is_alive(*id));
+                        if self.state.zoom_stack.is_empty() {
+                            self.state.zoom_stack.push(root);
+                        }
+                    }
+                }
+                if let Some(sel) = self.state.selected_node {
+                    if !tree.is_alive(sel) {
+                        self.state.selected_node = Some(target_id);
+                    }
+                }
+                self.state.hovered_node = None;
+                self.state.hovered_dir = None;
+                self.state.context_menu_target = None;
+                self.state.scroll_dir_tree_to = Some(target_id);
+            }
+            self.state.partial_refresh_receiver = None;
+            self.state.treemap_dirty = true;
+        }
     }
 
     fn poll_scan(&mut self) {
@@ -209,6 +284,7 @@ impl eframe::App for App {
         }
 
         self.poll_scan();
+        self.poll_partial_refresh();
 
         if self.state.request_rescan {
             self.state.request_rescan = false;
@@ -437,7 +513,16 @@ impl eframe::App for App {
                             });
                         });
                 }
-                _ => {}
+                PendingAction::RefreshSubtree(node_id) => {
+                    let node_id = *node_id;
+                    self.state.pending_action = None;
+                    self.start_partial_refresh(node_id);
+                }
+                _ => {
+                    // RevealInFinder / MoveToTrash variants are unused —
+                    // context menu performs those actions inline.
+                    self.state.pending_action = None;
+                }
             }
         }
         if let Some(result) = action_to_process {

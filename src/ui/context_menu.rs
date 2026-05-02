@@ -41,6 +41,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     );
     ui.separator();
 
+    let is_dir = state
+        .tree
+        .as_ref()
+        .map(|t| t.node(node).is_dir())
+        .unwrap_or(false);
+
     if ui.button("Show in Finder").clicked() {
         crate::platform::finder::reveal_in_finder(&path);
         ui.close_menu();
@@ -48,6 +54,18 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     if ui.button("Copy Path").clicked() {
         ui.ctx().copy_text(path.to_string_lossy().to_string());
         ui.close_menu();
+    }
+    if is_dir {
+        if ui.button("Refresh This Folder").clicked() {
+            state.pending_action = Some(PendingAction::RefreshSubtree(node));
+            ui.close_menu();
+        }
+        if ui.button("Zoom Into").clicked() {
+            state.view_root = Some(node);
+            state.zoom_stack.push(node);
+            state.treemap_dirty = true;
+            ui.close_menu();
+        }
     }
     ui.separator();
     if ui
