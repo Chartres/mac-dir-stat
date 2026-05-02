@@ -119,18 +119,32 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         } else {
             // Welcome / empty state — no auto-scan on first launch.
             painter.text(
-                Pos2::new(center.x, center.y - 18.0),
+                Pos2::new(center.x, center.y - 30.0),
                 egui::Align2::CENTER_CENTER,
                 "MacDirStat",
-                egui::FontId::proportional(22.0),
+                egui::FontId::proportional(24.0),
                 theme::TEXT_PRIMARY,
             );
             painter.text(
-                Pos2::new(center.x, center.y + 12.0),
+                Pos2::new(center.x, center.y),
                 egui::Align2::CENTER_CENTER,
                 "Click  Scan Directory…  in the toolbar to begin",
                 egui::FontId::proportional(13.0),
+                theme::TEXT_SECONDARY,
+            );
+            painter.text(
+                Pos2::new(center.x, center.y + 22.0),
+                egui::Align2::CENTER_CENTER,
+                "or drop a folder onto this window",
+                egui::FontId::proportional(12.0),
                 theme::TEXT_MUTED,
+            );
+            painter.text(
+                Pos2::new(center.x, center.y + 56.0),
+                egui::Align2::CENTER_CENTER,
+                format!("Last: {}   ·   ⌘R to scan it", state.scan_root.display()),
+                egui::FontId::proportional(11.0),
+                theme::TEXT_DIM,
             );
         }
         return;

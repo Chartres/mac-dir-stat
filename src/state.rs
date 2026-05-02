@@ -40,6 +40,13 @@ pub fn load() -> PersistedState {
             };
         }
     }
+    // Drop the persisted scan_root if the path is gone — otherwise the file
+    // picker opens at a dead path.
+    if let Some(p) = &s.scan_root {
+        if !p.exists() {
+            s.scan_root = None;
+        }
+    }
     s
 }
 

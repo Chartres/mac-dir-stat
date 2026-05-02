@@ -452,7 +452,25 @@ impl eframe::App for App {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if let Some(tree) = &self.state.tree {
+                    // Partial-refresh indicator takes priority over the
+                    // hovered-file path so the user sees feedback during the
+                    // background re-scan.
+                    if let Some((target_id, _)) = &self.state.partial_refresh_receiver {
+                        if let Some(tree) = &self.state.tree {
+                            if tree.is_alive(*target_id) {
+                                let path = tree.full_path(*target_id);
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "Refreshing  {}  …",
+                                        path.display(),
+                                    ))
+                                    .color(ui::theme::ACCENT_LIGHT)
+                                    .size(11.0),
+                                );
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                    } else if let Some(tree) = &self.state.tree {
                         // Show hovered file if any, otherwise show hovered directory region
                         let show_node = self.state.hovered_node
                             .filter(|&id| tree.is_alive(id))
