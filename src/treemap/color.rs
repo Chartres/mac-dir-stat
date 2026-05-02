@@ -36,7 +36,8 @@ const PALETTE: &[GradientPair] = &[
 const SLATE_PAIR: GradientPair = ([71, 85, 105, 255], [148, 163, 184, 255]);
 
 /// Dark, subtle color for free space — should not draw attention.
-pub const FREE_SPACE_PAIR: GradientPair = ([24, 20, 40, 255], [30, 26, 50, 255]);
+/// Tuned to sit just above the new off-black background (no purple cast).
+pub const FREE_SPACE_PAIR: GradientPair = ([20, 22, 28, 255], [28, 30, 36, 255]);
 
 pub fn extension_color(ext: &str) -> GradientPair {
     if ext.is_empty() {

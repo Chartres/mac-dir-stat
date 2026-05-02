@@ -262,12 +262,24 @@ impl eframe::App for App {
         }
 
         // Top toolbar
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            ui::toolbar::show(ui, &mut self.state);
-        });
+        egui::TopBottomPanel::top("toolbar")
+            .frame(
+                egui::Frame::new()
+                    .fill(ui::theme::BG_PANEL)
+                    .inner_margin(egui::Margin::symmetric(14, 10)),
+            )
+            .show(ctx, |ui| {
+                ui::toolbar::show(ui, &mut self.state);
+            });
 
         // Bottom status bar
-        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+        egui::TopBottomPanel::bottom("status_bar")
+            .frame(
+                egui::Frame::new()
+                    .fill(ui::theme::BG_PANEL)
+                    .inner_margin(egui::Margin::symmetric(14, 6)),
+            )
+            .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if let Some(tree) = &self.state.tree {
                     let root = tree.root();
@@ -321,11 +333,16 @@ impl eframe::App for App {
             });
         });
 
+        let side_frame = egui::Frame::new()
+            .fill(ui::theme::BG_PANEL)
+            .inner_margin(egui::Margin::symmetric(12, 10));
+
         // Left panel: directory tree
         egui::SidePanel::left("dir_tree")
             .default_width(300.0)
             .min_width(200.0)
             .resizable(true)
+            .frame(side_frame)
             .show(ctx, |ui| {
                 ui::dir_tree::show(ui, &mut self.state);
             });
@@ -335,6 +352,7 @@ impl eframe::App for App {
             .default_width(280.0)
             .min_width(180.0)
             .resizable(true)
+            .frame(side_frame)
             .show(ctx, |ui| {
                 ui::ext_list::show(ui, &mut self.state);
             });
@@ -356,27 +374,40 @@ impl eframe::App for App {
                     let name = name.clone();
                     let size = *size;
                     egui::Window::new("Confirm Delete")
+                        .title_bar(false)
                         .collapsible(false)
                         .resizable(false)
                         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                         .show(ctx, |ui| {
-                            ui.label(format!(
-                                "Move \"{}\" ({}) to Trash?",
-                                name,
-                                ui::theme::format_size(size),
-                            ));
-                            ui.add_space(8.0);
-                            ui.horizontal(|ui| {
-                                if ui.add(egui::Button::new("Cancel").fill(ui::theme::BUTTON_BG)).clicked() {
-                                    action_to_process = Some(None);
-                                }
-                                if ui.add(
-                                    egui::Button::new(egui::RichText::new("Move to Trash").color(egui::Color32::WHITE))
-                                        .fill(egui::Color32::from_rgb(220, 38, 38)),
-                                ).clicked() {
-                                    action_to_process = Some(Some(node_id));
-                                }
-                            });
+                            ui.set_min_width(360.0);
+                            ui.label(
+                                egui::RichText::new("Move to Trash?")
+                                    .color(ui::theme::TEXT_PRIMARY)
+                                    .size(15.0)
+                                    .strong(),
+                            );
+                            ui.add_space(6.0);
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "{}   {}",
+                                    name,
+                                    ui::theme::format_size(size),
+                                ))
+                                .color(ui::theme::TEXT_SECONDARY)
+                                .size(12.0),
+                            );
+                            ui.add_space(14.0);
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui::widgets::danger_button(ui, "Move to Trash").clicked() {
+                                        action_to_process = Some(Some(node_id));
+                                    }
+                                    if ui::widgets::ghost_button(ui, "Cancel").clicked() {
+                                        action_to_process = Some(None);
+                                    }
+                                },
+                            );
                         });
                 }
                 _ => {}

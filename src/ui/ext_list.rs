@@ -1,17 +1,11 @@
 use crate::app::AppState;
 use crate::treemap::color::extension_color;
-use crate::ui::theme;
-use egui::{Color32, Ui, Vec2};
+use crate::ui::{theme, widgets};
+use egui::{Color32, CornerRadius, Ui, Vec2};
 
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     ui.vertical(|ui| {
-        ui.label(
-            egui::RichText::new("FILE TYPES")
-                .color(theme::SECTION_HEADER)
-                .size(9.0)
-                .strong(),
-        );
-        ui.add_space(4.0);
+        widgets::section_header(ui, "File types");
 
         if state.tree.is_none() {
             if state.scan_progress.scanning {
@@ -40,10 +34,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     let ext_id = ui.make_persistent_id(("ext_row", i));
 
                     let response = ui.horizontal(|ui| {
-                        // Color swatch
+                        // Color swatch — slightly larger pill
                         let (swatch_rect, _) =
-                            ui.allocate_exact_size(Vec2::new(10.0, 10.0), egui::Sense::hover());
-                        ui.painter().rect_filled(swatch_rect, 2.0, swatch_color);
+                            ui.allocate_exact_size(Vec2::new(12.0, 12.0), egui::Sense::hover());
+                        ui.painter()
+                            .rect_filled(swatch_rect, CornerRadius::same(3), swatch_color);
 
                         // Extension name — fixed width so it doesn't get clipped
                         let ext_display = if ext.is_empty() {

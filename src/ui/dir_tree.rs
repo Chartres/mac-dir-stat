@@ -1,17 +1,11 @@
 use crate::app::AppState;
 use crate::scanner::tree::{NodeId, NodeKind};
-use crate::ui::theme;
+use crate::ui::{theme, widgets};
 use egui::{Ui, Vec2};
 
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     ui.vertical(|ui| {
-        ui.label(
-            egui::RichText::new("DIRECTORY TREE")
-                .color(theme::SECTION_HEADER)
-                .size(9.0)
-                .strong(),
-        );
-        ui.add_space(4.0);
+        widgets::section_header(ui, "Directory tree");
 
         let tree = match &state.tree {
             Some(t) => t,
@@ -79,10 +73,10 @@ fn show_node(
     let frame = if is_selected {
         egui::Frame::new()
             .fill(theme::BG_SELECTION)
-            .inner_margin(egui::Margin::symmetric(2, 1))
-            .corner_radius(4.0)
+            .inner_margin(egui::Margin::symmetric(4, 2))
+            .corner_radius(theme::RADIUS_SM)
     } else {
-        egui::Frame::new().inner_margin(egui::Margin::symmetric(2, 1))
+        egui::Frame::new().inner_margin(egui::Margin::symmetric(4, 2))
     };
 
     let frame_response = frame.show(ui, |ui| {
