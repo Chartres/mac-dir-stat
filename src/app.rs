@@ -229,7 +229,7 @@ impl eframe::App for App {
         if ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command) {
             if let Some(node_id) = self.state.selected_node {
                 if let Some(tree) = &self.state.tree {
-                    let name = tree.node(node_id).name.to_string_lossy().to_string();
+                    let name = tree.name(node_id).to_string();
                     let size = tree.node(node_id).size;
                     self.state.pending_action = Some(PendingAction::ConfirmTrash(node_id, name, size));
                 }

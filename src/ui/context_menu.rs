@@ -7,7 +7,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     let (name, size, path) = if let Some(tree) = &state.tree {
         let n = tree.node(node);
         (
-            n.name.to_string_lossy().to_string(),
+            tree.name(node).to_string(),
             n.size,
             tree.full_path(node),
         )

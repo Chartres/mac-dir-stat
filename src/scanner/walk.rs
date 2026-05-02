@@ -1,16 +1,15 @@
 use super::ScanProgress;
-use crate::scanner::tree::{FileTree, NodeId, NodeKind};
+use crate::scanner::tree::FileTree;
 use crossbeam_channel::Sender;
 use jwalk::WalkDir;
 use std::collections::HashMap;
-use std::ffi::OsString;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 /// Get total and available bytes for the volume containing `path`.
 fn volume_space(path: &Path) -> Option<(u64, u64)> {
     use std::ffi::CString;
-    use std::os::unix::ffi::OsStrExt;
     let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
     unsafe {
         let mut stat: libc::statvfs = std::mem::zeroed();
@@ -41,9 +40,9 @@ fn should_skip(path: &Path, scan_root: &Path) -> bool {
 
 pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut tree = FileTree::new();
-    tree.node_mut(tree.root()).name = OsString::from(root.to_string_lossy().as_ref());
+    tree.rename_root(root.as_os_str().as_bytes());
 
-    let mut dir_map: HashMap<PathBuf, NodeId> = HashMap::new();
+    let mut dir_map: HashMap<PathBuf, usize> = HashMap::new();
     dir_map.insert(root.clone(), tree.root());
 
     let mut file_count: usize = 0;
@@ -75,18 +74,17 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
 
         let parent_id = match dir_map.get(&parent_path) {
             Some(&id) => id,
-            None => {
-                match find_closest_ancestor(&dir_map, &parent_path) {
-                    Some(id) => id,
-                    None => continue,
-                }
-            }
+            None => match find_closest_ancestor(&dir_map, &parent_path) {
+                Some(id) => id,
+                None => continue,
+            },
         };
 
-        let file_name = match path.file_name() {
-            Some(n) => OsString::from(n),
+        let file_name_os = match path.file_name() {
+            Some(n) => n,
             None => continue,
         };
+        let file_name_bytes = file_name_os.as_bytes();
 
         let metadata = match entry.metadata() {
             Ok(m) => m,
@@ -97,14 +95,10 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
         let depth = path.components().count().saturating_sub(root.components().count()) as u16;
 
         if metadata.is_dir() {
-            let node_id = tree.add_node(
+            let node_id = tree.add_dir(
                 parent_id,
-                file_name,
-                0,
-                NodeKind::Directory {
-                    children: vec![],
-                    expanded: depth < 2,
-                },
+                file_name_bytes,
+                depth < 2,
                 modified,
                 depth,
             );
@@ -112,14 +106,14 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             dir_count += 1;
         } else {
             let size = metadata.len();
-            let extension = path
+            let extension_owned = path
                 .extension()
                 .map(|e| e.to_string_lossy().to_lowercase());
-            tree.add_node(
+            tree.add_file(
                 parent_id,
-                file_name,
+                file_name_bytes,
                 size,
-                NodeKind::File { extension },
+                extension_owned.as_deref(),
                 modified,
                 depth,
             );
@@ -137,25 +131,25 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
         }
     }
 
+    // Free the path → NodeId map before doing post-processing. With deep
+    // trees this can hold hundreds of MB of full PathBufs.
+    drop(dir_map);
+
     tree.compute_sizes();
 
     // Add a "Free Space" node if we can determine volume size
     if let Some((total, avail)) = volume_space(&root) {
         let used = tree.node(tree.root()).size;
-        // Free space = total - used (or avail if used > total due to skipped paths)
         let free = if used < total { total - used } else { avail };
         if free > 0 {
-            tree.add_node(
+            tree.add_file(
                 tree.root(),
-                OsString::from("<Free Space>"),
+                b"<Free Space>",
                 free,
-                NodeKind::File {
-                    extension: Some("__free_space__".to_string()),
-                },
+                Some("__free_space__"),
                 SystemTime::now(),
                 1,
             );
-            // Recompute root size to include free space
             tree.compute_sizes();
         }
     }
@@ -163,7 +157,7 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let _ = tx.send(ScanProgress::Done(tree));
 }
 
-fn find_closest_ancestor(dir_map: &HashMap<PathBuf, NodeId>, path: &Path) -> Option<NodeId> {
+fn find_closest_ancestor(dir_map: &HashMap<PathBuf, usize>, path: &Path) -> Option<usize> {
     let mut current = path.parent();
     while let Some(p) = current {
         if let Some(&id) = dir_map.get(p) {

@@ -19,7 +19,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                                 .size(11.0),
                         );
                     }
-                    let name = tree.node(node_id).name.to_string_lossy().to_string();
+                    let name = tree.name(node_id).to_string();
                     let label = ui.add(
                         egui::Label::new(
                             egui::RichText::new(&name)
@@ -146,7 +146,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         // Compute alpha for filtering
         let dimmed = if let Some(ref sel_ext) = state.selected_extension {
             if let Some(tree) = &state.tree {
-                tree.node(cr.node_id).extension() != Some(sel_ext.as_str())
+                tree.extension(cr.node_id) != Some(sel_ext.as_str())
             } else {
                 false
             }
@@ -156,7 +156,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
 
         let search_dimmed = if let Some(ref query) = search_query_lower {
             if let Some(tree) = &state.tree {
-                let name = tree.node(cr.node_id).name.to_string_lossy();
+                let name = tree.name(cr.node_id);
                 !name.to_lowercase().contains(query.as_str())
             } else {
                 false
@@ -344,7 +344,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         if w > 40.0 && h > 16.0 {
             if let Some(tree) = &state.tree {
                 let node = tree.node(cr.node_id);
-                let name = node.name.to_string_lossy();
+                let name = tree.name(cr.node_id);
                 let max_chars = (w / 7.0) as usize;
                 let display_name = if name.len() > max_chars && max_chars > 3 {
                     format!(

@@ -1,18 +1,60 @@
-use std::ffi::OsString;
+use std::borrow::Cow;
+use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
 pub type NodeId = usize;
 
+/// Compact reference into a `StringArena`. 8 bytes vs 24 for `OsString`.
+#[derive(Copy, Clone, Debug)]
+pub struct StrRef {
+    offset: u32,
+    len: u32,
+}
+
+impl StrRef {
+    pub const EMPTY: StrRef = StrRef { offset: 0, len: 0 };
+}
+
+/// Bump arena holding raw bytes for all node names + extensions.
+/// One contiguous `Vec<u8>` instead of millions of small heap allocs.
+#[derive(Debug, Default)]
+pub struct StringArena {
+    buf: Vec<u8>,
+}
+
+impl StringArena {
+    pub fn new() -> Self {
+        Self { buf: Vec::new() }
+    }
+
+    pub fn intern_bytes(&mut self, b: &[u8]) -> StrRef {
+        let offset = self.buf.len() as u32;
+        self.buf.extend_from_slice(b);
+        StrRef { offset, len: b.len() as u32 }
+    }
+
+    pub fn intern_str(&mut self, s: &str) -> StrRef {
+        self.intern_bytes(s.as_bytes())
+    }
+
+    pub fn get(&self, r: StrRef) -> &[u8] {
+        let start = r.offset as usize;
+        &self.buf[start..start + r.len as usize]
+    }
+}
+
 #[derive(Debug)]
 pub struct FileTree {
     nodes: Vec<Node>,
     root: NodeId,
+    strings: StringArena,
 }
 
 #[derive(Debug)]
 pub struct Node {
-    pub name: OsString,
+    pub name: StrRef,
     pub size: u64,
     pub kind: NodeKind,
     pub modified: SystemTime,
@@ -23,7 +65,7 @@ pub struct Node {
 
 #[derive(Debug)]
 pub enum NodeKind {
-    File { extension: Option<String> },
+    File { extension: Option<StrRef> },
     Directory { children: Vec<NodeId>, expanded: bool },
 }
 
@@ -42,19 +84,14 @@ impl Node {
             NodeKind::File { .. } => &[],
         }
     }
-
-    pub fn extension(&self) -> Option<&str> {
-        match &self.kind {
-            NodeKind::File { extension } => extension.as_deref(),
-            NodeKind::Directory { .. } => None,
-        }
-    }
 }
 
 impl FileTree {
     pub fn new() -> Self {
+        let mut strings = StringArena::new();
+        let root_name = strings.intern_str("/");
         let root = Node {
-            name: OsString::from("/"),
+            name: root_name,
             size: 0,
             kind: NodeKind::Directory {
                 children: vec![],
@@ -68,6 +105,7 @@ impl FileTree {
         FileTree {
             nodes: vec![root],
             root: 0,
+            strings,
         }
     }
 
@@ -83,25 +121,82 @@ impl FileTree {
         &mut self.nodes[id]
     }
 
-    pub fn add_node(
+    pub fn name_bytes(&self, id: NodeId) -> &[u8] {
+        self.strings.get(self.nodes[id].name)
+    }
+
+    pub fn name(&self, id: NodeId) -> Cow<'_, str> {
+        String::from_utf8_lossy(self.name_bytes(id))
+    }
+
+    pub fn extension(&self, id: NodeId) -> Option<&str> {
+        match &self.nodes[id].kind {
+            NodeKind::File { extension: Some(r) } => {
+                std::str::from_utf8(self.strings.get(*r)).ok()
+            }
+            _ => None,
+        }
+    }
+
+    pub fn rename_root(&mut self, name: &[u8]) {
+        let r = self.strings.intern_bytes(name);
+        self.nodes[self.root].name = r;
+    }
+
+    pub fn add_dir(
         &mut self,
         parent: NodeId,
-        name: OsString,
-        size: u64,
-        kind: NodeKind,
+        name: &[u8],
+        expanded: bool,
         modified: SystemTime,
         depth: u16,
     ) -> NodeId {
+        let name_ref = self.strings.intern_bytes(name);
+        self.push_node(
+            parent,
+            Node {
+                name: name_ref,
+                size: 0,
+                kind: NodeKind::Directory {
+                    children: vec![],
+                    expanded,
+                },
+                modified,
+                parent: Some(parent),
+                depth,
+                alive: true,
+            },
+        )
+    }
+
+    pub fn add_file(
+        &mut self,
+        parent: NodeId,
+        name: &[u8],
+        size: u64,
+        extension: Option<&str>,
+        modified: SystemTime,
+        depth: u16,
+    ) -> NodeId {
+        let name_ref = self.strings.intern_bytes(name);
+        let ext_ref = extension.map(|s| self.strings.intern_str(s));
+        self.push_node(
+            parent,
+            Node {
+                name: name_ref,
+                size,
+                kind: NodeKind::File { extension: ext_ref },
+                modified,
+                parent: Some(parent),
+                depth,
+                alive: true,
+            },
+        )
+    }
+
+    fn push_node(&mut self, parent: NodeId, node: Node) -> NodeId {
         let id = self.nodes.len();
-        self.nodes.push(Node {
-            name,
-            size,
-            kind,
-            modified,
-            parent: Some(parent),
-            depth,
-            alive: true,
-        });
+        self.nodes.push(node);
         if let NodeKind::Directory { children, .. } = &mut self.nodes[parent].kind {
             children.push(id);
         }
@@ -161,10 +256,10 @@ impl FileTree {
     }
 
     pub fn full_path(&self, id: NodeId) -> PathBuf {
-        let mut parts = vec![];
+        let mut parts: Vec<&[u8]> = vec![];
         let mut current = id;
         loop {
-            parts.push(self.nodes[current].name.clone());
+            parts.push(self.name_bytes(current));
             if let Some(pid) = self.nodes[current].parent {
                 current = pid;
             } else {
@@ -172,9 +267,9 @@ impl FileTree {
             }
         }
         parts.reverse();
-        let mut path = PathBuf::from(&parts[0]);
+        let mut path = PathBuf::from(OsStr::from_bytes(parts[0]));
         for part in &parts[1..] {
-            path.push(part);
+            path.push(OsStr::from_bytes(part));
         }
         path
     }
@@ -202,7 +297,9 @@ impl FileTree {
         }
         match &node.kind {
             NodeKind::File { extension } => {
-                let ext = extension.clone().unwrap_or_default();
+                let ext = extension
+                    .map(|r| String::from_utf8_lossy(self.strings.get(r)).into_owned())
+                    .unwrap_or_default();
                 let entry = map.entry(ext).or_insert((0, 0));
                 entry.0 += node.size;
                 entry.1 += 1;

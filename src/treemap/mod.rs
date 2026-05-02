@@ -57,10 +57,10 @@ fn layout_recursive(
     }
 
     match &node.kind {
-        NodeKind::File { extension } => {
+        NodeKind::File { .. } => {
             let (cs, ce) = match color_mode {
                 ColorMode::Extension => {
-                    extension_color(extension.as_deref().unwrap_or(""))
+                    extension_color(tree.extension(node_id).unwrap_or(""))
                 }
                 ColorMode::Depth => depth_color(hue_index, node.depth),
                 ColorMode::Age => age_color(node.modified),

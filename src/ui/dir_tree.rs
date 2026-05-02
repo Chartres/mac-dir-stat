@@ -69,7 +69,7 @@ fn show_node(
     };
 
     let is_selected = highlighted_dir == Some(id);
-    let name = node.name.to_string_lossy().to_string();
+    let name = tree.name(id).to_string();
     let size = node.size;
     let depth = node.depth;
 
