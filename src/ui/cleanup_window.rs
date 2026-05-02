@@ -42,6 +42,65 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                 .size(11.0),
             );
             ui.add_space(6.0);
+
+            // Batch action bar
+            if !state.cleanup_candidates.is_empty() {
+                ui.horizontal(|ui| {
+                    let selected_count = state.cleanup_selected.len();
+                    let selected_total: u64 = state
+                        .cleanup_candidates
+                        .iter()
+                        .filter(|c| state.cleanup_selected.contains(&c.node_id))
+                        .map(|c| c.size)
+                        .sum();
+
+                    if widgets::ghost_button(ui, "Select all").clicked() {
+                        state.cleanup_selected = state
+                            .cleanup_candidates
+                            .iter()
+                            .map(|c| c.node_id)
+                            .collect();
+                    }
+                    if widgets::ghost_button(ui, "Clear").clicked() {
+                        state.cleanup_selected.clear();
+                    }
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            let label = if selected_count == 0 {
+                                "Trash selected".to_string()
+                            } else {
+                                format!(
+                                    "Trash {} ({})",
+                                    selected_count,
+                                    theme::format_size(selected_total),
+                                )
+                            };
+                            let enabled = selected_count > 0;
+                            ui.add_enabled_ui(enabled, |ui| {
+                                if widgets::danger_button(ui, &label).clicked() {
+                                    let ids: Vec<crate::scanner::tree::NodeId> = state
+                                        .cleanup_candidates
+                                        .iter()
+                                        .filter(|c| state.cleanup_selected.contains(&c.node_id))
+                                        .map(|c| c.node_id)
+                                        .collect();
+                                    if !ids.is_empty() {
+                                        state.pending_action = Some(
+                                            crate::app::PendingAction::ConfirmBatchTrash(
+                                                ids,
+                                                selected_total,
+                                            ),
+                                        );
+                                    }
+                                }
+                            });
+                        },
+                    );
+                });
+            }
+
+            ui.add_space(4.0);
             widgets::subtle_divider(ui);
             ui.add_space(4.0);
 
@@ -123,6 +182,15 @@ fn candidate_row(ui: &mut egui::Ui, state: &mut AppState, cand: &CleanupCandidat
 
     frame.show(ui, |ui| {
         ui.horizontal(|ui| {
+            // Selection checkbox
+            let mut selected = state.cleanup_selected.contains(&cand.node_id);
+            if ui.checkbox(&mut selected, "").changed() {
+                if selected {
+                    state.cleanup_selected.insert(cand.node_id);
+                } else {
+                    state.cleanup_selected.remove(&cand.node_id);
+                }
+            }
             // Path on the left, truncated
             ui.vertical(|ui| {
                 let path_str = cand.path.display().to_string();

@@ -53,6 +53,7 @@ pub struct AppState {
     // Cleanup suggestions — recomputed on scan completion / partial refresh.
     pub cleanup_window_open: bool,
     pub cleanup_candidates: Vec<crate::cleanup::CleanupCandidate>,
+    pub cleanup_selected: std::collections::HashSet<NodeId>,
 
     // Help / about window — toggled via toolbar or `?` shortcut.
     pub help_window_open: bool,
@@ -80,6 +81,7 @@ pub enum PendingAction {
     RevealInFinder(PathBuf),
     MoveToTrash(NodeId),
     ConfirmTrash(NodeId, String, u64),
+    ConfirmBatchTrash(Vec<NodeId>, u64),
     RefreshSubtree(NodeId),
 }
 
@@ -118,6 +120,7 @@ impl App {
                 context_menu_target: None,
                 cleanup_window_open: false,
                 cleanup_candidates: Vec::new(),
+                cleanup_selected: std::collections::HashSet::new(),
                 help_window_open: false,
                 search_active: false,
                 search_query: String::new(),
@@ -264,6 +267,44 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Trash a batch of nodes from a single confirmation. Failed individual
+    /// items are logged and skipped; successful ones are removed from the
+    /// tree. After all items are processed, recompute extension stats and
+    /// cleanup candidates once.
+    fn perform_batch_delete(&mut self, ids: Vec<NodeId>) {
+        let mut succeeded: Vec<NodeId> = Vec::new();
+        for id in &ids {
+            let path = match &self.state.tree {
+                Some(t) if t.is_alive(*id) => t.full_path(*id),
+                _ => continue,
+            };
+            if let Err(e) = crate::platform::trash::move_to_trash(&path) {
+                eprintln!("Batch trash failed for {}: {}", path.display(), e);
+                continue;
+            }
+            succeeded.push(*id);
+        }
+        if let Some(tree) = &mut self.state.tree {
+            for id in &succeeded {
+                tree.remove_node(*id);
+            }
+            let root = tree.root();
+            self.state.extension_stats = tree.collect_extensions(root);
+            self.state.cleanup_candidates =
+                crate::cleanup::find_candidates(tree, root);
+        }
+        for id in &succeeded {
+            if self.state.selected_node == Some(*id) {
+                self.state.selected_node = None;
+            }
+            if self.state.hovered_node == Some(*id) {
+                self.state.hovered_node = None;
+            }
+            self.state.cleanup_selected.remove(id);
+        }
+        self.state.treemap_dirty = true;
     }
 
     fn perform_delete(&mut self, node_id: NodeId) {
@@ -556,6 +597,7 @@ impl eframe::App for App {
 
         // Handle pending actions
         let mut action_to_process: Option<Option<NodeId>> = None;
+        let mut batch_to_process: Option<Option<Vec<NodeId>>> = None;
         if let Some(action) = &self.state.pending_action {
             match action {
                 PendingAction::ConfirmTrash(node_id, name, size) => {
@@ -617,6 +659,58 @@ impl eframe::App for App {
                     self.state.pending_action = None;
                     self.start_partial_refresh(node_id);
                 }
+                PendingAction::ConfirmBatchTrash(ids, total_size) => {
+                    let ids = ids.clone();
+                    let total_size = *total_size;
+                    egui::Window::new("Confirm Batch Delete")
+                        .title_bar(false)
+                        .collapsible(false)
+                        .resizable(false)
+                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                        .default_width(320.0)
+                        .show(ctx, |ui| {
+                            ui.set_max_width(360.0);
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "Move {} item{} to Trash?",
+                                    ids.len(),
+                                    if ids.len() == 1 { "" } else { "s" },
+                                ))
+                                .color(ui::theme::TEXT_PRIMARY)
+                                .size(13.0)
+                                .strong(),
+                            );
+                            ui.add_space(4.0);
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "Total {}",
+                                    ui::theme::format_size(total_size),
+                                ))
+                                .color(ui::theme::TEXT_SECONDARY)
+                                .size(11.0),
+                            );
+                            ui.add_space(12.0);
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui::widgets::danger_button(
+                                            ui,
+                                            &format!("Move {} to Trash", ids.len()),
+                                        )
+                                        .clicked()
+                                        {
+                                            batch_to_process = Some(Some(ids.clone()));
+                                        }
+                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
+                                            batch_to_process = Some(None);
+                                        }
+                                    },
+                                );
+                            });
+                        });
+                }
                 _ => {
                     // RevealInFinder / MoveToTrash variants are unused —
                     // context menu performs those actions inline.
@@ -628,6 +722,12 @@ impl eframe::App for App {
             self.state.pending_action = None;
             if let Some(node_id) = result {
                 self.perform_delete(node_id);
+            }
+        }
+        if let Some(result) = batch_to_process {
+            self.state.pending_action = None;
+            if let Some(ids) = result {
+                self.perform_batch_delete(ids);
             }
         }
     }

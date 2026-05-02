@@ -132,6 +132,23 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             );
             painter.rect_filled(indicator, 2.0, theme::ACCENT);
             ui.ctx().request_repaint();
+        } else if state.tree.is_some() {
+            // Scan finished but produced nothing (empty directory or all
+            // entries unreadable / skipped).
+            painter.text(
+                Pos2::new(center.x, center.y - 8.0),
+                egui::Align2::CENTER_CENTER,
+                format!("Nothing scannable in {}", state.scan_root.display()),
+                egui::FontId::proportional(13.0),
+                theme::TEXT_SECONDARY,
+            );
+            painter.text(
+                Pos2::new(center.x, center.y + 12.0),
+                egui::Align2::CENTER_CENTER,
+                "Pick a different folder or drop one here.",
+                egui::FontId::proportional(11.0),
+                theme::TEXT_MUTED,
+            );
         } else {
             // Welcome / empty state — no auto-scan on first launch.
             painter.text(
@@ -500,6 +517,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 let n = t.node(id);
                 (
                     t.name(id).to_string(),
+                    t.full_path(id).display().to_string(),
                     n.size,
                     t.extension(id).map(|s| s.to_string()),
                     n.modified,
@@ -508,9 +526,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             })
         })
     };
-    if let Some((name, size, ext, modified, is_dir)) = hover_data {
+    if let Some((name, path, size, ext, modified, is_dir)) = hover_data {
         response.on_hover_ui_at_pointer(|ui| {
-            ui.set_max_width(420.0);
+            ui.set_max_width(460.0);
             let display_name = if name.chars().count() > 60 {
                 let mut iter = name.chars();
                 let head: String = iter.by_ref().take(58).collect();
@@ -523,6 +541,21 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     .strong()
                     .color(theme::TEXT_PRIMARY)
                     .size(12.5),
+            );
+            // Path (truncated middle)
+            let path_disp = if path.chars().count() > 80 {
+                let n = path.chars().count();
+                let head: String = path.chars().take(38).collect();
+                let tail: String = path.chars().skip(n.saturating_sub(38)).collect();
+                format!("{}…{}", head, tail)
+            } else {
+                path.clone()
+            };
+            ui.label(
+                egui::RichText::new(path_disp)
+                    .color(theme::TEXT_MUTED)
+                    .monospace()
+                    .size(10.0),
             );
             ui.label(
                 egui::RichText::new(theme::format_size(size))
