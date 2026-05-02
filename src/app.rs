@@ -508,7 +508,10 @@ impl eframe::App for App {
                 self.state.selected_extension = None;
             }
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::Questionmark)) {
+        // Don't fire `?` while a text input (search) is focused.
+        if !ctx.wants_keyboard_input()
+            && ctx.input(|i| i.key_pressed(egui::Key::Questionmark))
+        {
             self.state.help_window_open = !self.state.help_window_open;
         }
 
