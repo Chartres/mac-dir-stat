@@ -5,6 +5,7 @@ use jwalk::WalkDir;
 use std::collections::HashMap;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::SystemTime;
 
 /// Get total and available bytes for the volume containing `path`.
@@ -23,16 +24,72 @@ fn volume_space(path: &Path) -> Option<(u64, u64)> {
     }
 }
 
-/// Paths to skip when scanning from `/` to avoid APFS firmlink double-counting.
-/// `/System/Volumes/Data` is a firmlink to the data volume (already merged into `/`).
-/// `/Volumes/Macintosh HD` (and variants) are firmlinks back to the root.
-fn should_skip(path: &Path, scan_root: &Path) -> bool {
-    // Always skip /System/Volumes — contains firmlinks that duplicate the entire fs
+/// Builds the list of paths to skip preemptively. Skipping is done at the
+/// directory-listing stage (via jwalk's process_read_dir) so the walker never
+/// even tries to enter these paths — which is what avoids triggering macOS
+/// TCC permission prompts in the first place.
+fn build_skip_paths() -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = vec![
+        // APFS firmlinks (duplicate the entire fs)
+        PathBuf::from("/System/Volumes"),
+        // Time Machine local snapshots and installer sandboxes
+        PathBuf::from("/.MobileBackups"),
+        PathBuf::from("/.PKInstallSandboxManager"),
+        PathBuf::from("/.PKInstallSandboxManager-SystemSoftware"),
+    ];
+
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        // TCC-protected user dirs — accessing any of these triggers a system
+        // permission prompt. Skip preemptively.
+        for sub in [
+            "Library/Mail",
+            "Library/Messages",
+            "Library/Calendars",
+            "Library/Reminders",
+            "Library/Safari",
+            "Library/Cookies",
+            "Library/HomeKit",
+            "Library/IdentityServices",
+            "Library/Suggestions",
+            "Library/PersonalizationPortrait",
+            "Library/Sharing",
+            "Library/Metadata/CoreSpotlight",
+            "Library/CoreFollowUp",
+            "Library/Application Support/AddressBook",
+            "Library/Application Support/CallHistoryDB",
+            "Library/Application Support/CallHistoryTransactions",
+            "Library/Application Support/com.apple.TCC",
+            "Library/Caches/com.apple.Safari",
+            "Library/Containers/com.apple.mail",
+        ] {
+            paths.push(home.join(sub));
+        }
+    }
+    paths
+}
+
+fn is_photos_library(path: &Path) -> bool {
+    path.extension()
+        .map_or(false, |e| e == "photoslibrary" || e == "photolibrary")
+}
+
+fn should_skip(path: &Path, scan_root: &Path, skip_paths: &[PathBuf]) -> bool {
+    // APFS firmlinks
     if path.starts_with("/System/Volumes") {
         return true;
     }
-    // When scanning from /, skip /Volumes entries (mount points / firmlinks to root)
+    // When scanning from /, skip /Volumes entries (mount points / firmlinks
+    // to root, plus the "Removable Volumes" TCC trigger).
     if scan_root == Path::new("/") && path.starts_with("/Volumes") {
+        return true;
+    }
+    // TCC-protected paths
+    for p in skip_paths {
+        if path.starts_with(p) {
+            return true;
+        }
+    }
+    if is_photos_library(path) {
         return true;
     }
     false
@@ -50,7 +107,21 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut byte_count: u64 = 0;
     let mut progress_counter: usize = 0;
 
-    for entry in WalkDir::new(&root).skip_hidden(false).sort(true).follow_links(false) {
+    let skip_paths = Arc::new(build_skip_paths());
+    let walker_skip_paths = Arc::clone(&skip_paths);
+    let walker_root = root.clone();
+
+    for entry in WalkDir::new(&root)
+        .skip_hidden(false)
+        .sort(true)
+        .follow_links(false)
+        .process_read_dir(move |_depth, _dir_path, _state, children| {
+            children.retain(|res| match res {
+                Ok(entry) => !should_skip(&entry.path(), &walker_root, &walker_skip_paths),
+                Err(_) => true,
+            });
+        })
+    {
         let entry = match entry {
             Ok(e) => e,
             Err(_) => continue,
@@ -62,8 +133,9 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             continue;
         }
 
-        // Skip APFS firmlink paths that cause double-counting
-        if should_skip(&path, &root) {
+        // Defensive — process_read_dir already filters most cases, but keep
+        // this for the rare entry that slips through.
+        if should_skip(&path, &root, &skip_paths) {
             continue;
         }
 
