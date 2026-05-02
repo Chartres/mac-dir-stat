@@ -8,14 +8,18 @@ Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/em
 
 - **Treemap rendering** of directory contents — area = file size — with cushioned gradient colors per file type, depth, or modification age.
 - **Directory tree panel** synced to the treemap; click anywhere in the treemap to reveal the location.
-- **File-type breakdown** showing total bytes per extension.
-- **Cleanup Suggestions**: scans for known-regenerable directories (Xcode DerivedData, iOS Simulators, `node_modules`, `target`, Application Caches, Docker data, …) and lets you trash them with one click.
-- **Refresh subtree**: right-click a folder to re-scan only that subtree.
+- **File-type breakdown** showing total bytes per extension; click a row to dim non-matching files.
+- **Cleanup Suggestions** with multi-select and batch trash: scans for known-regenerable directories (Xcode DerivedData / Archives / Simulators / DeviceSupport, `node_modules`, `target`, Application Caches, Docker / Cargo / rustup / Gradle / Maven / Next.js / Turbo, …). Tick the candidates you trust, hit one button, confirm once. Empty Trash from the same window when you're done.
+- **Refresh subtree**: right-click a folder (or `⇧⌘R` on a selected one) to re-scan only that subtree without losing your current view.
 - **Right-click menu** on every node — Reveal in Finder, Copy Path, Refresh, Zoom Into, Move to Trash.
 - **Drag-and-drop** a folder onto the window to scan it.
-- **Hover tooltip** with name, size, type, and relative modified time.
-- **Persistent state** — last scan path and color mode are restored on launch.
+- **Hover tooltip** with name, full path, size, type, and relative modified time.
+- **Persistent state** — last scan path, color mode, and window size are restored on launch.
+- **Live scan progress** — counts, bytes, current path, and skipped-error count surfaced as the walker progresses.
+- **Freed-this-session counter** in the status bar — accumulates bytes trashed since the last scan started.
 - **TCC-aware**: known protected paths (Photos library, Mail, Calendar, Reminders, removable volumes, …) are filtered out before traversal so you don't get a wall of macOS permission prompts on first scan.
+
+Press `?` at any time for the keyboard shortcut list.
 
 ## Install
 
@@ -42,10 +46,13 @@ The app is currently **unsigned**, so on first launch macOS Gatekeeper will bloc
 |---|---|
 | `⌘O` | Pick directory to scan |
 | `⌘R` | Re-scan current root |
+| `⇧⌘R` | Re-scan only the selected subtree |
+| `⌘1` / `⌘2` / `⌘3` | Color treemap by extension / depth / modified age |
 | `⌘F` | Search files in scanned tree |
 | `⌘⌫` | Move selected node to Trash |
-| `Enter` | Reveal selected node in Finder |
-| `Esc` | Close search / pop zoom / clear selection |
+| `↩` | Reveal selected node in Finder |
+| `Esc` | Close help/cleanup/search · pop zoom · clear selection |
+| `?` | Toggle help / about window |
 
 ## Build from source
 
