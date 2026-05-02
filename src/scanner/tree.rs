@@ -300,6 +300,11 @@ impl FileTree {
                 let ext = extension
                     .map(|r| String::from_utf8_lossy(self.strings.get(r)).into_owned())
                     .unwrap_or_default();
+                // Skip synthetic extensions used for the free-space and
+                // skipped-bytes treemap blocks — they're not real files.
+                if ext.starts_with("__") {
+                    return;
+                }
                 let entry = map.entry(ext).or_insert((0, 0));
                 entry.0 += node.size;
                 entry.1 += 1;
