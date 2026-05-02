@@ -38,6 +38,10 @@ pub struct AppState {
     pub selected_extension: Option<String>,
     pub hovered_dir: Option<NodeId>, // deepest directory region under cursor
 
+    // Reveal-in-tree request — set when user clicks a treemap rect, consumed
+    // by dir_tree which scrolls and clears.
+    pub scroll_dir_tree_to: Option<NodeId>,
+
     // Search
     pub search_active: bool,
     pub search_query: String,
@@ -46,6 +50,7 @@ pub struct AppState {
     pub pending_action: Option<PendingAction>,
     pub request_rescan: bool,
     pub last_screen_size: egui::Vec2,
+    pub last_canvas_size: egui::Vec2,
 }
 
 pub struct ScanProgressInfo {
@@ -87,11 +92,13 @@ impl App {
                 hovered_node: None,
                 hovered_dir: None,
                 selected_extension: None,
+                scroll_dir_tree_to: None,
                 search_active: false,
                 search_query: String::new(),
                 pending_action: None,
                 request_rescan: false,
                 last_screen_size: egui::Vec2::ZERO,
+                last_canvas_size: egui::Vec2::ZERO,
             },
             theme_applied: false,
         }
@@ -193,7 +200,6 @@ impl eframe::App for App {
         if !self.theme_applied {
             ui::theme::apply_theme(ctx);
             self.theme_applied = true;
-            self.start_scan();
         }
 
         self.poll_scan();
@@ -335,12 +341,13 @@ impl eframe::App for App {
 
         let side_frame = egui::Frame::new()
             .fill(ui::theme::BG_PANEL)
-            .inner_margin(egui::Margin::symmetric(12, 10));
+            .inner_margin(egui::Margin::symmetric(8, 8));
 
         // Left panel: directory tree
         egui::SidePanel::left("dir_tree")
-            .default_width(300.0)
-            .min_width(200.0)
+            .default_width(340.0)
+            .min_width(240.0)
+            .max_width(560.0)
             .resizable(true)
             .frame(side_frame)
             .show(ctx, |ui| {
@@ -349,8 +356,9 @@ impl eframe::App for App {
 
         // Right panel: extension list
         egui::SidePanel::right("ext_list")
-            .default_width(280.0)
-            .min_width(180.0)
+            .default_width(300.0)
+            .min_width(200.0)
+            .max_width(440.0)
             .resizable(true)
             .frame(side_frame)
             .show(ctx, |ui| {
@@ -373,41 +381,54 @@ impl eframe::App for App {
                     let node_id = *node_id;
                     let name = name.clone();
                     let size = *size;
+                    let display_name = if name.chars().count() > 36 {
+                        let mut iter = name.chars();
+                        let head: String = iter.by_ref().take(34).collect();
+                        format!("{}…", head)
+                    } else {
+                        name.clone()
+                    };
                     egui::Window::new("Confirm Delete")
                         .title_bar(false)
                         .collapsible(false)
                         .resizable(false)
                         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                        .default_width(300.0)
                         .show(ctx, |ui| {
-                            ui.set_min_width(360.0);
+                            ui.set_max_width(320.0);
                             ui.label(
                                 egui::RichText::new("Move to Trash?")
                                     .color(ui::theme::TEXT_PRIMARY)
-                                    .size(15.0)
+                                    .size(13.0)
                                     .strong(),
                             );
-                            ui.add_space(6.0);
+                            ui.add_space(4.0);
                             ui.label(
                                 egui::RichText::new(format!(
-                                    "{}   {}",
-                                    name,
+                                    "{}  ·  {}",
+                                    display_name,
                                     ui::theme::format_size(size),
                                 ))
                                 .color(ui::theme::TEXT_SECONDARY)
-                                .size(12.0),
+                                .size(11.0),
                             );
-                            ui.add_space(14.0);
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ui::widgets::danger_button(ui, "Move to Trash").clicked() {
-                                        action_to_process = Some(Some(node_id));
-                                    }
-                                    if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                        action_to_process = Some(None);
-                                    }
-                                },
-                            );
+                            ui.add_space(12.0);
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui::widgets::danger_button(ui, "Move to Trash")
+                                            .clicked()
+                                        {
+                                            action_to_process = Some(Some(node_id));
+                                        }
+                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
+                                            action_to_process = Some(None);
+                                        }
+                                    },
+                                );
+                            });
                         });
                 }
                 _ => {}

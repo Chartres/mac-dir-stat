@@ -45,6 +45,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
     let canvas_rect = response.rect;
 
+    // React to side-panel resizes: when the central canvas changes size,
+    // recompute the treemap layout (caching is invalidated).
+    let canvas_size = canvas_rect.size();
+    if (canvas_size - state.last_canvas_size).length() > 0.5 {
+        state.treemap_dirty = true;
+        state.last_canvas_size = canvas_size;
+    }
+
     // Recompute if dirty
     if state.treemap_dirty && state.tree.is_some() {
         if let (Some(tree), Some(view_root)) = (&state.tree, state.view_root) {
@@ -64,8 +72,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
     painter.rect_filled(canvas_rect, 0.0, theme::BG_DARK);
 
     if state.colored_rects.is_empty() {
+        let center = canvas_rect.center();
         if state.scan_progress.scanning {
-            let center = canvas_rect.center();
             let time = ui.input(|i| i.time);
             let dots = match ((time * 2.0) as usize) % 4 {
                 0 => "",
@@ -108,6 +116,22 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             );
             painter.rect_filled(indicator, 2.0, theme::ACCENT);
             ui.ctx().request_repaint();
+        } else {
+            // Welcome / empty state — no auto-scan on first launch.
+            painter.text(
+                Pos2::new(center.x, center.y - 18.0),
+                egui::Align2::CENTER_CENTER,
+                "MacDirStat",
+                egui::FontId::proportional(22.0),
+                theme::TEXT_PRIMARY,
+            );
+            painter.text(
+                Pos2::new(center.x, center.y + 12.0),
+                egui::Align2::CENTER_CENTER,
+                "Click  Scan Directory…  in the toolbar to begin",
+                egui::FontId::proportional(13.0),
+                theme::TEXT_MUTED,
+            );
         }
         return;
     }
@@ -255,7 +279,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     0.0,
                     egui::Stroke::new(
                         if dr.depth == 1 { 2.0 } else { 1.0 },
-                        Color32::from_rgba_unmultiplied(167, 139, 250, alpha),
+                        theme::highlight_alpha(alpha),
                     ),
                     StrokeKind::Inside,
                 );
@@ -280,10 +304,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 painter.rect_stroke(
                     rect.expand(2.0),
                     3.0,
-                    egui::Stroke::new(
-                        1.0,
-                        Color32::from_rgba_unmultiplied(167, 139, 250, 100),
-                    ),
+                    egui::Stroke::new(1.0, theme::highlight_alpha(100)),
                     StrokeKind::Outside,
                 );
                 break;
@@ -308,11 +329,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     StrokeKind::Inside,
                 );
                 // Subtle fill overlay to make the region stand out
-                painter.rect_filled(
-                    rect,
-                    0.0,
-                    Color32::from_rgba_unmultiplied(167, 139, 250, 15),
-                );
+                painter.rect_filled(rect, 0.0, theme::highlight_alpha(15));
                 found = true;
                 break;
             }
@@ -382,6 +399,15 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             state.selected_node = Some(hovered);
             state.selected_extension = None;
             state.expand_to_node(hovered);
+            // Reveal in dir tree: scroll to the containing directory row.
+            if let Some(tree) = &state.tree {
+                let target = if tree.node(hovered).is_dir() {
+                    Some(hovered)
+                } else {
+                    tree.node(hovered).parent
+                };
+                state.scroll_dir_tree_to = target;
+            }
         }
     }
     if response.double_clicked() {

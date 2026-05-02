@@ -35,6 +35,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         egui::ScrollArea::both()
             .auto_shrink([false, false])
             .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                ui.spacing_mut().interact_size.y = 16.0;
                 show_node(ui, state, root, root_size, highlighted_dir);
             });
     });
@@ -67,27 +69,29 @@ fn show_node(
     let size = node.size;
     let depth = node.depth;
 
-    let indent = depth as f32 * 16.0;
+    let indent = depth as f32 * 10.0;
     let has_children = !children.is_empty();
 
     let frame = if is_selected {
         egui::Frame::new()
             .fill(theme::BG_SELECTION)
-            .inner_margin(egui::Margin::symmetric(4, 2))
+            .inner_margin(egui::Margin { left: 3, right: 3, top: 1, bottom: 1 })
             .corner_radius(theme::RADIUS_SM)
     } else {
-        egui::Frame::new().inner_margin(egui::Margin::symmetric(4, 2))
+        egui::Frame::new()
+            .inner_margin(egui::Margin { left: 3, right: 3, top: 1, bottom: 1 })
     };
 
     let frame_response = frame.show(ui, |ui| {
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
             ui.add_space(indent);
 
             if has_children {
                 let arrow = if expanded { "▼" } else { "▶" };
                 let arrow_resp = ui.add(
                     egui::Label::new(
-                        egui::RichText::new(arrow).color(theme::TEXT_MUTED).size(10.0),
+                        egui::RichText::new(arrow).color(theme::TEXT_MUTED).size(9.0),
                     )
                     .sense(egui::Sense::click()),
                 );
@@ -104,20 +108,19 @@ fn show_node(
                     return;
                 }
             } else {
-                ui.add_space(14.0);
+                ui.add_space(10.0);
             }
 
-            ui.label(egui::RichText::new("📁").color(theme::ACCENT_LIGHT).size(12.0));
-
             let name_color = if is_selected {
-                theme::ACCENT_LIGHT
-            } else {
                 theme::TEXT_PRIMARY
+            } else {
+                theme::TEXT_SECONDARY
             };
 
-            // Truncate name to avoid overflow
-            let avail = (ui.available_width() - 90.0).max(40.0);
-            let max_chars = (avail / 7.0) as usize;
+            // Truncate name to avoid overflow. Reserve space for the size text
+            // (and bar, when there's room).
+            let avail = (ui.available_width() - 70.0).max(30.0);
+            let max_chars = (avail / 6.5) as usize;
             let display_name = if name.len() > max_chars && max_chars > 3 {
                 format!("{}…", &name[..max_chars - 1])
             } else {
@@ -126,23 +129,24 @@ fn show_node(
             ui.label(egui::RichText::new(&display_name).color(name_color).size(12.0));
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if root_size > 0 {
-                    let fraction = size as f32 / root_size as f32;
-                    let bar_width = 40.0;
-                    let (bar_rect, _) =
-                        ui.allocate_exact_size(Vec2::new(bar_width, 4.0), egui::Sense::hover());
-                    ui.painter().rect_filled(bar_rect, 2.0, theme::BAR_BG);
-                    let filled = egui::Rect::from_min_size(
-                        bar_rect.left_top(),
-                        Vec2::new(bar_width * fraction, 4.0),
-                    );
-                    ui.painter().rect_filled(filled, 2.0, theme::ACCENT);
-                }
+                ui.spacing_mut().item_spacing.x = 6.0;
                 ui.label(
                     egui::RichText::new(theme::format_size(size))
                         .color(theme::TEXT_MUTED)
                         .size(10.0),
                 );
+                if root_size > 0 && ui.available_width() > 32.0 {
+                    let fraction = size as f32 / root_size as f32;
+                    let bar_width = 28.0;
+                    let (bar_rect, _) =
+                        ui.allocate_exact_size(Vec2::new(bar_width, 3.0), egui::Sense::hover());
+                    ui.painter().rect_filled(bar_rect, 1.5, theme::BAR_BG);
+                    let filled = egui::Rect::from_min_size(
+                        bar_rect.left_top(),
+                        Vec2::new(bar_width * fraction, 3.0),
+                    );
+                    ui.painter().rect_filled(filled, 1.5, theme::BAR_FILL);
+                }
             });
         });
     });
@@ -156,6 +160,12 @@ fn show_node(
         state.view_root = Some(id);
         state.zoom_stack.push(id);
         state.treemap_dirty = true;
+    }
+
+    // Reveal-in-tree: scroll this row into view if the treemap requested it.
+    if state.scroll_dir_tree_to == Some(id) {
+        row_response.scroll_to_me(Some(egui::Align::Center));
+        state.scroll_dir_tree_to = None;
     }
 
     if expanded {

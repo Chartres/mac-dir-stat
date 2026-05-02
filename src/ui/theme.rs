@@ -17,10 +17,16 @@ pub const TEXT_SECONDARY: Color32 = Color32::from_rgb(0xa1, 0xa4, 0xad);
 pub const TEXT_MUTED: Color32 = Color32::from_rgb(0x6b, 0x6f, 0x78);
 pub const TEXT_DIM: Color32 = Color32::from_rgb(0x4d, 0x50, 0x59);
 
-// Accent — softened violet (was 7c3aed; now violet-500)
+// Accent — reserved for the primary CTA only.
 pub const ACCENT: Color32 = Color32::from_rgb(0x8b, 0x5c, 0xf6);
 pub const ACCENT_HOVER: Color32 = Color32::from_rgb(0x9d, 0x74, 0xf8);
-pub const ACCENT_LIGHT: Color32 = Color32::from_rgb(0xc4, 0xb5, 0xfd);
+
+// Highlight — used on selected/hovered items, status text, breadcrumbs.
+// Cool near-white, no violet cast.
+pub const ACCENT_LIGHT: Color32 = Color32::from_rgb(0xd6, 0xda, 0xe2);
+
+// Mini-bar fill (dir-tree size bars, scan progress indicator)
+pub const BAR_FILL: Color32 = Color32::from_rgb(0x6b, 0x7c, 0x96);
 
 // Danger
 pub const DANGER: Color32 = Color32::from_rgb(0xef, 0x44, 0x44);
@@ -123,6 +129,13 @@ pub fn apply_theme(ctx: &egui::Context) {
     v.hyperlink_color = ACCENT_LIGHT;
 
     ctx.set_style(style);
+}
+
+/// Returns ACCENT_LIGHT with a custom alpha — for selection rings, dir-region
+/// borders, and other low-opacity highlight overlays.
+pub fn highlight_alpha(alpha: u8) -> Color32 {
+    let c = ACCENT_LIGHT;
+    Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), alpha)
 }
 
 pub fn format_size(bytes: u64) -> String {
