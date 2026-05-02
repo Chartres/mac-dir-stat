@@ -172,13 +172,18 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 egui::FontId::proportional(12.0),
                 theme::TEXT_MUTED,
             );
-            painter.text(
-                Pos2::new(center.x, center.y + 56.0),
-                egui::Align2::CENTER_CENTER,
-                format!("Last: {}   ·   ⌘R to scan it", state.scan_root.display()),
-                egui::FontId::proportional(11.0),
-                theme::TEXT_DIM,
-            );
+            if state.has_persisted_root {
+                painter.text(
+                    Pos2::new(center.x, center.y + 56.0),
+                    egui::Align2::CENTER_CENTER,
+                    format!(
+                        "Last: {}   ·   ⌘R to scan it",
+                        state.scan_root.display()
+                    ),
+                    egui::FontId::proportional(11.0),
+                    theme::TEXT_DIM,
+                );
+            }
         }
         return;
     }

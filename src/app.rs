@@ -67,6 +67,10 @@ pub struct AppState {
     pub request_rescan: bool,
     pub last_screen_size: egui::Vec2,
     pub last_canvas_size: egui::Vec2,
+
+    // True when scan_root came from persisted state. Drives the welcome
+    // screen — no "Last: …" hint on first run.
+    pub has_persisted_root: bool,
 }
 
 pub struct ScanProgressInfo {
@@ -88,6 +92,7 @@ pub enum PendingAction {
 impl App {
     pub fn new() -> Self {
         let persisted = crate::state::load();
+        let has_persisted_root = persisted.scan_root.is_some();
         let scan_root = persisted.scan_root.unwrap_or_else(|| PathBuf::from("/"));
         let color_mode = persisted.color_mode.unwrap_or(ColorMode::Extension);
         App {
@@ -128,6 +133,7 @@ impl App {
                 request_rescan: false,
                 last_screen_size: egui::Vec2::ZERO,
                 last_canvas_size: egui::Vec2::ZERO,
+                has_persisted_root,
             },
             theme_applied: false,
         }
