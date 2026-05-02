@@ -2,6 +2,7 @@ pub mod cleanup_window;
 pub mod context_menu;
 pub mod dir_tree;
 pub mod ext_list;
+pub mod help_window;
 pub mod search;
 pub mod theme;
 pub mod toolbar;

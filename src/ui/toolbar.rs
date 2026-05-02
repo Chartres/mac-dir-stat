@@ -55,6 +55,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         );
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if widgets::ghost_button(ui, "?").clicked() {
+                state.help_window_open = !state.help_window_open;
+            }
+            ui.add_space(4.0);
             let mut current = state.color_mode;
             if widgets::segmented_control(
                 ui,

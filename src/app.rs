@@ -54,6 +54,9 @@ pub struct AppState {
     pub cleanup_window_open: bool,
     pub cleanup_candidates: Vec<crate::cleanup::CleanupCandidate>,
 
+    // Help / about window — toggled via toolbar or `?` shortcut.
+    pub help_window_open: bool,
+
     // Search
     pub search_active: bool,
     pub search_query: String,
@@ -115,6 +118,7 @@ impl App {
                 context_menu_target: None,
                 cleanup_window_open: false,
                 cleanup_candidates: Vec::new(),
+                help_window_open: false,
                 search_active: false,
                 search_query: String::new(),
                 pending_action: None,
@@ -397,7 +401,11 @@ impl eframe::App for App {
             }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if self.state.search_active {
+            if self.state.help_window_open {
+                self.state.help_window_open = false;
+            } else if self.state.cleanup_window_open {
+                self.state.cleanup_window_open = false;
+            } else if self.state.search_active {
                 self.state.search_active = false;
                 self.state.search_query.clear();
             } else if self.state.zoom_stack.len() > 1 {
@@ -408,6 +416,9 @@ impl eframe::App for App {
                 self.state.selected_node = None;
                 self.state.selected_extension = None;
             }
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Questionmark)) {
+            self.state.help_window_open = !self.state.help_window_open;
         }
 
         if self.state.scan_progress.scanning {
@@ -540,6 +551,8 @@ impl eframe::App for App {
 
         // Cleanup-suggestions window (toggleable from the toolbar)
         ui::cleanup_window::show(ctx, &mut self.state);
+        // Help / about window (`?` shortcut, also toolbar button)
+        ui::help_window::show(ctx, &mut self.state);
 
         // Handle pending actions
         let mut action_to_process: Option<Option<NodeId>> = None;
