@@ -71,6 +71,10 @@ pub struct AppState {
     // True when scan_root came from persisted state. Drives the welcome
     // screen — no "Last: …" hint on first run.
     pub has_persisted_root: bool,
+
+    // Cumulative bytes the user has trashed since the current scan
+    // completed. Resets on each scan start. Shown in the status bar.
+    pub freed_this_session: u64,
 }
 
 pub struct ScanProgressInfo {
@@ -135,6 +139,7 @@ impl App {
                 last_screen_size: egui::Vec2::ZERO,
                 last_canvas_size: egui::Vec2::ZERO,
                 has_persisted_root,
+                freed_this_session: 0,
             },
             theme_applied: false,
         }
@@ -151,6 +156,7 @@ impl App {
             current_path: None,
         };
         self.state.scan_start = Some(Instant::now());
+        self.state.freed_this_session = 0;
         self.state.tree = None;
         self.state.colored_rects.clear();
         self.state.dir_rects.clear();
@@ -282,9 +288,10 @@ impl App {
     /// cleanup candidates once.
     fn perform_batch_delete(&mut self, ids: Vec<NodeId>) {
         let mut succeeded: Vec<NodeId> = Vec::new();
+        let mut freed: u64 = 0;
         for id in &ids {
-            let path = match &self.state.tree {
-                Some(t) if t.is_alive(*id) => t.full_path(*id),
+            let (path, size) = match &self.state.tree {
+                Some(t) if t.is_alive(*id) => (t.full_path(*id), t.node(*id).size),
                 _ => continue,
             };
             if let Err(e) = crate::platform::trash::move_to_trash(&path) {
@@ -292,7 +299,9 @@ impl App {
                 continue;
             }
             succeeded.push(*id);
+            freed += size;
         }
+        self.state.freed_this_session = self.state.freed_this_session.saturating_add(freed);
         if let Some(tree) = &mut self.state.tree {
             for id in &succeeded {
                 tree.remove_node(*id);
@@ -317,8 +326,11 @@ impl App {
     fn perform_delete(&mut self, node_id: NodeId) {
         if let Some(tree) = &self.state.tree {
             let path = tree.full_path(node_id);
+            let size = tree.node(node_id).size;
             match crate::platform::trash::move_to_trash(&path) {
                 Ok(()) => {
+                    self.state.freed_this_session =
+                        self.state.freed_this_session.saturating_add(size);
                     if let Some(tree) = &mut self.state.tree {
                         tree.remove_node(node_id);
                         let root = tree.root();
@@ -496,12 +508,21 @@ impl eframe::App for App {
                 if let Some(tree) = &self.state.tree {
                     let root = tree.root();
                     let file_count = tree.collect_files(root).len();
+                    let freed_str = if self.state.freed_this_session > 0 {
+                        format!(
+                            "  •  freed {}",
+                            ui::theme::format_size(self.state.freed_this_session)
+                        )
+                    } else {
+                        String::new()
+                    };
                     ui.label(
                         egui::RichText::new(format!(
-                            "{} files  •  {} dirs  •  {:.1}s",
+                            "{} files  •  {} dirs  •  {:.1}s{}",
                             file_count,
                             self.state.scan_progress.dirs,
                             self.state.scan_duration_secs,
+                            freed_str,
                         ))
                         .color(ui::theme::TEXT_MUTED)
                         .size(11.0),
