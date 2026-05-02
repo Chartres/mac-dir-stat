@@ -4,6 +4,16 @@ Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/em
 
 ## Install
 
+### Homebrew (recommended)
+
+```sh
+brew install --cask chartres/mac-dir-stat/mac-dir-stat
+```
+
+`brew` strips the quarantine attribute on install, so the app opens normally.
+
+### Manual DMG
+
 Grab the latest `MacDirStat-<version>.dmg` from [Releases](https://github.com/Chartres/mac-dir-stat/releases), open it, drag **MacDirStat** into `/Applications`.
 
 The app is currently **unsigned**, so on first launch macOS Gatekeeper will block it. Either:
