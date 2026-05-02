@@ -325,11 +325,20 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 painter.rect_stroke(
                     rect,
                     0.0,
-                    egui::Stroke::new(2.5, theme::ACCENT_LIGHT),
+                    egui::Stroke::new(2.5, theme::ACCENT),
                     StrokeKind::Inside,
                 );
                 // Subtle fill overlay to make the region stand out
-                painter.rect_filled(rect, 0.0, theme::highlight_alpha(15));
+                painter.rect_filled(
+                    rect,
+                    0.0,
+                    Color32::from_rgba_unmultiplied(
+                        theme::ACCENT.r(),
+                        theme::ACCENT.g(),
+                        theme::ACCENT.b(),
+                        24,
+                    ),
+                );
                 found = true;
                 break;
             }
@@ -342,10 +351,18 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                         Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
                         Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
                     );
+                    // Inner white + outer accent ring — readable against any
+                    // treemap color.
                     painter.rect_stroke(
                         rect,
                         2.0,
-                        egui::Stroke::new(2.0, theme::ACCENT_LIGHT),
+                        egui::Stroke::new(2.0, Color32::WHITE),
+                        StrokeKind::Outside,
+                    );
+                    painter.rect_stroke(
+                        rect.expand(2.0),
+                        3.0,
+                        egui::Stroke::new(2.0, theme::ACCENT),
                         StrokeKind::Outside,
                     );
                     break;
@@ -424,9 +441,17 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         }
     }
 
-    // Context menu
+    // Capture context-menu target at right-click time. This must NOT be
+    // re-read from hovered_node inside the menu closure — by then the pointer
+    // has moved to whichever menu item is being clicked, and hovered_node
+    // points to a different (or no) rect, leading to operations on the wrong
+    // file (in the worst case: hovering over /Applications and triggering a
+    // delete there).
+    if response.secondary_clicked() {
+        state.context_menu_target = state.hovered_node.or(state.selected_node);
+    }
     response.context_menu(|ui| {
-        if let Some(node_id) = state.hovered_node.or(state.selected_node) {
+        if let Some(node_id) = state.context_menu_target {
             crate::ui::context_menu::show(ui, state, node_id);
         }
     });

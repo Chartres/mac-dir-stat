@@ -42,6 +42,11 @@ pub struct AppState {
     // by dir_tree which scrolls and clears.
     pub scroll_dir_tree_to: Option<NodeId>,
 
+    // Captured at right-click time so the context menu always operates on the
+    // node that was under the pointer when opened, not whatever happens to be
+    // hovered as the menu is navigated.
+    pub context_menu_target: Option<NodeId>,
+
     // Search
     pub search_active: bool,
     pub search_query: String,
@@ -93,6 +98,7 @@ impl App {
                 hovered_dir: None,
                 selected_extension: None,
                 scroll_dir_tree_to: None,
+                context_menu_target: None,
                 search_active: false,
                 search_query: String::new(),
                 pending_action: None,

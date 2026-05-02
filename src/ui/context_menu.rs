@@ -15,8 +15,21 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
         return;
     };
 
+    // Force a usable width — without this the menu measures children at zero
+    // desired width on the first frame and renders ~2 chars wide.
+    ui.set_min_width(200.0);
+    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+
+    let display_name = if name.chars().count() > 32 {
+        let mut iter = name.chars();
+        let head: String = iter.by_ref().take(30).collect();
+        format!("{}…", head)
+    } else {
+        name.clone()
+    };
+
     ui.label(
-        egui::RichText::new(&name)
+        egui::RichText::new(&display_name)
             .color(theme::TEXT_PRIMARY)
             .strong()
             .size(12.0),
