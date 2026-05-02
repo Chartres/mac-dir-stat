@@ -26,21 +26,33 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     .strong()
                     .size(15.0),
             );
-            ui.label(
-                RichText::new(if state.tree.is_none() {
-                    "Run a scan first to see suggestions.".to_string()
-                } else if count == 0 {
-                    "No safe-to-clean directories found in this scan.".to_string()
-                } else {
-                    format!(
-                        "{} candidates · up to {} freeable",
-                        count,
-                        theme::format_size(total_savings),
-                    )
-                })
-                .color(theme::TEXT_SECONDARY)
-                .size(11.0),
-            );
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(if state.tree.is_none() {
+                        "Run a scan first to see suggestions.".to_string()
+                    } else if count == 0 {
+                        "No safe-to-clean directories found in this scan.".to_string()
+                    } else {
+                        format!(
+                            "{} candidates · up to {} freeable",
+                            count,
+                            theme::format_size(total_savings),
+                        )
+                    })
+                    .color(theme::TEXT_SECONDARY)
+                    .size(11.0),
+                );
+                ui.with_layout(
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        if widgets::ghost_button(ui, "Empty Trash…").clicked() {
+                            state.pending_action = Some(
+                                crate::app::PendingAction::ConfirmEmptyTrash,
+                            );
+                        }
+                    },
+                );
+            });
             ui.add_space(6.0);
 
             // Batch action bar
@@ -174,9 +186,15 @@ pub fn show(ctx: &Context, state: &mut AppState) {
 }
 
 fn candidate_row(ui: &mut egui::Ui, state: &mut AppState, cand: &CleanupCandidate) {
+    let is_selected = state.cleanup_selected.contains(&cand.node_id);
+    let (fill, stroke) = if is_selected {
+        (theme::BG_SELECTION, theme::ACCENT)
+    } else {
+        (theme::BG_DARK, theme::BORDER_SUBTLE)
+    };
     let frame = egui::Frame::new()
-        .fill(theme::BG_DARK)
-        .stroke(Stroke::new(1.0, theme::BORDER_SUBTLE))
+        .fill(fill)
+        .stroke(Stroke::new(1.0, stroke))
         .corner_radius(CornerRadius::same(theme::RADIUS_SM))
         .inner_margin(Margin::symmetric(8, 6));
 

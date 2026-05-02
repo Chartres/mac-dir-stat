@@ -86,6 +86,7 @@ pub enum PendingAction {
     MoveToTrash(NodeId),
     ConfirmTrash(NodeId, String, u64),
     ConfirmBatchTrash(Vec<NodeId>, u64),
+    ConfirmEmptyTrash,
     RefreshSubtree(NodeId),
 }
 
@@ -604,6 +605,7 @@ impl eframe::App for App {
         // Handle pending actions
         let mut action_to_process: Option<Option<NodeId>> = None;
         let mut batch_to_process: Option<Option<Vec<NodeId>>> = None;
+        let mut empty_trash_confirmed: Option<bool> = None;
         if let Some(action) = &self.state.pending_action {
             match action {
                 PendingAction::ConfirmTrash(node_id, name, size) => {
@@ -664,6 +666,49 @@ impl eframe::App for App {
                     let node_id = *node_id;
                     self.state.pending_action = None;
                     self.start_partial_refresh(node_id);
+                }
+                PendingAction::ConfirmEmptyTrash => {
+                    egui::Window::new("Confirm Empty Trash")
+                        .title_bar(false)
+                        .collapsible(false)
+                        .resizable(false)
+                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                        .default_width(320.0)
+                        .show(ctx, |ui| {
+                            ui.set_max_width(360.0);
+                            ui.label(
+                                egui::RichText::new("Empty Trash?")
+                                    .color(ui::theme::TEXT_PRIMARY)
+                                    .size(13.0)
+                                    .strong(),
+                            );
+                            ui.add_space(4.0);
+                            ui.label(
+                                egui::RichText::new(
+                                    "Permanently deletes everything currently in your Trash. \
+                                     Cannot be undone.",
+                                )
+                                .color(ui::theme::TEXT_SECONDARY)
+                                .size(11.0),
+                            );
+                            ui.add_space(12.0);
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui::widgets::danger_button(ui, "Empty Trash")
+                                            .clicked()
+                                        {
+                                            empty_trash_confirmed = Some(true);
+                                        }
+                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
+                                            empty_trash_confirmed = Some(false);
+                                        }
+                                    },
+                                );
+                            });
+                        });
                 }
                 PendingAction::ConfirmBatchTrash(ids, total_size) => {
                     let ids = ids.clone();
@@ -734,6 +779,14 @@ impl eframe::App for App {
             self.state.pending_action = None;
             if let Some(ids) = result {
                 self.perform_batch_delete(ids);
+            }
+        }
+        if let Some(confirmed) = empty_trash_confirmed {
+            self.state.pending_action = None;
+            if confirmed {
+                if let Err(e) = crate::platform::trash::empty_trash() {
+                    eprintln!("Empty trash failed: {}", e);
+                }
             }
         }
     }
