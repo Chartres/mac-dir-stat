@@ -534,6 +534,46 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
     if let Some((name, path, size, ext, modified, is_dir)) = hover_data {
         response.on_hover_ui_at_pointer(|ui| {
             ui.set_max_width(460.0);
+
+            // Special-case the synthetic free-space / skipped blocks — the
+            // generic name/path tooltip is unhelpful for these.
+            let is_free_space = ext.as_deref() == Some("__free_space__");
+            let is_skipped = ext.as_deref() == Some("__skipped__");
+            if is_free_space || is_skipped {
+                let title = if is_free_space {
+                    "Free Space"
+                } else {
+                    "Hidden / Skipped"
+                };
+                ui.label(
+                    egui::RichText::new(title)
+                        .strong()
+                        .color(theme::TEXT_PRIMARY)
+                        .size(12.5),
+                );
+                ui.label(
+                    egui::RichText::new(theme::format_size(size))
+                        .color(theme::ACCENT_LIGHT)
+                        .size(11.5),
+                );
+                let body = if is_free_space {
+                    "Available space on this volume according to the \
+                     filesystem (statvfs). Not stored in any file."
+                } else {
+                    "Bytes the scanner couldn't enumerate: TCC-protected \
+                     paths (Photos library, Mail, Calendar, Reminders, …), \
+                     macOS-internal directories that block readdir, and \
+                     per-file permission errors. Not double-counted — the \
+                     gap between disk total and (scanned + free)."
+                };
+                ui.label(
+                    egui::RichText::new(body)
+                        .color(theme::TEXT_MUTED)
+                        .size(10.5),
+                );
+                return;
+            }
+
             let display_name = if name.chars().count() > 60 {
                 let mut iter = name.chars();
                 let head: String = iter.by_ref().take(58).collect();

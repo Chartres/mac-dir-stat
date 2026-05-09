@@ -53,6 +53,16 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     },
                 );
             });
+            ui.label(
+                RichText::new(
+                    "Nothing is deleted until you tick items and click a Trash button. \
+                     Each candidate has a description — if you're unsure, click Reveal \
+                     to see it in Finder.",
+                )
+                .color(theme::TEXT_MUTED)
+                .size(10.5)
+                .italics(),
+            );
             ui.add_space(6.0);
 
             // Batch action bar

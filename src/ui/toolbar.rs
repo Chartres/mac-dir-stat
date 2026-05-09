@@ -26,11 +26,17 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             let count = state.cleanup_candidates.len();
             let total: u64 = state.cleanup_candidates.iter().map(|c| c.size).sum();
             let label = if count > 0 {
-                format!("Cleanup  ·  {}", theme::format_size(total))
+                format!("Cleanup…  ·  {}", theme::format_size(total))
             } else {
-                "Cleanup".to_string()
+                "Cleanup…".to_string()
             };
-            if widgets::ghost_button(ui, &label).clicked() {
+            let resp = widgets::ghost_button(ui, &label);
+            let resp = resp.on_hover_text(
+                "Opens a review window listing safe-to-delete folders \
+                 (caches, Xcode build artifacts, node_modules, simulators, …). \
+                 Nothing is deleted until you tick items and confirm a Trash action.",
+            );
+            if resp.clicked() {
                 state.cleanup_window_open = !state.cleanup_window_open;
             }
         }
