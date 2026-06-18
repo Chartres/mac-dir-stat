@@ -51,16 +51,11 @@ open-source — that's what this is.
 brew install --cask chartres/mac-dir-stat/mac-dir-stat
 ```
 
-`brew` strips the quarantine attribute on install, so the app opens normally.
-
 ### Manual DMG
 
 Grab the latest `MacDirStat-<version>.dmg` from [Releases](https://github.com/Chartres/mac-dir-stat/releases), open it, drag **MacDirStat** into `/Applications`.
 
-The app is currently **unsigned**, so on first launch macOS Gatekeeper will block it. Either:
-
-- **Right-click → Open** in Finder (one-time "Open anyway" prompt), or
-- Strip the quarantine flag once: `xattr -dr com.apple.quarantine /Applications/MacDirStat.app`
+The app is **signed with a Developer ID and notarized by Apple**, so it opens normally on first launch — no Gatekeeper workaround needed.
 
 ## Keyboard shortcuts
 

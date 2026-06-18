@@ -16,8 +16,9 @@ Plus two hard rules that matter here:
 
 1. **Unsigned apps are rejected.** Verbatim: an app that *"fails with Gatekeeper
    enabled … (e.g. unsigned apps will not launch on Apple Silicon Macs)"* is not
-   acceptable. MacDirStat is **currently unsigned** (see README). **This is a
-   blocker for `homebrew/cask` regardless of stars** and must be fixed first.
+   acceptable. ✅ **Resolved as of v0.5.1 (2026-06-18):** the release is signed
+   with a Developer ID and notarized by Apple (`spctl` reports *"accepted,
+   source=Notarized Developer ID"*), so this blocker is cleared.
 2. **Notability can be waived** for apps with their **own website** (even if the
    binary is GitHub-hosted) or **newly released software getting significant
    social-media attention** — a realistic shortcut if a launch post takes off.
@@ -116,7 +117,7 @@ reviewers anyway.
 
 | Milestone | Signal | Gate it unlocks |
 |---|---|---|
-| M1 | Notarized release, opens clean on Apple Silicon | Removes the hard cask blocker |
+| M1 ✅ | Notarized release, opens clean on Apple Silicon (done v0.5.1) | Removes the hard cask blocker |
 | M2 | README has GIF + screenshot; AlternativeTo + 3 awesome-lists live | Evergreen discovery on |
 | M3 | ≥75★ / ≥30 forks / ≥30 watchers, sustained | Meets **standard** cask notability |
 | M4 | `homebrew/cask` PR merged (ideally a non-author submitter) | `brew install --cask mac-dir-stat` |
