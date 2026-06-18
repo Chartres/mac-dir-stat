@@ -60,7 +60,19 @@ pub struct Node {
     pub modified: SystemTime,
     pub parent: Option<NodeId>,
     pub depth: u16,
+    /// Recursive count of files anywhere beneath this node (0 for files).
+    pub file_count: u64,
+    /// Recursive count of subdirectories beneath this node (0 for files).
+    pub subdir_count: u64,
     alive: bool,
+}
+
+impl Node {
+    /// Total items (files + subdirectories) beneath this node — the
+    /// WinDirStat "Items" column.
+    pub fn items(&self) -> u64 {
+        self.file_count + self.subdir_count
+    }
 }
 
 #[derive(Debug)]
@@ -100,6 +112,8 @@ impl FileTree {
             modified: SystemTime::now(),
             parent: None,
             depth: 0,
+            file_count: 0,
+            subdir_count: 0,
             alive: true,
         };
         FileTree {
@@ -164,6 +178,8 @@ impl FileTree {
                 modified,
                 parent: Some(parent),
                 depth,
+                file_count: 0,
+                subdir_count: 0,
                 alive: true,
             },
         )
@@ -189,6 +205,8 @@ impl FileTree {
                 modified,
                 parent: Some(parent),
                 depth,
+                file_count: 0,
+                subdir_count: 0,
                 alive: true,
             },
         )
@@ -207,26 +225,55 @@ impl FileTree {
         self.nodes.iter().filter(|n| n.alive).count()
     }
 
+    /// Aggregate a directory's `size`, `file_count` and `subdir_count` from its
+    /// direct children. Requires the children's own counts to already be
+    /// correct (true in a bottom-up reverse pass and after grafting).
+    fn aggregate_dir(&self, id: NodeId) -> (u64, u64, u64) {
+        let mut size = 0u64;
+        let mut files = 0u64;
+        let mut dirs = 0u64;
+        if let NodeKind::Directory { children, .. } = &self.nodes[id].kind {
+            for &c in children {
+                let child = &self.nodes[c];
+                if !child.alive {
+                    continue;
+                }
+                size += child.size;
+                if child.is_dir() {
+                    dirs += 1 + child.subdir_count;
+                    files += child.file_count;
+                } else {
+                    files += 1;
+                }
+            }
+        }
+        (size, files, dirs)
+    }
+
     pub fn compute_sizes(&mut self) {
+        // Child ids always exceed their parent's (children are pushed after
+        // the parent), so a single high→low pass aggregates bottom-up.
         for i in (0..self.nodes.len()).rev() {
-            if !self.nodes[i].alive {
+            if !self.nodes[i].alive || !self.nodes[i].is_dir() {
                 continue;
             }
-            if let NodeKind::Directory { ref children, .. } = self.nodes[i].kind {
-                let child_ids: Vec<NodeId> = children.clone();
-                let total: u64 = child_ids
-                    .iter()
-                    .filter(|&&c| self.nodes[c].alive)
-                    .map(|&c| self.nodes[c].size)
-                    .sum();
-                self.nodes[i].size = total;
-            }
+            let (size, files, dirs) = self.aggregate_dir(i);
+            self.nodes[i].size = size;
+            self.nodes[i].file_count = files;
+            self.nodes[i].subdir_count = dirs;
         }
     }
 
     pub fn remove_node(&mut self, id: NodeId) {
         let size = self.nodes[id].size;
         let parent = self.nodes[id].parent;
+
+        // How many files and dirs disappear from every ancestor's totals.
+        let (del_files, del_dirs) = if self.nodes[id].is_dir() {
+            (self.nodes[id].file_count, self.nodes[id].subdir_count + 1)
+        } else {
+            (1, 0)
+        };
 
         self.nodes[id].alive = false;
 
@@ -239,6 +286,10 @@ impl FileTree {
         let mut current = parent;
         while let Some(pid) = current {
             self.nodes[pid].size = self.nodes[pid].size.saturating_sub(size);
+            self.nodes[pid].file_count =
+                self.nodes[pid].file_count.saturating_sub(del_files);
+            self.nodes[pid].subdir_count =
+                self.nodes[pid].subdir_count.saturating_sub(del_dirs);
             current = self.nodes[pid].parent;
         }
 
@@ -374,13 +425,11 @@ impl FileTree {
     pub fn recompute_sizes_upward(&mut self, target: NodeId) {
         let mut current = Some(target);
         while let Some(id) = current {
-            if let NodeKind::Directory { children, .. } = &self.nodes[id].kind {
-                let total: u64 = children
-                    .iter()
-                    .filter(|&&c| self.nodes[c].alive)
-                    .map(|&c| self.nodes[c].size)
-                    .sum();
-                self.nodes[id].size = total;
+            if self.nodes[id].is_dir() {
+                let (size, files, dirs) = self.aggregate_dir(id);
+                self.nodes[id].size = size;
+                self.nodes[id].file_count = files;
+                self.nodes[id].subdir_count = dirs;
             }
             current = self.nodes[id].parent;
         }
@@ -396,6 +445,8 @@ impl FileTree {
     pub fn graft_under(&mut self, target: NodeId, source: FileTree) {
         self.clear_descendants(target);
 
+        // Everything appended from here on is a freshly grafted node.
+        let first_new = self.nodes.len();
         let target_depth = self.nodes[target].depth;
         // (source_node_id, destination_parent_in_self, depth_in_self)
         let mut stack: Vec<(NodeId, NodeId, u16)> = Vec::new();
@@ -438,6 +489,17 @@ impl FileTree {
                         stack.push((c, new_id, depth.saturating_add(1)));
                     }
                 }
+            }
+        }
+
+        // Set counts on the grafted dirs bottom-up (children have higher ids
+        // than their parents), then propagate target + ancestors upward.
+        for i in (first_new..self.nodes.len()).rev() {
+            if self.nodes[i].is_dir() {
+                let (size, files, dirs) = self.aggregate_dir(i);
+                self.nodes[i].size = size;
+                self.nodes[i].file_count = files;
+                self.nodes[i].subdir_count = dirs;
             }
         }
 

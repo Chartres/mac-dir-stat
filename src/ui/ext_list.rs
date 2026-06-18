@@ -4,8 +4,21 @@ use crate::ui::{theme, widgets};
 use egui::{Color32, CornerRadius, Ui, Vec2};
 
 pub fn show(ui: &mut Ui, state: &mut AppState) {
+    use crate::app::ExtSortMode;
     ui.vertical(|ui| {
-        widgets::section_header(ui, "File types");
+        ui.horizontal(|ui| {
+            widgets::section_header(ui, "File types");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let label = format!("Sort: {}", state.ext_sort.label());
+                if ui
+                    .small_button(egui::RichText::new(label).size(10.0))
+                    .on_hover_text("Cycle sort order (Size · Count · Name)")
+                    .clicked()
+                {
+                    state.ext_sort = state.ext_sort.next();
+                }
+            });
+        });
 
         if state.tree.is_none() {
             if state.scan_progress.scanning {
@@ -16,15 +29,23 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
 
         let total_size: u64 = state.extension_stats.iter().map(|(_, b, _)| *b).sum();
 
+        // Sort a display copy by the active mode (stats are size-sorted at
+        // collection time).
+        let mut stats: Vec<(String, u64, usize)> = state.extension_stats.clone();
+        match state.ext_sort {
+            ExtSortMode::Size => stats.sort_by(|a, b| b.1.cmp(&a.1)),
+            ExtSortMode::Count => stats.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1))),
+            ExtSortMode::Name => stats.sort_by(|a, b| a.0.cmp(&b.0)),
+        }
+
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 let max_to_show = 50;
-                let stats = &state.extension_stats;
                 let show_count = stats.len().min(max_to_show);
 
                 for i in 0..show_count {
-                    let (ext, bytes, _count) = &stats[i];
+                    let (ext, bytes, count) = &stats[i];
                     let is_selected = state.selected_extension.as_deref() == Some(ext.as_str());
                     let colors = extension_color(if ext.is_empty() { "" } else { ext });
                     let swatch_color = Color32::from_rgba_premultiplied(
@@ -77,6 +98,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                                         .color(theme::TEXT_SECONDARY)
                                         .size(10.0),
                                 );
+                                // File count for this type (WinDirStat "Files").
+                                if ui.available_width() > 36.0 {
+                                    ui.label(
+                                        egui::RichText::new(format!("{}×", count))
+                                            .color(theme::TEXT_MUTED)
+                                            .size(9.0),
+                                    );
+                                }
                             },
                         );
                     });

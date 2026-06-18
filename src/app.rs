@@ -75,6 +75,20 @@ pub struct AppState {
     // Cumulative bytes the user has trashed since the current scan
     // completed. Resets on each scan start. Shown in the status bar.
     pub freed_this_session: u64,
+
+    // Sort modes for the directory tree and file-type list.
+    pub dir_sort: DirSortMode,
+    pub ext_sort: ExtSortMode,
+
+    // Flywheel Common Platform analytics client (ships dark unless configured).
+    pub flywheel: crate::flywheel::Flywheel,
+    // Sean Ellis PMF micro-survey state (help/about window).
+    pub feedback_choice: Option<&'static str>,
+    pub feedback_text: String,
+    pub feedback_sent: bool,
+
+    // One-time Full Disk Access prompt (first launch without access).
+    pub show_fda_prompt: bool,
 }
 
 pub struct ScanProgressInfo {
@@ -84,6 +98,59 @@ pub struct ScanProgressInfo {
     pub errors: usize,
     pub scanning: bool,
     pub current_path: Option<String>,
+}
+
+/// Sort order for the directory tree's children (WinDirStat column sorting).
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum DirSortMode {
+    Size,
+    Name,
+    Items,
+    Recent,
+}
+
+impl DirSortMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            DirSortMode::Size => "Size",
+            DirSortMode::Name => "Name",
+            DirSortMode::Items => "Items",
+            DirSortMode::Recent => "Recent",
+        }
+    }
+    pub fn next(self) -> Self {
+        match self {
+            DirSortMode::Size => DirSortMode::Name,
+            DirSortMode::Name => DirSortMode::Items,
+            DirSortMode::Items => DirSortMode::Recent,
+            DirSortMode::Recent => DirSortMode::Size,
+        }
+    }
+}
+
+/// Sort order for the file-type (extension) list.
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum ExtSortMode {
+    Size,
+    Count,
+    Name,
+}
+
+impl ExtSortMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            ExtSortMode::Size => "Size",
+            ExtSortMode::Count => "Count",
+            ExtSortMode::Name => "Name",
+        }
+    }
+    pub fn next(self) -> Self {
+        match self {
+            ExtSortMode::Size => ExtSortMode::Count,
+            ExtSortMode::Count => ExtSortMode::Name,
+            ExtSortMode::Name => ExtSortMode::Size,
+        }
+    }
 }
 
 pub enum PendingAction {
@@ -101,6 +168,22 @@ impl App {
         let has_persisted_root = persisted.scan_root.is_some();
         let scan_root = persisted.scan_root.unwrap_or_else(|| PathBuf::from("/"));
         let color_mode = persisted.color_mode.unwrap_or(ColorMode::Extension);
+        let flywheel = crate::flywheel::Flywheel::init("mac-dir-stat");
+        flywheel.track(
+            "app_open",
+            serde_json::json!({ "version": env!("CARGO_PKG_VERSION") }),
+        );
+
+        // Ask for Full Disk Access exactly once: on the first launch that
+        // doesn't already have it. We record that we asked regardless, so the
+        // prompt never reappears.
+        let show_fda_prompt = if crate::platform::fda::already_prompted() {
+            false
+        } else {
+            let needs = !crate::platform::fda::has_full_disk_access();
+            crate::platform::fda::mark_prompted();
+            needs
+        };
         App {
             state: AppState {
                 tree: None,
@@ -137,11 +220,21 @@ impl App {
                 search_active: false,
                 search_query: String::new(),
                 pending_action: None,
-                request_rescan: false,
                 last_screen_size: egui::Vec2::ZERO,
                 last_canvas_size: egui::Vec2::ZERO,
                 has_persisted_root,
                 freed_this_session: 0,
+                dir_sort: DirSortMode::Size,
+                ext_sort: ExtSortMode::Size,
+                flywheel,
+                feedback_choice: None,
+                feedback_text: String::new(),
+                feedback_sent: false,
+                show_fda_prompt,
+                // Auto-scan on launch (default target = whole disk via the `/`
+                // fallback above). The first update() frame starts the scan, so
+                // the app opens straight into a scan instead of a welcome screen.
+                request_rescan: true,
             },
             theme_applied: false,
         }
@@ -276,6 +369,16 @@ impl App {
                         if let Some(start) = self.state.scan_start {
                             self.state.scan_duration_secs = start.elapsed().as_secs_f32();
                         }
+                        self.state.flywheel.track(
+                            "scan_completed",
+                            serde_json::json!({
+                                "files": self.state.scan_progress.files,
+                                "dirs": self.state.scan_progress.dirs,
+                                "bytes": self.state.scan_progress.bytes,
+                                "errors": self.state.scan_progress.errors,
+                                "duration_secs": self.state.scan_duration_secs,
+                            }),
+                        );
                         let root = tree.root();
                         self.state.extension_stats = tree.collect_extensions(root);
                         self.state.cleanup_candidates =
@@ -295,6 +398,9 @@ impl App {
                     }
                     ScanProgress::Error(msg) => {
                         eprintln!("Scan error: {}", msg);
+                        self.state
+                            .flywheel
+                            .log_error(&msg, serde_json::json!({ "where": "scan" }));
                         self.state.scan_progress.scanning = false;
                     }
                 }
@@ -322,6 +428,13 @@ impl App {
             freed += size;
         }
         self.state.freed_this_session = self.state.freed_this_session.saturating_add(freed);
+        if !succeeded.is_empty() {
+            self.state.flywheel.conversion(serde_json::json!({
+                "freed_bytes": freed,
+                "items": succeeded.len(),
+                "kind": "batch",
+            }));
+        }
         if let Some(tree) = &mut self.state.tree {
             for id in &succeeded {
                 tree.remove_node(*id);
@@ -347,6 +460,77 @@ impl App {
         self.state.treemap_dirty = true;
     }
 
+    /// Move the directory-list selection up or down through the visible rows.
+    fn nav_dir_list(&mut self, down: bool) {
+        let Some(tree) = &self.state.tree else { return };
+        let order = crate::ui::dir_tree::visible_dirs(tree, self.state.dir_sort);
+        if order.is_empty() {
+            return;
+        }
+        // Current dir = selected dir, or a selected file's parent dir.
+        let current = self.state.selected_node.and_then(|sel| {
+            if !tree.is_alive(sel) {
+                None
+            } else if tree.node(sel).is_dir() {
+                Some(sel)
+            } else {
+                tree.node(sel).parent
+            }
+        });
+        let next = match current.and_then(|c| order.iter().position(|&n| n == c)) {
+            Some(idx) => {
+                if down {
+                    order.get(idx + 1).copied().unwrap_or(order[idx])
+                } else if idx > 0 {
+                    order[idx - 1]
+                } else {
+                    order[0]
+                }
+            }
+            None => order[0],
+        };
+        self.state.expand_to_node(next);
+        self.state.selected_node = Some(next);
+        self.state.selected_extension = None;
+        self.state.scroll_dir_tree_to = Some(next);
+    }
+
+    /// Right arrow expands the selected directory (or steps into its first
+    /// child if already open); left arrow collapses it (or steps to its parent).
+    fn nav_expand_selected(&mut self, expand: bool) {
+        let Some(sel) = self.state.selected_node else { return };
+        let Some(tree) = &mut self.state.tree else { return };
+        if !tree.is_alive(sel) {
+            return;
+        }
+        let target = if tree.node(sel).is_dir() {
+            sel
+        } else {
+            match tree.node(sel).parent {
+                Some(p) => p,
+                None => return,
+            }
+        };
+        if let crate::scanner::tree::NodeKind::Directory { expanded, .. } =
+            &mut tree.node_mut(target).kind
+        {
+            let was_expanded = *expanded;
+            if expand {
+                if !was_expanded {
+                    *expanded = true;
+                }
+            } else if was_expanded {
+                *expanded = false;
+            } else if let Some(parent) = tree.node(target).parent {
+                self.state.selected_node = Some(parent);
+                self.state.scroll_dir_tree_to = Some(parent);
+            }
+        }
+        if target != sel {
+            self.state.selected_node = Some(target);
+        }
+    }
+
     fn perform_delete(&mut self, node_id: NodeId) {
         if let Some(tree) = &self.state.tree {
             let path = tree.full_path(node_id);
@@ -355,6 +539,11 @@ impl App {
                 Ok(()) => {
                     self.state.freed_this_session =
                         self.state.freed_this_session.saturating_add(size);
+                    self.state.flywheel.conversion(serde_json::json!({
+                        "freed_bytes": size,
+                        "items": 1,
+                        "kind": "single",
+                    }));
                     if let Some(tree) = &mut self.state.tree {
                         tree.remove_node(node_id);
                         let root = tree.root();
@@ -541,6 +730,22 @@ impl eframe::App for App {
             self.state.help_window_open = !self.state.help_window_open;
         }
 
+        // Arrow-key navigation of the directory list (WinDirStat parity).
+        // Gated so it never steals keys from the search field or other input.
+        if !ctx.wants_keyboard_input() && self.state.tree.is_some() && !self.state.search_active {
+            let up = ctx.input(|i| i.key_pressed(egui::Key::ArrowUp));
+            let down = ctx.input(|i| i.key_pressed(egui::Key::ArrowDown));
+            let left = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft));
+            let right = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight));
+            if up || down {
+                self.nav_dir_list(down);
+            } else if right {
+                self.nav_expand_selected(true);
+            } else if left {
+                self.nav_expand_selected(false);
+            }
+        }
+
         if self.state.scan_progress.scanning {
             ctx.request_repaint();
         }
@@ -688,6 +893,8 @@ impl eframe::App for App {
         ui::cleanup_window::show(ctx, &mut self.state);
         // Help / about window (`?` shortcut, also toolbar button)
         ui::help_window::show(ctx, &mut self.state);
+        // One-time Full Disk Access prompt (first launch without access)
+        ui::fda_window::show(ctx, &mut self.state);
 
         // Handle pending actions
         let mut action_to_process: Option<Option<NodeId>> = None;
