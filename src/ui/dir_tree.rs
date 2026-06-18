@@ -1,11 +1,76 @@
 use crate::app::AppState;
-use crate::scanner::tree::{NodeId, NodeKind};
+use crate::scanner::tree::{FileTree, NodeId, NodeKind};
 use crate::ui::{theme, widgets};
 use egui::{Ui, Vec2};
 
+/// Sort a directory's live children by the active sort mode.
+fn sorted_children(tree: &FileTree, parent: NodeId, sort: crate::app::DirSortMode) -> Vec<NodeId> {
+    use crate::app::DirSortMode;
+    let mut children: Vec<NodeId> = tree.node(parent).children().to_vec();
+    children.retain(|&c| tree.is_alive(c));
+    match sort {
+        DirSortMode::Size => {
+            children.sort_by(|&a, &b| tree.node(b).size.cmp(&tree.node(a).size))
+        }
+        DirSortMode::Items => children.sort_by(|&a, &b| {
+            tree.node(b)
+                .items()
+                .cmp(&tree.node(a).items())
+                .then(tree.node(b).size.cmp(&tree.node(a).size))
+        }),
+        DirSortMode::Recent => {
+            children.sort_by(|&a, &b| tree.node(b).modified.cmp(&tree.node(a).modified))
+        }
+        DirSortMode::Name => children.sort_by(|&a, &b| {
+            tree.name(a)
+                .to_lowercase()
+                .cmp(&tree.name(b).to_lowercase())
+        }),
+    }
+    children
+}
+
+/// Directories in top-to-bottom display order (pre-order, honoring the active
+/// sort and collapsed nodes). Drives keyboard navigation; mirrors what
+/// `show_node` renders.
+pub fn visible_dirs(tree: &FileTree, sort: crate::app::DirSortMode) -> Vec<NodeId> {
+    fn rec(tree: &FileTree, id: NodeId, sort: crate::app::DirSortMode, out: &mut Vec<NodeId>) {
+        if !tree.is_alive(id) || !tree.node(id).is_dir() {
+            return;
+        }
+        out.push(id);
+        let expanded = matches!(
+            &tree.node(id).kind,
+            NodeKind::Directory { expanded: true, .. }
+        );
+        if expanded {
+            for c in sorted_children(tree, id, sort) {
+                if tree.node(c).is_dir() {
+                    rec(tree, c, sort, out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    rec(tree, tree.root(), sort, &mut out);
+    out
+}
+
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     ui.vertical(|ui| {
-        widgets::section_header(ui, "Directory tree");
+        ui.horizontal(|ui| {
+            widgets::section_header(ui, "Directory tree");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let label = format!("Sort: {}", state.dir_sort.label());
+                if ui
+                    .small_button(egui::RichText::new(label).size(10.0))
+                    .on_hover_text("Cycle sort order (Size · Name · Items · Recent)")
+                    .clicked()
+                {
+                    state.dir_sort = state.dir_sort.next();
+                }
+            });
+        });
 
         let tree = match &state.tree {
             Some(t) => t,
@@ -68,6 +133,7 @@ fn show_node(
     let name = tree.name(id).to_string();
     let size = node.size;
     let depth = node.depth;
+    let items = node.items();
 
     let indent = depth as f32 * 10.0;
     let has_children = !children.is_empty();
@@ -145,7 +211,16 @@ fn show_node(
                         bar_rect.left_top(),
                         Vec2::new(bar_width * fraction, 3.0),
                     );
-                    ui.painter().rect_filled(filled, 1.5, theme::BAR_FILL);
+                    ui.painter().rect_filled(filled, 1.5, theme::ACCENT_LIGHT);
+                }
+                // Item count (files + subdirs) — WinDirStat's "Items" column,
+                // shown when there's horizontal room.
+                if ui.available_width() > 48.0 {
+                    ui.label(
+                        egui::RichText::new(format_count(items))
+                            .color(theme::TEXT_MUTED)
+                            .size(9.0),
+                    );
                 }
             });
         });
@@ -175,14 +250,23 @@ fn show_node(
     });
 
     if expanded {
-        let tree = match &state.tree {
-            Some(t) => t,
+        let order = match &state.tree {
+            Some(t) => sorted_children(t, id, state.dir_sort),
             None => return,
         };
-        let mut sorted_children = children;
-        sorted_children.sort_by(|&a, &b| tree.node(b).size.cmp(&tree.node(a).size));
-        for child_id in sorted_children {
+        for child_id in order {
             show_node(ui, state, child_id, root_size, highlighted_dir);
         }
+    }
+}
+
+/// Compact item-count formatting: 1234 → "1.2k", 12 → "12".
+fn format_count(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}k", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
     }
 }

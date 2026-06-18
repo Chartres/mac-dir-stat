@@ -7,11 +7,12 @@ Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/em
 ## Features
 
 - **Treemap rendering** of directory contents — area = file size — with cushioned gradient colors per file type, depth, or modification age.
-- **Directory tree panel** synced to the treemap; click anywhere in the treemap to reveal the location.
-- **File-type breakdown** showing total bytes per extension; click a row to dim non-matching files.
+- **Directory tree panel** synced to the treemap; click anywhere in the treemap to reveal the location. Each folder shows its size, a percentage bar, and its **item count** (files + subdirs). Cycle the sort between **Size · Name · Items · Recent**, and navigate the whole list from the keyboard.
+- **File-type breakdown** showing total bytes, percentage, and **file count** per extension; sort by **Size · Count · Name**; click a row to dim non-matching files.
 - **Cleanup Suggestions** with multi-select and batch trash: scans for known-regenerable directories (Xcode DerivedData / Archives / Simulators / DeviceSupport, `node_modules`, `target`, Application Caches, Docker / Cargo / rustup / Gradle / Maven / Next.js / Turbo, …). Tick the candidates you trust, hit one button, confirm once. Empty Trash from the same window when you're done.
 - **Refresh subtree**: right-click a folder (or `⇧⌘R` on a selected one) to re-scan only that subtree without losing your current view.
-- **Right-click menu** on every node — Reveal in Finder, Copy Path, Refresh, Zoom Into, Move to Trash.
+- **Right-click menu** on every node — **Open**, Reveal in Finder, **Open Terminal Here**, **Get Info**, Copy Path, Refresh, Zoom Into, Move to Trash.
+- **Free & unknown space** — scanning any volume root (`/` or a mounted volume under `/Volumes`) adds `<Free Space>` and `<Hidden / Skipped>` blocks so the treemap accounts for the whole disk.
 - **Drag-and-drop** a folder onto the window to scan it.
 - **Hover tooltip** with name, full path, size, type, and relative modified time.
 - **Persistent state** — last scan path, color mode, and window size are restored on launch.
@@ -20,6 +21,25 @@ Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/em
 - **TCC-aware**: known protected paths (Photos library, Mail, Calendar, Reminders, removable volumes, …) are filtered out before traversal so you don't get a wall of macOS permission prompts on first scan.
 
 Press `?` at any time for the keyboard shortcut list.
+
+### Privacy
+
+MacDirStat can send **anonymous, cookieless** usage counts (app opens, scans run, space reclaimed — never file names or paths) to help prioritize features. It is **off by default** unless a release build is configured with an analytics endpoint, and you can always turn it off under **Help → Privacy**, with `MACDIRSTAT_NO_TELEMETRY=1`, or by leaving the build unconfigured.
+
+## Compared to
+
+| | MacDirStat | [DaisyDisk](https://daisydiskapp.com) | [GrandPerspective](https://grandperspectiv.sourceforge.net) | [WinDirStat](https://windirstat.net) |
+|---|---|---|---|---|
+| Platform | macOS | macOS | macOS | Windows |
+| Price | **Free** | Paid | Free (donations) | Free |
+| Open source | **Yes (MIT)** | No | Yes (GPL) | Yes |
+| Visualization | Treemap | Sunburst | Treemap | Treemap |
+| Folder list + file-type list | **Yes** | No | No | Yes |
+| One-click cleanup of regenerable junk | **Yes** | No | No | No |
+| Actively developed | **Yes** | Yes | Sporadic | Yes |
+
+If you loved WinDirStat on Windows and want the same thing on a Mac — free and
+open-source — that's what this is.
 
 ## Install
 
@@ -49,6 +69,8 @@ The app is currently **unsigned**, so on first launch macOS Gatekeeper will bloc
 | `⇧⌘R` | Re-scan only the selected subtree |
 | `⌘1` / `⌘2` / `⌘3` | Color treemap by extension / depth / modified age |
 | `⌘F` | Search files in scanned tree |
+| `↑` / `↓` | Move selection up/down the directory list |
+| `→` / `←` | Expand / collapse the selected directory |
 | `⌘⌫` | Move selected node to Trash |
 | `↩` | Reveal selected node in Finder |
 | `Esc` | Close help/cleanup/search · pop zoom · clear selection |
@@ -76,3 +98,4 @@ Tag-driven release: pushing `vX.Y.Z` triggers `.github/workflows/release.yml`, w
 - `src/ui/` — egui chrome: toolbar, side panels, treemap viewport, search, cleanup window, context menu.
 - `src/cleanup.rs` — heuristic detection of regenerable directories.
 - `src/state.rs` — persisted UI state (scan root, color mode).
+- `src/flywheel.rs` — optional anonymous usage analytics (off by default; see [Privacy](#privacy)).

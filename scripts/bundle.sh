@@ -23,4 +23,18 @@ lipo -create -output "$APP/Contents/MacOS/$BIN_NAME" \
 
 sed "s/@VERSION@/$VERSION/g" "$ROOT/macos/Info.plist.in" > "$APP/Contents/Info.plist"
 
+# Code-sign with a Developer ID + hardened runtime when an identity is provided
+# (CODESIGN_IDENTITY env). Required for notarization, which homebrew/cask needs.
+# Without it the build is unsigned exactly as before — local dev stays friction-free.
+if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+    echo "Signing with identity: $CODESIGN_IDENTITY"
+    codesign --force --options runtime --timestamp \
+        --sign "$CODESIGN_IDENTITY" "$APP/Contents/MacOS/$BIN_NAME"
+    codesign --force --options runtime --timestamp \
+        --sign "$CODESIGN_IDENTITY" "$APP"
+    codesign --verify --strict --verbose=2 "$APP"
+else
+    echo "CODESIGN_IDENTITY not set — building unsigned (see docs/GROWTH.md Track A)."
+fi
+
 echo "Built $APP (version $VERSION)"

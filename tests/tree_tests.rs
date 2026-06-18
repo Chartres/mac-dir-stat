@@ -73,6 +73,54 @@ fn test_collect_extensions() {
 }
 
 #[test]
+fn test_compute_counts() {
+    // root
+    //   src/        (dir)
+    //     a.rs, b.rs
+    //     nested/   (dir)
+    //       c.rs
+    //   top.txt
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let src = tree.add_dir(root, b"src", false, SystemTime::now(), 1);
+    tree.add_file(src, b"a.rs", 1, Some("rs"), SystemTime::now(), 2);
+    tree.add_file(src, b"b.rs", 1, Some("rs"), SystemTime::now(), 2);
+    let nested = tree.add_dir(src, b"nested", false, SystemTime::now(), 2);
+    tree.add_file(nested, b"c.rs", 1, Some("rs"), SystemTime::now(), 3);
+    tree.add_file(root, b"top.txt", 1, Some("txt"), SystemTime::now(), 1);
+
+    tree.compute_sizes();
+
+    assert_eq!(tree.node(nested).file_count, 1);
+    assert_eq!(tree.node(nested).subdir_count, 0);
+    assert_eq!(tree.node(src).file_count, 3); // a, b, c
+    assert_eq!(tree.node(src).subdir_count, 1); // nested
+    assert_eq!(tree.node(root).file_count, 4); // a, b, c, top
+    assert_eq!(tree.node(root).subdir_count, 2); // src, nested
+    assert_eq!(tree.node(root).items(), 6);
+}
+
+#[test]
+fn test_counts_decrement_on_remove() {
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let src = tree.add_dir(root, b"src", false, SystemTime::now(), 1);
+    tree.add_file(src, b"a.rs", 1, Some("rs"), SystemTime::now(), 2);
+    let nested = tree.add_dir(src, b"nested", false, SystemTime::now(), 2);
+    tree.add_file(nested, b"c.rs", 1, Some("rs"), SystemTime::now(), 3);
+    tree.compute_sizes();
+    assert_eq!(tree.node(root).file_count, 2);
+    assert_eq!(tree.node(root).subdir_count, 2);
+
+    // Removing the nested dir drops its file (c.rs) and itself from totals.
+    tree.remove_node(nested);
+    assert_eq!(tree.node(src).file_count, 1); // only a.rs remains
+    assert_eq!(tree.node(src).subdir_count, 0);
+    assert_eq!(tree.node(root).file_count, 1);
+    assert_eq!(tree.node(root).subdir_count, 1); // only src
+}
+
+#[test]
 fn test_full_path() {
     let mut tree = FileTree::new();
     let root = tree.root();

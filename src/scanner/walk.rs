@@ -8,6 +8,33 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
+/// The device id of `path` (`st_dev`), used to detect volume mount roots.
+fn device_id(path: &Path) -> Option<u64> {
+    use std::ffi::CString;
+    let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    unsafe {
+        let mut st: libc::stat = std::mem::zeroed();
+        if libc::stat(c_path.as_ptr(), &mut st) == 0 {
+            Some(st.st_dev as u64)
+        } else {
+            None
+        }
+    }
+}
+
+/// True when `path` is the root of a mounted volume — `/` or any mount point
+/// whose device differs from its parent's (e.g. `/Volumes/External`). Free and
+/// unknown space are only meaningful at a volume root.
+fn is_volume_root(path: &Path) -> bool {
+    if path == Path::new("/") {
+        return true;
+    }
+    match (device_id(path), path.parent().and_then(device_id)) {
+        (Some(dev), Some(parent_dev)) => dev != parent_dev,
+        _ => false,
+    }
+}
+
 /// Get total and available bytes for the volume containing `path`.
 fn volume_space(path: &Path) -> Option<(u64, u64)> {
     use std::ffi::CString;
@@ -219,9 +246,10 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     tree.compute_sizes();
 
     // Free Space + Skipped synthetic nodes — only meaningful when scanning a
-    // volume root. For sub-roots (e.g. ~/Downloads), the disk's free space
-    // doesn't belong inside the scanned tree.
-    if root == Path::new("/") {
+    // volume root (`/` or a mounted volume like /Volumes/External). For
+    // sub-roots (e.g. ~/Downloads), the disk's free space doesn't belong
+    // inside the scanned tree.
+    if is_volume_root(&root) {
         if let Some((total, avail)) = volume_space(&root) {
             let used = tree.node(tree.root()).size;
 

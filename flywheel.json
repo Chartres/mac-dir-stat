@@ -1,0 +1,37 @@
+{
+  "name": "mac-dir-stat",
+  "slug": "mac-dir-stat",
+  "one_liner": "Treemap directory-size visualizer for macOS — find what's eating your disk and reclaim it",
+  "platform": "desktop",
+  "maturity": 3,
+  "track": "community",
+  "template": "cli-homebrew",
+  "stack": "Rust + egui/eframe",
+  "deploy_target": "Homebrew cask (Chartres/homebrew-mac-dir-stat) + GitHub Releases DMG",
+  "stage": "maintain",
+  "stage_entered": "2026-06-13",
+  "stage_confidence": "confirmed",
+  "time_box_ends": null,
+  "kill_criteria": {
+    "statement": "Homebrew analytics show zero install growth for two consecutive quarters → sunset",
+    "deadline": "2026-12-13",
+    "locked": true
+  },
+  "activation_event": "conversion",
+  "kpi_source": "supabase",
+  "natural_frequency": "episodic",
+  "north_star": null,
+  "links": {
+    "repo": "https://github.com/Chartres/mac-dir-stat"
+  },
+  "decisions": [],
+  "tags": [
+    "macos",
+    "devtool",
+    "treemap",
+    "disk-usage",
+    "rust",
+    "egui"
+  ],
+  "notes": "Desktop GUI (egui/eframe), not a CLI — record corrected 2026-06-18. Distributed via Homebrew cask + DMG. Flywheel SDK (Rust port of flywheel-client) wired in 2026-06-18: app_open + scan_completed key_action + conversion=freed-bytes (the aha) + error events post to the shared flywheel-core events table; ships dark until FLYWHEEL_SUPABASE_URL/ANON_KEY are baked at release. kpi_source=supabase, activation_event=conversion. Stage still 'maintain' on record but under active feature work (WinDirStat parity) + growth push per 2026-06-18 goal — maintain→growing revival is a pending human gate decision."
+}

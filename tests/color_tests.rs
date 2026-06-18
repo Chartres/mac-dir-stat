@@ -18,9 +18,10 @@ fn test_extension_color_different_extensions() {
 
 #[test]
 fn test_extension_color_unknown() {
+    // No-extension files use the slate gradient (SLATE_PAIR in color.rs).
     let c = extension_color("");
-    assert_eq!(c.0, [71, 85, 105, 255]);
-    assert_eq!(c.1, [148, 163, 184, 255]);
+    assert_eq!(c.0, [88, 102, 122, 255]);
+    assert_eq!(c.1, [136, 148, 168, 255]);
 }
 
 #[test]
