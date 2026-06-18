@@ -86,6 +86,9 @@ pub struct AppState {
     pub feedback_choice: Option<&'static str>,
     pub feedback_text: String,
     pub feedback_sent: bool,
+
+    // One-time Full Disk Access prompt (first launch without access).
+    pub show_fda_prompt: bool,
 }
 
 pub struct ScanProgressInfo {
@@ -170,6 +173,17 @@ impl App {
             "app_open",
             serde_json::json!({ "version": env!("CARGO_PKG_VERSION") }),
         );
+
+        // Ask for Full Disk Access exactly once: on the first launch that
+        // doesn't already have it. We record that we asked regardless, so the
+        // prompt never reappears.
+        let show_fda_prompt = if crate::platform::fda::already_prompted() {
+            false
+        } else {
+            let needs = !crate::platform::fda::has_full_disk_access();
+            crate::platform::fda::mark_prompted();
+            needs
+        };
         App {
             state: AppState {
                 tree: None,
@@ -206,7 +220,6 @@ impl App {
                 search_active: false,
                 search_query: String::new(),
                 pending_action: None,
-                request_rescan: false,
                 last_screen_size: egui::Vec2::ZERO,
                 last_canvas_size: egui::Vec2::ZERO,
                 has_persisted_root,
@@ -217,6 +230,11 @@ impl App {
                 feedback_choice: None,
                 feedback_text: String::new(),
                 feedback_sent: false,
+                show_fda_prompt,
+                // Auto-scan on launch (default target = whole disk via the `/`
+                // fallback above). The first update() frame starts the scan, so
+                // the app opens straight into a scan instead of a welcome screen.
+                request_rescan: true,
             },
             theme_applied: false,
         }
@@ -875,6 +893,8 @@ impl eframe::App for App {
         ui::cleanup_window::show(ctx, &mut self.state);
         // Help / about window (`?` shortcut, also toolbar button)
         ui::help_window::show(ctx, &mut self.state);
+        // One-time Full Disk Access prompt (first launch without access)
+        ui::fda_window::show(ctx, &mut self.state);
 
         // Handle pending actions
         let mut action_to_process: Option<Option<NodeId>> = None;

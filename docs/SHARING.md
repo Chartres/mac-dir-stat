@@ -154,3 +154,30 @@ without web referrers, the measurable funnel is:
 
 The star-growth and Homebrew-acceptance roadmap lives in
 [GROWTH.md](GROWTH.md).
+
+---
+
+## Appendix — ready-to-submit listings (you click submit / sign)
+
+### AlternativeTo (alternativeto.net → "Add application")
+- **Name:** MacDirStat
+- **Tagline:** Free, open-source treemap disk-usage visualizer for macOS.
+- **Description:** MacDirStat shows what's using your disk as a treemap — every
+  rectangle is a file, area is its size — plus a sortable folder list and
+  file-type breakdown. Right-click to Open / Reveal / Trash, and clear
+  regenerable junk (Xcode DerivedData, node_modules, target/, caches) in one
+  click. MIT-licensed, no ads, no account.
+- **Platforms:** Mac · **License:** Open Source / Free · **Link:**
+  github.com/Chartres/mac-dir-stat
+- **"Alternative to" tags:** WinDirStat, DaisyDisk, GrandPerspective, OmniDiskSweeper
+
+### Awesome-list PRs (one-line entries; bespoke per list, you submit the PR)
+- **awesome-macos** (Utilities/Disk):
+  `- [MacDirStat](https://github.com/Chartres/mac-dir-stat) - Treemap disk-usage visualizer; a free, open-source WinDirStat/DaisyDisk alternative. ![oss]`
+- **awesome-rust** (Applications/Utilities):
+  `- [MacDirStat](https://github.com/Chartres/mac-dir-stat) — macOS treemap disk-usage visualizer (egui).`
+- **awesome-egui** (Apps):
+  `- [MacDirStat](https://github.com/Chartres/mac-dir-stat) — Treemap directory-size visualizer for macOS.`
+
+Read each list's CONTRIBUTING before the PR (alphabetical order, badge
+conventions, "must be maintained" rules). One bespoke PR per list.

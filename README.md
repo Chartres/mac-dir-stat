@@ -2,7 +2,7 @@
 
 Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/emilk/egui).
 
-![treemap directory size visualizer](docs/screenshot-placeholder.png)
+![MacDirStat — a treemap of an entire macOS disk, with directory tree and file-type breakdown](docs/screenshot.png)
 
 ## Features
 
@@ -15,6 +15,8 @@ Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/em
 - **Free & unknown space** — scanning any volume root (`/` or a mounted volume under `/Volumes`) adds `<Free Space>` and `<Hidden / Skipped>` blocks so the treemap accounts for the whole disk.
 - **Drag-and-drop** a folder onto the window to scan it.
 - **Hover tooltip** with name, full path, size, type, and relative modified time.
+- **Scans on launch** — opens straight into a scan of your whole disk (or your last-scanned folder), no welcome screen to click through.
+- **One-time Full Disk Access prompt** — on first run, if the app lacks Full Disk Access, it offers to open the right Settings pane once (and never nags again); protected areas otherwise show up as `<Hidden / Skipped>`.
 - **Persistent state** — last scan path, color mode, and window size are restored on launch.
 - **Live scan progress** — counts, bytes, current path, and skipped-error count surfaced as the walker progresses.
 - **Freed-this-session counter** in the status bar — accumulates bytes trashed since the last scan started.
