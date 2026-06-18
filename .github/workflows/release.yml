@@ -56,7 +56,7 @@ jobs:
           # Bake the flywheel analytics endpoint into the release (option_env!);
           # absent → the in-app SDK ships dark. See src/flywheel.rs.
           FLYWHEEL_SUPABASE_URL: ${{ secrets.FLYWHEEL_SUPABASE_URL }}
-          FLYWHEEL_SUPABASE_ANON_KEY: ${{ secrets.FLYWHEEL_SUPABASE_ANON_KEY }}
+          FLYWHEEL_SUPABASE_KEY: ${{ secrets.FLYWHEEL_SUPABASE_KEY }}
         run: ./scripts/bundle.sh
 
       - name: Build DMG

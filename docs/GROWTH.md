@@ -71,8 +71,8 @@ gh secret set MACOS_NOTARY_TEAM_ID   -R Chartres/mac-dir-stat   # 10-char Team I
 To turn on the in-app analytics (otherwise the SDK ships dark), also:
 
 ```sh
-gh secret set FLYWHEEL_SUPABASE_URL      -R Chartres/mac-dir-stat -b "https://<project>.supabase.co"
-gh secret set FLYWHEEL_SUPABASE_ANON_KEY -R Chartres/mac-dir-stat -b "<anon-key>"
+gh secret set FLYWHEEL_SUPABASE_URL -R Chartres/mac-dir-stat -b "https://<project>.supabase.co"
+gh secret set FLYWHEEL_SUPABASE_KEY -R Chartres/mac-dir-stat -b "<publishable-key>"   # sb_publishable_…
 ```
 
 After the secrets are set, the next `git tag vX.Y.Z && git push --tags` ships a

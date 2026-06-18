@@ -12,7 +12,7 @@
 //! `session_id`. There is no auth in this app, so `flywheel_uid` is always null.
 //!
 //! Configuration (any one source, checked in order):
-//!   * runtime env `FLYWHEEL_SUPABASE_URL` + `FLYWHEEL_SUPABASE_ANON_KEY`
+//!   * runtime env `FLYWHEEL_SUPABASE_URL` + `FLYWHEEL_SUPABASE_KEY`
 //!   * compile-time bake via the same names (`option_env!`) for release builds
 //! Opt-out: `MACDIRSTAT_NO_TELEMETRY=1` in the environment, or the user toggle
 //! persisted in `telemetry.txt`. With no config baked, the SDK ships dark.
@@ -48,7 +48,7 @@ fn state_dir() -> Option<PathBuf> {
         .map(|h| PathBuf::from(h).join("Library/Application Support/mac-dir-stat"))
 }
 
-/// Resolve `(url, anon_key)` from runtime env first, then a compile-time bake.
+/// Resolve `(url, publishable_key)` from runtime env first, then a compile-time bake.
 /// Returns `None` when neither is present — the ships-dark default.
 fn resolve_config() -> Option<(String, String)> {
     let url = std::env::var("FLYWHEEL_SUPABASE_URL")
@@ -56,10 +56,10 @@ fn resolve_config() -> Option<(String, String)> {
         .filter(|s| !s.is_empty())
         .or_else(|| option_env!("FLYWHEEL_SUPABASE_URL").map(str::to_string))
         .filter(|s| !s.is_empty())?;
-    let key = std::env::var("FLYWHEEL_SUPABASE_ANON_KEY")
+    let key = std::env::var("FLYWHEEL_SUPABASE_KEY")
         .ok()
         .filter(|s| !s.is_empty())
-        .or_else(|| option_env!("FLYWHEEL_SUPABASE_ANON_KEY").map(str::to_string))
+        .or_else(|| option_env!("FLYWHEEL_SUPABASE_KEY").map(str::to_string))
         .filter(|s| !s.is_empty())?;
     Some((url.trim_end_matches('/').to_string(), key))
 }
