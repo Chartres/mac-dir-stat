@@ -8,23 +8,30 @@
   "template": "cli-homebrew",
   "stack": "Rust + egui/eframe",
   "deploy_target": "Homebrew cask (Chartres/homebrew-mac-dir-stat) + GitHub Releases DMG",
-  "stage": "maintain",
-  "stage_entered": "2026-06-13",
+  "stage": "growing",
+  "stage_entered": "2026-06-19",
   "stage_confidence": "confirmed",
-  "time_box_ends": null,
+  "time_box_ends": "2026-09-19",
   "kill_criteria": {
-    "statement": "Homebrew analytics show zero install growth for two consecutive quarters → sunset",
-    "deadline": "2026-12-13",
+    "statement": "Two consecutive quarters with flat/declining GitHub stars AND no growth in weekly scan-completers (telemetry) → revert to maintain",
+    "deadline": "2026-12-19",
     "locked": true
   },
   "activation_event": "conversion",
   "kpi_source": "supabase",
   "natural_frequency": "episodic",
-  "north_star": null,
+  "north_star": "GitHub stars — adoption proxy; ≥75 unlocks homebrew/cask notability. Guard metric: weekly scan-completers from telemetry.",
   "links": {
     "repo": "https://github.com/Chartres/mac-dir-stat"
   },
-  "decisions": [],
+  "decisions": [
+    {
+      "date": "2026-06-19",
+      "gate": "maintain",
+      "choice": "ADVANCE",
+      "rationale": "Revive maintain→growing: v0.5.1 signed+notarized shipped, WinDirStat parity gains, analytics live, active star-growth push toward homebrew/cask notability."
+    }
+  ],
   "tags": [
     "macos",
     "devtool",
