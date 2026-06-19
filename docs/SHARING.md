@@ -157,27 +157,49 @@ The star-growth and Homebrew-acceptance roadmap lives in
 
 ---
 
-## Appendix — ready-to-submit listings (you click submit / sign)
+## Appendix — ready-to-submit copy (Pavol's voice; you click submit)
 
-### AlternativeTo (alternativeto.net → "Add application")
+### 2. Demo GIF (record it yourself — 12 seconds, better than any stitched frames)
+
+1. `Cmd-Shift-5` → **Record Selected Portion** → draw a box tight around the
+   MacDirStat window.
+2. Record ~12s: let it scan and the treemap fill → click **Cleanup…** → tick a
+   couple of candidates → **Move to Trash** → watch the freed counter move. Stop.
+3. Convert to an optimized looping GIF (ffmpeg is installed):
+   ```sh
+   IN=~/Desktop/demo.mov
+   ffmpeg -y -i "$IN" -vf "fps=15,scale=900:-1:flags=lanczos,palettegen" /tmp/pal.png
+   ffmpeg -y -i "$IN" -i /tmp/pal.png -lavfi "fps=15,scale=900:-1:flags=lanczos[x];[x][1:v]paletteuse" docs/demo.gif
+   ```
+   Then point the README image at `docs/demo.gif`. Or just hand me the `.mov`
+   path and I'll convert it, drop it in the README, and commit.
+
+### 3. AlternativeTo (alternativeto.net → "Add application")
 - **Name:** MacDirStat
-- **Tagline:** Free, open-source treemap disk-usage visualizer for macOS.
-- **Description:** MacDirStat shows what's using your disk as a treemap — every
-  rectangle is a file, area is its size — plus a sortable folder list and
-  file-type breakdown. Right-click to Open / Reveal / Trash, and clear
-  regenerable junk (Xcode DerivedData, node_modules, target/, caches) in one
-  click. MIT-licensed, no ads, no account.
+- **Tagline:** Treemap disk-usage tool for macOS that also clears out build junk.
+- **Description:** Shows what's using your disk as a treemap — each rectangle is
+  a file, sized by the space it takes. Next to the treemap there's a sortable
+  folder list and a file-type breakdown. It also finds regenerable developer
+  junk — Xcode DerivedData, node_modules, target/, caches — and trashes it in
+  one pass. Free, open source (MIT), no account. macOS only.
 - **Platforms:** Mac · **License:** Open Source / Free · **Link:**
   github.com/Chartres/mac-dir-stat
-- **"Alternative to" tags:** WinDirStat, DaisyDisk, GrandPerspective, OmniDiskSweeper
+- **"Alternative to":** WinDirStat, DaisyDisk, GrandPerspective, OmniDiskSweeper
 
-### Awesome-list PRs (one-line entries; bespoke per list, you submit the PR)
-- **awesome-macos** (Utilities/Disk):
-  `- [MacDirStat](https://github.com/Chartres/mac-dir-stat) - Treemap disk-usage visualizer; a free, open-source WinDirStat/DaisyDisk alternative. ![oss]`
-- **awesome-rust** (Applications/Utilities):
-  `- [MacDirStat](https://github.com/Chartres/mac-dir-stat) — macOS treemap disk-usage visualizer (egui).`
-- **awesome-egui** (Apps):
-  `- [MacDirStat](https://github.com/Chartres/mac-dir-stat) — Treemap directory-size visualizer for macOS.`
+### 5. Awesome-list PRs (one entry per list; open the PR yourself)
+- **awesome-macos** (Utilities / Disk):
+  `- [MacDirStat](https://github.com/Chartres/mac-dir-stat) - Treemap disk-usage tool that also clears regenerable build junk. Free, open source.`
+- **awesome-rust** (Applications / Utilities):
+  `- [mac-dir-stat](https://github.com/Chartres/mac-dir-stat) — Treemap disk-usage tool for macOS, built with egui.`
+- **awesome-egui** (Apps / Showcase):
+  `- [MacDirStat](https://github.com/Chartres/mac-dir-stat) — Treemap disk-usage tool for macOS.`
 
-Read each list's CONTRIBUTING before the PR (alphabetical order, badge
-conventions, "must be maintained" rules). One bespoke PR per list.
+PR description (reuse for each, trim to fit the list's style):
+> Adds MacDirStat — a treemap disk-usage tool for macOS (Rust + egui). Shows
+> what's using your disk and trashes regenerable build junk (DerivedData,
+> node_modules, target/, caches) in one pass. Free, open source, notarized
+> release.
+
+Read each list's CONTRIBUTING first — alphabetical order, badge conventions,
+and any "must be maintained / N stars" rules. One PR per list, matched to its
+format.
