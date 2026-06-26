@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MacDirStat — free, open-source treemap disk visualizer for macOS</title>
+<meta name="description" content="A free, open-source WinDirStat-style treemap for macOS. See what's eating your disk and trash regenerable build junk in two clicks. Rust + egui. Signed and notarized.">
+<link rel="canonical" href="https://chartres.github.io/mac-dir-stat/">
+<meta property="og:title" content="MacDirStat — treemap disk visualizer for macOS">
+<meta property="og:description" content="Free, open-source WinDirStat/DaisyDisk-style treemap for macOS. See what's eating your disk; trash build junk in two clicks.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://chartres.github.io/mac-dir-stat/screenshot.png">
+<meta property="og:url" content="https://chartres.github.io/mac-dir-stat/">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{
+    --bg:#11141b; --panel:#161a23; --ink:#e8ebf2; --muted:#9aa3b2;
+    --line:#252b38; --accent:#8b5cf6; --accent2:#a78bfa; --good:#34d399;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+  header{padding:64px 0 28px;text-align:center}
+  h1{font-size:42px;line-height:1.1;margin:0 0 12px;letter-spacing:-.02em}
+  .tag{font-size:20px;color:var(--muted);max-width:680px;margin:0 auto 28px}
+  .cta{display:inline-flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:10px}
+  .btn{display:inline-block;padding:11px 20px;border-radius:10px;font-weight:600;
+    border:1px solid var(--line)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent2);text-decoration:none}
+  .btn.ghost:hover{border-color:var(--accent2);text-decoration:none}
+  .shot{margin:34px auto 0;max-width:100%;border-radius:12px;border:1px solid var(--line);
+    display:block;box-shadow:0 24px 60px rgba(0,0,0,.45)}
+  .badges{margin-top:14px;color:var(--muted);font-size:14px}
+  .badges b{color:var(--good)}
+  section{padding:40px 0;border-top:1px solid var(--line)}
+  h2{font-size:26px;margin:0 0 18px;letter-spacing:-.01em}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card h3{margin:0 0 6px;font-size:17px}
+  .card p{margin:0;color:var(--muted);font-size:15px}
+  code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:#0c0e14;border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+    overflow:auto;font-size:14px}
+  .install p{color:var(--muted);margin:.4em 0 .2em}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin-top:6px}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--muted);font-weight:600}
+  td b{color:var(--good)}
+  footer{padding:40px 0 64px;color:var(--muted);font-size:14px;text-align:center;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>MacDirStat</h1>
+  <p class="tag">A free, open-source treemap that shows what's eating your disk on macOS —
+    and trashes the regenerable junk in two clicks.</p>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/Chartres/mac-dir-stat/releases/latest">Download for macOS</a>
+    <a class="btn ghost" href="https://github.com/Chartres/mac-dir-stat">View source on GitHub</a>
+  </div>
+  <div class="badges">Free · MIT · <b>signed &amp; notarized by Apple</b> · no account, no ads</div>
+  <img class="shot" src="screenshot.png"
+    alt="MacDirStat showing a treemap of an entire macOS disk, with a directory tree on the left and a file-type breakdown on the right">
+</header>
+
+<section class="wrap">
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card"><h3>Treemap of your disk</h3><p>Every rectangle is a file, its area is its size — the big stuff is literally the big stuff on screen.</p></div>
+    <div class="card"><h3>Sortable folder list</h3><p>Size, name, items, or most-recent. Each folder shows its size, a percent bar, and item count.</p></div>
+    <div class="card"><h3>File-type breakdown</h3><p>Bytes, percentage, and file count per extension. Click a row to dim everything else.</p></div>
+    <div class="card"><h3>Two-click cleanup</h3><p>Finds regenerable junk — DerivedData, node_modules, target/, caches — and trashes it in one pass.</p></div>
+    <div class="card"><h3>Whole-volume accounting</h3><p>Scan a volume root and it adds free space and hidden/skipped blocks, so the map covers the whole disk.</p></div>
+    <div class="card"><h3>Stays out of your way</h3><p>Scans on launch, no welcome screen. Protected paths are filtered up front, so no wall of permission prompts.</p></div>
+  </div>
+</section>
+
+<section class="wrap install">
+  <h2>Install</h2>
+  <p>Homebrew (recommended):</p>
+  <pre>brew install --cask chartres/mac-dir-stat/mac-dir-stat</pre>
+  <p>Or grab the latest <code>.dmg</code> from
+    <a href="https://github.com/Chartres/mac-dir-stat/releases/latest">Releases</a>,
+    open it, and drag <b>MacDirStat</b> into Applications. It's signed and notarized, so it
+    opens normally on first launch — no Gatekeeper workaround.</p>
+</section>
+
+<section class="wrap">
+  <h2>How it compares</h2>
+  <table>
+    <thead><tr><th></th><th>MacDirStat</th><th>DaisyDisk</th><th>GrandPerspective</th><th>WinDirStat</th></tr></thead>
+    <tbody>
+      <tr><td>Platform</td><td>macOS</td><td>macOS</td><td>macOS</td><td>Windows</td></tr>
+      <tr><td>Price</td><td><b>Free</b></td><td>Paid</td><td>Free</td><td>Free</td></tr>
+      <tr><td>Open source</td><td><b>Yes (MIT)</b></td><td>No</td><td>Yes (GPL)</td><td>Yes</td></tr>
+      <tr><td>Visualization</td><td>Treemap</td><td>Sunburst</td><td>Treemap</td><td>Treemap</td></tr>
+      <tr><td>Folder + file-type lists</td><td><b>Yes</b></td><td>No</td><td>No</td><td>Yes</td></tr>
+      <tr><td>One-click junk cleanup</td><td><b>Yes</b></td><td>No</td><td>No</td><td>No</td></tr>
+    </tbody>
+  </table>
+  <p style="color:var(--muted);margin-top:14px">If you loved WinDirStat on Windows and want the same thing on a Mac — free and open-source — that's what this is.</p>
+</section>
+
+<footer class="wrap">
+  MacDirStat is a free, unofficial, open-source project (MIT). Built with Rust + egui.<br>
+  <a href="https://github.com/Chartres/mac-dir-stat">github.com/Chartres/mac-dir-stat</a>
+</footer>
+</body>
+</html>
