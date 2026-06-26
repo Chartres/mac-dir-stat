@@ -2,6 +2,8 @@
 
 Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/emilk/egui).
 
+**Website:** [chartres.github.io/mac-dir-stat](https://chartres.github.io/mac-dir-stat/) · **Changelog:** [CHANGELOG.md](CHANGELOG.md)
+
 ![MacDirStat — a treemap of an entire macOS disk, with directory tree and file-type breakdown](docs/screenshot.png)
 
 ## Features
