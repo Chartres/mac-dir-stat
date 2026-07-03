@@ -19,6 +19,11 @@ jobs:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
+        # option_env! bakes at compile time but cargo doesn't track it for rerun,
+        # so a target/ cached before FLYWHEEL_SUPABASE_* existed keeps its empty
+        # bake and the SDK ships dark. Bump prefix-key to bust the stale cache.
+        with:
+          prefix-key: v2-fw
 
       # Import the Developer ID cert into a throwaway keychain when the signing
       # secrets exist. Without them the build proceeds unsigned (current behavior).
