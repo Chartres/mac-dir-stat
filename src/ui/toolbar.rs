@@ -18,8 +18,29 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             }
         }
 
+        if widgets::ghost_button(ui, "🖥  Whole Disk").clicked() {
+            state.scan_root = std::path::PathBuf::from("/");
+            state.request_rescan = true;
+        }
+
         if widgets::ghost_button(ui, "⟳  Refresh").clicked() {
             state.request_rescan = true;
+        }
+
+        // Persistent path to grant Full Disk Access — the one-and-done way to
+        // stop the per-folder permission prompts (Downloads, Desktop, Photos,
+        // removable drives) during a whole-disk scan. Shows only while missing.
+        if !state.has_fda {
+            let resp = widgets::ghost_button(ui, "⚠  Grant Full Disk Access")
+                .on_hover_text(
+                    "macOS asks permission for each protected folder it scans \
+                     (Downloads, Desktop, Photos, removable drives…). Grant Full \
+                     Disk Access once to stop all of those prompts. Opens System \
+                     Settings — add MacDirStat, then re-scan.",
+                );
+            if resp.clicked() {
+                crate::platform::fda::open_settings();
+            }
         }
 
         if state.tree.is_some() {

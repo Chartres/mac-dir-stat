@@ -89,6 +89,9 @@ pub struct AppState {
 
     // One-time Full Disk Access prompt (first launch without access).
     pub show_fda_prompt: bool,
+    // Cached FDA state — drives the persistent "Grant Full Disk Access"
+    // toolbar affordance. Rechecked on each scan (see start_scan).
+    pub has_fda: bool,
 }
 
 pub struct ScanProgressInfo {
@@ -177,12 +180,12 @@ impl App {
         // Ask for Full Disk Access exactly once: on the first launch that
         // doesn't already have it. We record that we asked regardless, so the
         // prompt never reappears.
+        let has_fda = crate::platform::fda::has_full_disk_access();
         let show_fda_prompt = if crate::platform::fda::already_prompted() {
             false
         } else {
-            let needs = !crate::platform::fda::has_full_disk_access();
             crate::platform::fda::mark_prompted();
-            needs
+            !has_fda
         };
         App {
             state: AppState {
@@ -231,6 +234,7 @@ impl App {
                 feedback_text: String::new(),
                 feedback_sent: false,
                 show_fda_prompt,
+                has_fda,
                 // Auto-scan on launch (default target = whole disk via the `/`
                 // fallback above). The first update() frame starts the scan, so
                 // the app opens straight into a scan instead of a welcome screen.
@@ -241,6 +245,9 @@ impl App {
     }
 
     pub fn start_scan(&mut self) {
+        // Cheap once-per-scan recheck so the FDA affordance clears after the
+        // user grants access and re-scans.
+        self.state.has_fda = crate::platform::fda::has_full_disk_access();
         let (tx, rx) = crossbeam_channel::unbounded();
         self.state.scan_receiver = Some(rx);
         self.state.scan_progress = ScanProgressInfo {

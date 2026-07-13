@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MacDirStat — see what's eating your disk</title>
+<meta name="description" content="A free, native macOS disk-usage visualizer. Treemap of your whole drive, then one-click cleanup of regenerable build junk. Open source, signed, notarized.">
+<meta property="og:title" content="MacDirStat">
+<meta property="og:description" content="See what's eating your Mac's disk — then clear it. Free, native, open source.">
+<meta property="og:image" content="https://macdirstat.dravec.org/screenshot.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root {
+    --bg: #14121a;
+    --bg-2: #1a1724;
+    --panel: #1c1926;
+    --ink: #ece9f2;
+    --violet: #8b5cf6;
+    --violet-2: #a78bfa;
+    --muted: #9b96ab;
+    --rule: #2b2738;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--violet-2); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; color: var(--violet-2); }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  /* hero */
+  .hero {
+    text-align: center;
+    padding: 84px 24px 48px;
+    background:
+      radial-gradient(120% 90% at 50% -10%, rgba(139,92,246,0.22), transparent 60%),
+      linear-gradient(180deg, var(--bg-2) 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--rule);
+  }
+  .glyph { display: inline-grid; grid-template-columns: 26px 12px; grid-template-rows: 15px 11px; gap: 3px; width: 41px; margin: 0 auto 18px; }
+  .glyph i { border-radius: 2px; display: block; }
+  .glyph i:nth-child(1) { background: var(--violet); grid-row: span 2; }
+  .glyph i:nth-child(2) { background: var(--violet-2); }
+  .glyph i:nth-child(3) { background: #6d4bd0; }
+  h1 { font-size: clamp(42px, 8vw, 72px); margin: 6px 0 6px; letter-spacing: -1px; font-weight: 800; }
+  .tagline { font-size: clamp(17px, 2.6vw, 22px); color: var(--violet-2); margin: 0 0 10px; font-weight: 600; }
+  .sub { max-width: 580px; margin: 14px auto 30px; color: var(--muted); font-size: 17px; }
+
+  .cta {
+    display: inline-block;
+    background: var(--violet);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 700;
+    padding: 13px 30px;
+    border-radius: 999px;
+    box-shadow: 0 10px 30px -10px rgba(139,92,246,0.7);
+    transition: background 120ms ease, transform 120ms ease;
+  }
+  .cta:hover { background: #7c4ff0; transform: translateY(-1px); }
+  .cta-note { display: block; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .brew { margin-top: 18px; }
+  .brew code {
+    display: inline-block; background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 8px; padding: 8px 14px; color: var(--ink); font-size: 13px;
+  }
+
+  .shot {
+    margin: 46px auto 0;
+    max-width: 880px;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    box-shadow: 0 30px 70px -30px rgba(0,0,0,0.8);
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .shot img { display: block; width: 100%; height: auto; }
+
+  section h2 { font-size: 27px; margin: 0 0 8px; letter-spacing: -0.4px; }
+  .why { max-width: 690px; margin: 72px auto 0; }
+  .why p { font-size: 18px; color: #cfcbdb; }
+  .why .em { color: var(--violet-2); }
+
+  .feat { margin-top: 56px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 26px 40px; }
+  @media (max-width: 640px) { .feat { grid-template-columns: 1fr; } }
+  .feat h3 { margin: 0 0 4px; font-size: 17px; color: var(--violet-2); }
+  .feat p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+  .isnt { margin: 60px auto 0; max-width: 680px; color: var(--muted); font-size: 16px; text-align: center; font-style: italic; }
+
+  footer { margin-top: 76px; border-top: 1px solid var(--rule); padding: 28px 24px 56px; text-align: center; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--violet-2); text-decoration: none; }
+  .badge { display: inline-flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="glyph" aria-hidden="true"><i></i><i></i><i></i></div>
+  <h1>MacDirStat</h1>
+  <p class="tagline">See what's eating your disk. Then clear it.</p>
+  <p class="sub">A native macOS treemap of your whole drive — every folder sized to scale —
+  with one-click cleanup of the regenerable junk that quietly fills a Mac.
+  If you loved WinDirStat on Windows, this is that, free and open source.</p>
+  <a class="cta" href="https://github.com/Chartres/mac-dir-stat/releases/latest">Download for macOS</a>
+  <span class="cta-note">Free &amp; open-source (MIT) · signed &amp; notarized by Apple · Apple&nbsp;Silicon and Intel</span>
+  <div class="brew"><code>brew install --cask chartres/mac-dir-stat/mac-dir-stat</code></div>
+
+  <div class="shot">
+    <img src="screenshot.png" alt="MacDirStat showing a treemap of an entire macOS disk beside a directory tree and file-type breakdown" width="880">
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="why">
+    <h2>Why it exists</h2>
+    <p>Every Mac fills up, and the Storage bar in Settings won't tell you with what.
+    The good disk visualizers are either paid (DaisyDisk) or barely maintained
+    (GrandPerspective). MacDirStat is the third option: <span class="em">free, fast,
+    native, and it doesn't stop at showing you the problem</span> — it finds the
+    caches, build folders, and <code>node_modules</code> you can safely delete and
+    trashes them in one pass.</p>
+  </section>
+
+  <div class="feat">
+    <div><h3>Whole-disk treemap</h3><p>Every file drawn to scale, colored by type, depth, or age. Free and hidden space accounted for, so the picture adds up to your actual drive.</p></div>
+    <div><h3>One-click cleanup</h3><p>Finds Xcode DerivedData, simulators, <code>node_modules</code>, <code>target</code>, Docker, Cargo, Gradle caches — tick what you trust, Trash it, confirm once.</p></div>
+    <div><h3>Folder tree + file types</h3><p>A synced directory list and a per-extension breakdown with sizes, counts, and sort controls. Click the treemap to jump to any location.</p></div>
+    <div><h3>Fast, native, Rust</h3><p>A parallel filesystem walk with live progress. No Electron, no web view — a real Mac app that opens straight into a scan.</p></div>
+    <div><h3>One permission, once</h3><p>Grant Full Disk Access a single time and the per-folder prompts stop. Protected areas you skip just show as <code>Hidden / Skipped</code>.</p></div>
+    <div><h3>Private by default</h3><p>No account, no cloud. Optional usage counts are anonymous, off by default, and never include a file name or path.</p></div>
+  </div>
+
+  <p class="isnt">Not a cleaner that nags, not a subscription, not a menu-bar
+  gimmick. A disk map you can act on. Mac-only, on purpose.</p>
+
+</div>
+
+<footer>
+  <div class="badge">
+    <a href="https://github.com/Chartres/mac-dir-stat">GitHub</a>
+    <a href="https://github.com/Chartres/mac-dir-stat/releases/latest">Releases</a>
+    <a href="https://github.com/Chartres/mac-dir-stat/issues">Report an issue</a>
+  </div>
+  <div>Free &amp; open-source under the MIT license. No telemetry by default, no account, no lock-in.</div>
+</footer>
+
+</body>
+</html>
