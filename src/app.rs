@@ -265,6 +265,8 @@ impl App {
         self.state.cleanup_candidates.clear();
         self.state.cleanup_selected.clear();
         self.state.scroll_dir_tree_to = None;
+        self.state.partial_refresh_receiver = None;
+        self.state.status_message = None;
         crate::scanner::scan(self.state.scan_root.clone(), tx);
     }
 
