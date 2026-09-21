@@ -68,6 +68,54 @@ pub fn danger_button(ui: &mut Ui, label: &str) -> egui::Response {
     .inner
 }
 
+/// Centered, chrome-free confirmation modal: heading, one line of detail, and
+/// a danger/cancel button pair. `id` is the egui window id (the title bar is
+/// hidden, so it is never shown). Returns `None` while the user hasn't chosen,
+/// `Some(true)` on confirm, `Some(false)` on cancel.
+pub fn confirm_dialog(
+    ctx: &egui::Context,
+    id: &str,
+    heading: &str,
+    body: &str,
+    confirm_label: &str,
+) -> Option<bool> {
+    let mut choice = None;
+    egui::Window::new(id)
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .default_width(320.0)
+        .show(ctx, |ui| {
+            ui.set_max_width(360.0);
+            ui.label(
+                RichText::new(heading)
+                    .color(theme::TEXT_PRIMARY)
+                    .size(13.0)
+                    .strong(),
+            );
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(body)
+                    .color(theme::TEXT_SECONDARY)
+                    .size(11.0),
+            );
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if danger_button(ui, confirm_label).clicked() {
+                        choice = Some(true);
+                    }
+                    if ghost_button(ui, "Cancel").clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+        });
+    choice
+}
+
 /// Pill-style segmented control. Returns true if the selection changed.
 pub fn segmented_control<T: Copy + PartialEq>(
     ui: &mut Ui,

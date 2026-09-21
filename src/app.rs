@@ -907,186 +907,88 @@ impl eframe::App for App {
         // One-time Full Disk Access prompt (first launch without access)
         ui::fda_window::show(ctx, &mut self.state);
 
-        // Handle pending actions
-        let mut action_to_process: Option<Option<NodeId>> = None;
-        let mut batch_to_process: Option<Option<Vec<NodeId>>> = None;
-        let mut empty_trash_confirmed: Option<bool> = None;
+        // Handle pending actions. Each confirm dialog resolves to
+        // Some(true)/Some(false); the chosen action runs after the borrow of
+        // `pending_action` ends.
+        let mut dialog_resolved = false;
+        let mut delete_single: Option<NodeId> = None;
+        let mut delete_batch: Option<Vec<NodeId>> = None;
+        let mut empty_trash = false;
         if let Some(action) = &self.state.pending_action {
             match action {
                 PendingAction::ConfirmTrash(node_id, name, size) => {
-                    let node_id = *node_id;
-                    let name = name.clone();
-                    let size = *size;
                     let display_name = if name.chars().count() > 36 {
-                        let mut iter = name.chars();
-                        let head: String = iter.by_ref().take(34).collect();
-                        format!("{}…", head)
+                        let head: String = name.chars().take(34).collect();
+                        format!("{head}…")
                     } else {
                         name.clone()
                     };
-                    egui::Window::new("Confirm Delete")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(300.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(320.0);
-                            ui.label(
-                                egui::RichText::new("Move to Trash?")
-                                    .color(ui::theme::TEXT_PRIMARY)
-                                    .size(13.0)
-                                    .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{}  ·  {}",
-                                    display_name,
-                                    ui::theme::format_size(size),
-                                ))
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(ui, "Move to Trash")
-                                            .clicked()
-                                        {
-                                            action_to_process = Some(Some(node_id));
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            action_to_process = Some(None);
-                                        }
-                                    },
-                                );
-                            });
-                        });
+                    let confirmed = ui::widgets::confirm_dialog(
+                        ctx,
+                        "Confirm Delete",
+                        "Move to Trash?",
+                        &format!("{}  ·  {}", display_name, ui::theme::format_size(*size)),
+                        "Move to Trash",
+                    );
+                    if let Some(confirmed) = confirmed {
+                        dialog_resolved = true;
+                        if confirmed {
+                            delete_single = Some(*node_id);
+                        }
+                    }
+                }
+                PendingAction::ConfirmEmptyTrash => {
+                    let confirmed = ui::widgets::confirm_dialog(
+                        ctx,
+                        "Confirm Empty Trash",
+                        "Empty Trash?",
+                        "Permanently deletes everything currently in your Trash. \
+                         Cannot be undone.",
+                        "Empty Trash",
+                    );
+                    if let Some(confirmed) = confirmed {
+                        dialog_resolved = true;
+                        empty_trash = confirmed;
+                    }
+                }
+                PendingAction::ConfirmBatchTrash(ids, total_size) => {
+                    let confirmed = ui::widgets::confirm_dialog(
+                        ctx,
+                        "Confirm Batch Delete",
+                        &format!(
+                            "Move {} item{} to Trash?",
+                            ids.len(),
+                            if ids.len() == 1 { "" } else { "s" },
+                        ),
+                        &format!("Total {}", ui::theme::format_size(*total_size)),
+                        &format!("Move {} to Trash", ids.len()),
+                    );
+                    if let Some(confirmed) = confirmed {
+                        dialog_resolved = true;
+                        if confirmed {
+                            delete_batch = Some(ids.clone());
+                        }
+                    }
                 }
                 PendingAction::RefreshSubtree(node_id) => {
                     let node_id = *node_id;
                     self.state.pending_action = None;
                     self.start_partial_refresh(node_id);
                 }
-                PendingAction::ConfirmEmptyTrash => {
-                    egui::Window::new("Confirm Empty Trash")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(320.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(360.0);
-                            ui.label(
-                                egui::RichText::new("Empty Trash?")
-                                    .color(ui::theme::TEXT_PRIMARY)
-                                    .size(13.0)
-                                    .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(
-                                    "Permanently deletes everything currently in your Trash. \
-                                     Cannot be undone.",
-                                )
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(ui, "Empty Trash")
-                                            .clicked()
-                                        {
-                                            empty_trash_confirmed = Some(true);
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            empty_trash_confirmed = Some(false);
-                                        }
-                                    },
-                                );
-                            });
-                        });
-                }
-                PendingAction::ConfirmBatchTrash(ids, total_size) => {
-                    let ids = ids.clone();
-                    let total_size = *total_size;
-                    egui::Window::new("Confirm Batch Delete")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(320.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(360.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "Move {} item{} to Trash?",
-                                    ids.len(),
-                                    if ids.len() == 1 { "" } else { "s" },
-                                ))
-                                .color(ui::theme::TEXT_PRIMARY)
-                                .size(13.0)
-                                .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "Total {}",
-                                    ui::theme::format_size(total_size),
-                                ))
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(
-                                            ui,
-                                            &format!("Move {} to Trash", ids.len()),
-                                        )
-                                        .clicked()
-                                        {
-                                            batch_to_process = Some(Some(ids.clone()));
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            batch_to_process = Some(None);
-                                        }
-                                    },
-                                );
-                            });
-                        });
-                }
             }
         }
-        if let Some(result) = action_to_process {
+        if dialog_resolved {
             self.state.pending_action = None;
-            if let Some(node_id) = result {
-                self.perform_delete(node_id);
-            }
         }
-        if let Some(result) = batch_to_process {
-            self.state.pending_action = None;
-            if let Some(ids) = result {
-                self.perform_batch_delete(ids);
-            }
+        if let Some(node_id) = delete_single {
+            self.perform_delete(node_id);
         }
-        if let Some(confirmed) = empty_trash_confirmed {
-            self.state.pending_action = None;
-            if confirmed {
-                if let Err(e) = crate::platform::trash::empty_trash() {
-                    eprintln!("Empty trash failed: {}", e);
-                }
+        if let Some(ids) = delete_batch {
+            self.perform_batch_delete(ids);
+        }
+        if empty_trash {
+            if let Err(e) = crate::platform::trash::empty_trash() {
+                eprintln!("Empty trash failed: {}", e);
             }
         }
     }
