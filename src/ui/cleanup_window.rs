@@ -142,7 +142,12 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    let candidates = state.cleanup_candidates.clone();
+                    let mut candidates = state.cleanup_candidates.clone();
+                    // Sort by category first so headers are contiguous, then
+                    // by size descending within each category.
+                    candidates.sort_by(|a, b| {
+                        a.category.cmp(b.category).then(b.size.cmp(&a.size))
+                    });
                     let mut current_category = "";
 
                     // Group totals
