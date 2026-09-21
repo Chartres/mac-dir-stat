@@ -150,6 +150,48 @@ pub fn find_candidates(tree: &FileTree, root: NodeId) -> Vec<CleanupCandidate> {
     candidates
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn cargo_target_with_cargo_toml_is_classified() {
+        let dir = std::env::temp_dir().join("mac_dir_stat_test_cargo");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Cargo.toml"), "[package]").unwrap();
+        let target = dir.join("target");
+        let (cat, _) = classify(&target).expect("should classify");
+        assert_eq!(cat, "Rust target/");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn target_without_cargo_toml_is_not_classified() {
+        let dir = std::env::temp_dir().join("mac_dir_stat_test_notcargo");
+        fs::create_dir_all(&dir).unwrap();
+        // No Cargo.toml in parent
+        let target = dir.join("target");
+        assert!(classify(&target).is_none(), "should not classify without Cargo.toml");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn library_caches_is_classified() {
+        let path = std::path::Path::new("/Users/someone/Library/Caches");
+        let (cat, _) = classify(path).expect("should classify");
+        assert_eq!(cat, "Application Caches");
+    }
+
+    #[test]
+    fn gradle_description_warns_about_credentials() {
+        let path = std::path::Path::new("/Users/someone/.gradle");
+        let (_, desc) = classify(path).expect("should classify");
+        assert!(desc.contains("credentials") || desc.contains("gradle.properties"),
+            "description should warn about credentials");
+    }
+}
+
 fn walk(tree: &FileTree, id: NodeId, out: &mut Vec<CleanupCandidate>) {
     if !tree.is_alive(id) {
         return;
