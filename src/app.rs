@@ -998,6 +998,7 @@ impl eframe::App for App {
         if empty_trash {
             if let Err(e) = crate::platform::trash::empty_trash() {
                 eprintln!("Empty trash failed: {}", e);
+                self.state.status_message = Some(format!("Empty Trash failed: {e}"));
             }
         }
     }

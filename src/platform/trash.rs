@@ -5,19 +5,18 @@ pub fn move_to_trash(path: &Path) -> Result<(), String> {
     trash::delete(path).map_err(|e| format!("Failed to move to trash: {}", e))
 }
 
-/// Empties the user's Trash via Finder. We've already shown our own
-/// confirmation, so we use `without warning` to skip Finder's.
+/// Empties the user's Trash via Finder in a background thread so the UI
+/// frame is not blocked while Finder moves files.
 pub fn empty_trash() -> Result<(), String> {
-    let status = Command::new("osascript")
+    Command::new("osascript")
         .args([
             "-e",
             "tell application \"Finder\" to empty trash without warning",
         ])
-        .status()
-        .map_err(|e| format!("osascript failed to start: {}", e))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("osascript exited with status {}", status))
-    }
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("osascript failed to start: {}", e))
 }
