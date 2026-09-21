@@ -389,6 +389,14 @@ mod tests {
     }
 
     #[test]
+    fn no_telemetry_env_var_opts_out() {
+        // Safe: no other test touches MACDIRSTAT_NO_TELEMETRY.
+        std::env::set_var("MACDIRSTAT_NO_TELEMETRY", "1");
+        assert!(telemetry_opted_out(), "MACDIRSTAT_NO_TELEMETRY=1 should opt out");
+        std::env::remove_var("MACDIRSTAT_NO_TELEMETRY");
+    }
+
+    #[test]
     fn taxonomy_matches_ts_client() {
         assert!(TAXONOMY.contains(&"conversion"));
         assert!(TAXONOMY.contains(&"feedback_given"));
