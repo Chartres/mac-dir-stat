@@ -25,9 +25,6 @@ pub const ACCENT_HOVER: Color32 = Color32::from_rgb(0x9d, 0x74, 0xf8);
 // Cool near-white, no violet cast.
 pub const ACCENT_LIGHT: Color32 = Color32::from_rgb(0xd6, 0xda, 0xe2);
 
-// Mini-bar fill (dir-tree size bars, scan progress indicator)
-pub const BAR_FILL: Color32 = Color32::from_rgb(0x6b, 0x7c, 0x96);
-
 // Danger
 pub const DANGER: Color32 = Color32::from_rgb(0xef, 0x44, 0x44);
 pub const DANGER_HOVER: Color32 = Color32::from_rgb(0xf8, 0x71, 0x71);

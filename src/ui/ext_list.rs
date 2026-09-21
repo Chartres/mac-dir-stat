@@ -47,7 +47,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 for i in 0..show_count {
                     let (ext, bytes, count) = &stats[i];
                     let is_selected = state.selected_extension.as_deref() == Some(ext.as_str());
-                    let colors = extension_color(if ext.is_empty() { "" } else { ext });
+                    let colors = extension_color(ext);
                     let swatch_color = Color32::from_rgba_premultiplied(
                         colors.0[0], colors.0[1], colors.0[2], colors.0[3],
                     );
