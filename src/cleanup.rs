@@ -73,11 +73,6 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
             "Docker images, volumes, build cache. Prefer `docker system prune -a` for finer-grained cleanup.",
         ),
         (
-            "Library/Containers/com.apple.iCloud.iCloudDrive",
-            "iCloud Drive evictable cache",
-            "Local cache of iCloud-stored files. Files reload from iCloud on next access.",
-        ),
-        (
             ".cargo/registry",
             "Cargo registry cache",
             "Downloaded Rust crate sources. Re-fetched on next `cargo build`.",
