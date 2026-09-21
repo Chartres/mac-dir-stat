@@ -92,6 +92,9 @@ pub struct AppState {
     // Cached FDA state — drives the persistent "Grant Full Disk Access"
     // toolbar affordance. Rechecked on each scan (see start_scan).
     pub has_fda: bool,
+
+    // Transient status message shown in the status bar (e.g. trash errors).
+    pub status_message: Option<String>,
 }
 
 pub struct ScanProgressInfo {
@@ -235,6 +238,7 @@ impl App {
                 feedback_sent: false,
                 show_fda_prompt,
                 has_fda,
+                status_message: None,
                 // Auto-scan on launch (default target = whole disk via the `/`
                 // fallback above). The first update() frame starts the scan, so
                 // the app opens straight into a scan instead of a welcome screen.
@@ -570,6 +574,7 @@ impl App {
                 }
                 Err(e) => {
                     eprintln!("Delete failed: {}", e);
+                    self.state.status_message = Some(format!("Delete failed: {e}"));
                 }
             }
         }
@@ -815,6 +820,14 @@ impl eframe::App for App {
                         ))
                         .color(ui::theme::ACCENT_LIGHT)
                         .size(11.0),
+                    );
+                }
+
+                if let Some(msg) = &self.state.status_message {
+                    ui.label(
+                        egui::RichText::new(msg)
+                            .color(egui::Color32::from_rgb(220, 80, 80))
+                            .size(11.0),
                     );
                 }
 
