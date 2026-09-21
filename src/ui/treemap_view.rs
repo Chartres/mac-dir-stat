@@ -213,10 +213,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         let is_large = w > 3.0 && h > 3.0;
 
         // Hover detection only for visible-sized rects
-        if is_large && state.hovered_node.is_none() {
-            if pointer_pos.map_or(false, |p| rect.contains(p)) {
-                state.hovered_node = Some(cr.node_id);
-            }
+        if is_large
+            && state.hovered_node.is_none()
+            && pointer_pos.is_some_and(|p| rect.contains(p))
+        {
+            state.hovered_node = Some(cr.node_id);
         }
 
         // Compute alpha for filtering

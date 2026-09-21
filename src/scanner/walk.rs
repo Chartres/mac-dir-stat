@@ -97,7 +97,7 @@ fn build_skip_paths() -> Vec<PathBuf> {
 
 fn is_photos_library(path: &Path) -> bool {
     path.extension()
-        .map_or(false, |e| e == "photoslibrary" || e == "photolibrary")
+        .is_some_and(|e| e == "photoslibrary" || e == "photolibrary")
 }
 
 fn should_skip(path: &Path, scan_root: &Path, skip_paths: &[PathBuf]) -> bool {
