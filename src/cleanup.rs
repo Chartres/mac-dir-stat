@@ -108,11 +108,11 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
             )),
             ".gradle" => Some((
                 "Gradle caches",
-                "Gradle redownloads dependencies on next build.",
+                "Gradle redownloads dependencies on next build. Warning: gradle.properties (which may hold credentials) will also be deleted.",
             )),
             ".m2" => Some((
                 "Maven local repo",
-                "Maven local artifacts cache; rebuilt on next dependency resolve.",
+                "Maven cache — settings.xml (credentials) will also be deleted.",
             )),
             "DerivedData" => Some((
                 "DerivedData (loose)",
