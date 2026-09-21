@@ -398,6 +398,10 @@ impl App {
                         // Old NodeIds are gone; reset selection state.
                         self.state.cleanup_selected.clear();
                         self.state.context_menu_target = None;
+                        self.state.pending_action = None;
+                        self.state.hovered_dir = None;
+                        self.state.scroll_dir_tree_to = None;
+                        self.state.selected_extension = None;
                         crate::state::save(
                             &self.state.scan_root,
                             self.state.color_mode,
