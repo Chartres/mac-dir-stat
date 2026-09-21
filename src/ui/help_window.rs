@@ -136,8 +136,8 @@ fn feedback_section(ui: &mut egui::Ui, state: &mut AppState) {
         );
         if state.flywheel.is_enabled() {
             state.feedback_sent = true;
+            state.feedback_text.clear();
         }
-        state.feedback_text.clear();
     }
     if !state.flywheel.is_enabled() {
         ui.label(
