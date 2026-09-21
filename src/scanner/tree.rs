@@ -384,6 +384,9 @@ impl FileTree {
     }
 
     pub fn is_alive(&self, id: NodeId) -> bool {
+        if id >= self.nodes.len() {
+            return false;
+        }
         self.nodes[id].alive
     }
 
