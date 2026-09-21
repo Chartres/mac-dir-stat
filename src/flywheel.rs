@@ -72,11 +72,12 @@ pub fn telemetry_opted_out() -> bool {
     ) {
         return true;
     }
+    // Absent file = opted out; only "enabled" written by explicit opt-in counts.
     state_dir()
         .map(|d| d.join("telemetry.txt"))
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .map(|s| s.trim() == "disabled")
-        .unwrap_or(false)
+        .map(|s| s.trim() != "enabled")
+        .unwrap_or(true)
 }
 
 /// Persist the user's telemetry choice so it survives restarts.
