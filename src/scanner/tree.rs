@@ -13,9 +13,6 @@ pub struct StrRef {
     len: u32,
 }
 
-impl StrRef {
-    pub const EMPTY: StrRef = StrRef { offset: 0, len: 0 };
-}
 
 /// Bump arena holding raw bytes for all node names + extensions.
 /// One contiguous `Vec<u8>` instead of millions of small heap allocs.
@@ -221,10 +218,6 @@ impl FileTree {
         id
     }
 
-    pub fn node_count(&self) -> usize {
-        self.nodes.iter().filter(|n| n.alive).count()
-    }
-
     /// Aggregate a directory's `size`, `file_count` and `subdir_count` from its
     /// direct children. Requires the children's own counts to already be
     /// correct (true in a bottom-up reverse pass and after grafting).
@@ -387,13 +380,6 @@ impl FileTree {
                 }
             }
         }
-    }
-
-    pub fn children_sorted(&self, id: NodeId) -> Vec<NodeId> {
-        let mut children: Vec<NodeId> = self.node(id).children().to_vec();
-        children.retain(|&c| self.nodes[c].alive);
-        children.sort_by(|&a, &b| self.nodes[b].size.cmp(&self.nodes[a].size));
-        children
     }
 
     pub fn is_alive(&self, id: NodeId) -> bool {
