@@ -377,7 +377,7 @@ impl App {
                             self.state.scan_duration_secs = start.elapsed().as_secs_f32();
                         }
                         self.state.flywheel.track(
-                            "scan_completed",
+                            "key_action",
                             serde_json::json!({
                                 "files": self.state.scan_progress.files,
                                 "dirs": self.state.scan_progress.dirs,
