@@ -139,10 +139,6 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
                 ".cache directories",
                 "App- and tool-specific caches. Generally regenerable.",
             )),
-            ".Trash" | ".Trashes" => Some((
-                "Trash",
-                "Files in the macOS Trash. Empty when you're sure you don't need them.",
-            )),
             _ => None,
         };
     }
