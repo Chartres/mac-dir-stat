@@ -89,7 +89,9 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
         ),
     ];
     for &(suffix, label, desc) in SUFFIX_RULES {
-        if s.ends_with(suffix) {
+        // Require a path-component boundary: either the path IS the suffix or
+        // it ends with /<suffix>, preventing "MyLibrary/Caches" matching "Library/Caches".
+        if s == suffix || s.ends_with(&format!("/{suffix}")) {
             return Some((label, desc));
         }
     }
