@@ -85,10 +85,12 @@ pub fn set_telemetry_opt_out(opted_out: bool) {
     if std::fs::create_dir_all(&dir).is_err() {
         return;
     }
-    let _ = std::fs::write(
+    if let Err(e) = std::fs::write(
         dir.join("telemetry.txt"),
         if opted_out { "disabled" } else { "enabled" },
-    );
+    ) {
+        eprintln!("mac-dir-stat: failed to persist telemetry choice: {e}");
+    }
 }
 
 /// 16 random bytes from `/dev/urandom`, or a time-seeded fallback.
