@@ -173,7 +173,7 @@ impl App {
         let color_mode = persisted.color_mode.unwrap_or(ColorMode::Extension);
         let flywheel = crate::flywheel::Flywheel::init("mac-dir-stat");
         flywheel.track(
-            "app_open",
+            "page_view",
             serde_json::json!({ "version": env!("CARGO_PKG_VERSION") }),
         );
 
