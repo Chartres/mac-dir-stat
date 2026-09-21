@@ -187,8 +187,13 @@ fn show_node(
             // (and bar, when there's room).
             let avail = (ui.available_width() - 70.0).max(30.0);
             let max_chars = (avail / 6.5) as usize;
-            let display_name = if name.len() > max_chars && max_chars > 3 {
-                format!("{}…", &name[..max_chars - 1])
+            let display_name = if name.chars().count() > max_chars && max_chars > 3 {
+                let end = name
+                    .char_indices()
+                    .nth(max_chars - 1)
+                    .map(|(i, _)| i)
+                    .unwrap_or(name.len());
+                format!("{}…", &name[..end])
             } else {
                 name.clone()
             };
