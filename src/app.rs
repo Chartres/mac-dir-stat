@@ -268,8 +268,13 @@ impl App {
         self.state.extension_stats.clear();
         self.state.selected_node = None;
         self.state.hovered_node = None;
+        self.state.hovered_dir = None;
         self.state.view_root = None;
         self.state.zoom_stack.clear();
+        self.state.pending_action = None;
+        self.state.cleanup_candidates.clear();
+        self.state.cleanup_selected.clear();
+        self.state.scroll_dir_tree_to = None;
         crate::scanner::scan(self.state.scan_root.clone(), tx);
     }
 
