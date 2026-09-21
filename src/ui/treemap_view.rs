@@ -288,10 +288,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         if dr.depth >= 3 || dr.rect.w < 10.0 || dr.rect.h < 10.0 {
             continue;
         }
-        let rect = Rect::from_min_size(
-            Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
-            Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
-        );
+        let rect = to_screen(&dr.rect);
         let alpha = if dr.depth <= 1 { 40 } else { 20 };
         painter.rect_stroke(
             rect,
@@ -308,10 +305,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         let mut best_depth = 0u16;
         for dr in &state.dir_rects {
             if dr.depth == 0 { continue; }
-            let rect = Rect::from_min_size(
-                Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
-                Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
-            );
+            let rect = to_screen(&dr.rect);
             if rect.contains(pos) && dr.depth > best_depth {
                 best_depth = dr.depth;
                 state.hovered_dir = Some(dr.node_id);
@@ -321,10 +315,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             if dr.depth == 0 || dr.depth > 3 {
                 continue;
             }
-            let rect = Rect::from_min_size(
-                Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
-                Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
-            );
+            let rect = to_screen(&dr.rect);
             if rect.contains(pos) && rect.width() > 5.0 && rect.height() > 5.0 {
                 let alpha = if dr.depth == 1 { 50 } else { 30 };
                 painter.rect_stroke(
@@ -344,10 +335,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
     if let Some(hovered_id) = state.hovered_node {
         for cr in &state.colored_rects {
             if cr.node_id == hovered_id {
-                let rect = Rect::from_min_size(
-                    Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
-                    Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
-                );
+                let rect = to_screen(&cr.rect);
                 painter.rect_stroke(
                     rect,
                     2.0,
@@ -371,10 +359,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         let mut found = false;
         for dr in &state.dir_rects {
             if dr.node_id == selected_id {
-                let rect = Rect::from_min_size(
-                    Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
-                    Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
-                );
+                let rect = to_screen(&dr.rect);
                 painter.rect_stroke(
                     rect,
                     0.0,
@@ -400,10 +385,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         if !found {
             for cr in &state.colored_rects {
                 if cr.node_id == selected_id {
-                    let rect = Rect::from_min_size(
-                        Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
-                        Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
-                    );
+                    let rect = to_screen(&cr.rect);
                     // Inner white + outer accent ring — readable against any
                     // treemap color.
                     painter.rect_stroke(
@@ -649,6 +631,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             }
         });
     }
+}
+
+/// Treemap layout rect (f64, absolute screen coords) → egui rect.
+fn to_screen(r: &TRect) -> Rect {
+    Rect::from_min_size(
+        Pos2::new(r.x as f32, r.y as f32),
+        Vec2::new(r.w as f32, r.h as f32),
+    )
 }
 
 fn lerp_color(a: &Color32, b: &Color32, t: f32) -> Color32 {
