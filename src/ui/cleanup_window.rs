@@ -222,12 +222,15 @@ fn candidate_row(ui: &mut egui::Ui, state: &mut AppState, cand: &CleanupCandidat
             // Path on the left, truncated
             ui.vertical(|ui| {
                 let path_str = cand.path.display().to_string();
-                let display_path = if path_str.chars().count() > 64 {
-                    let mut iter = path_str.chars();
-                    let head: String = iter.by_ref().take(28).collect();
-                    let tail: String = iter
-                        .skip(path_str.chars().count().saturating_sub(64).saturating_sub(28))
-                        .collect();
+                let char_count = path_str.chars().count();
+                let display_path = if char_count > 44 {
+                    let head: String = path_str.chars().take(20).collect();
+                    let tail: String = path_str
+                        .char_indices()
+                        .nth(char_count - 20)
+                        .map(|(i, _)| &path_str[i..])
+                        .unwrap_or("")
+                        .to_string();
                     format!("{}…{}", head, tail)
                 } else {
                     path_str
