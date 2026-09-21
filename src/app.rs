@@ -97,6 +97,7 @@ pub struct AppState {
     pub status_message: Option<String>,
 }
 
+#[derive(Default)]
 pub struct ScanProgressInfo {
     pub files: usize,
     pub dirs: usize,
@@ -193,14 +194,7 @@ impl App {
                 tree: None,
                 scan_root,
                 scan_receiver: None,
-                scan_progress: ScanProgressInfo {
-                    files: 0,
-                    dirs: 0,
-                    bytes: 0,
-                    errors: 0,
-                    scanning: false,
-                    current_path: None,
-                },
+                scan_progress: ScanProgressInfo::default(),
                 scan_start: None,
                 scan_duration_secs: 0.0,
                 partial_refresh_receiver: None,
@@ -253,12 +247,8 @@ impl App {
         let (tx, rx) = crossbeam_channel::unbounded();
         self.state.scan_receiver = Some(rx);
         self.state.scan_progress = ScanProgressInfo {
-            files: 0,
-            dirs: 0,
-            bytes: 0,
-            errors: 0,
             scanning: true,
-            current_path: None,
+            ..Default::default()
         };
         self.state.scan_start = Some(Instant::now());
         self.state.freed_this_session = 0;
@@ -674,20 +664,16 @@ impl eframe::App for App {
         } else if ctx.input(|i| i.key_pressed(egui::Key::R) && i.modifiers.command) {
             self.state.request_rescan = true;
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::Num1) && i.modifiers.command) {
-            self.state.color_mode = ColorMode::Extension;
-            self.state.treemap_dirty = true;
-            crate::state::save(&self.state.scan_root, self.state.color_mode);
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Num2) && i.modifiers.command) {
-            self.state.color_mode = ColorMode::Depth;
-            self.state.treemap_dirty = true;
-            crate::state::save(&self.state.scan_root, self.state.color_mode);
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Num3) && i.modifiers.command) {
-            self.state.color_mode = ColorMode::Age;
-            self.state.treemap_dirty = true;
-            crate::state::save(&self.state.scan_root, self.state.color_mode);
+        for (key, mode) in [
+            (egui::Key::Num1, ColorMode::Extension),
+            (egui::Key::Num2, ColorMode::Depth),
+            (egui::Key::Num3, ColorMode::Age),
+        ] {
+            if ctx.input(|i| i.key_pressed(key) && i.modifiers.command) {
+                self.state.color_mode = mode;
+                self.state.treemap_dirty = true;
+                crate::state::save(&self.state.scan_root, self.state.color_mode);
+            }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::O) && i.modifiers.command) {
             if let Some(path) = crate::platform::dialogs::pick_folder(&self.state.scan_root) {
