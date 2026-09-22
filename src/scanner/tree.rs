@@ -406,6 +406,9 @@ impl FileTree {
     pub fn recompute_sizes_upward(&mut self, target: NodeId) {
         let mut current = Some(target);
         while let Some(id) = current {
+            if !self.nodes[id].alive {
+                break;
+            }
             if self.nodes[id].is_dir() {
                 let (size, files, dirs) = self.aggregate_dir(id);
                 self.nodes[id].size = size;
