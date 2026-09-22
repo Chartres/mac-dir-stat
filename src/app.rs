@@ -470,16 +470,7 @@ impl App {
         if order.is_empty() {
             return;
         }
-        // Current dir = selected dir, or a selected file's parent dir.
-        let current = self.state.selected_node.and_then(|sel| {
-            if !tree.is_alive(sel) {
-                None
-            } else if tree.node(sel).is_dir() {
-                Some(sel)
-            } else {
-                tree.node(sel).parent
-            }
-        });
+        let current = self.state.selected_node.and_then(|sel| tree.dir_of(sel));
         let next = match current.and_then(|c| order.iter().position(|&n| n == c)) {
             Some(idx) => {
                 if down {
@@ -503,17 +494,7 @@ impl App {
     fn nav_expand_selected(&mut self, expand: bool) {
         let Some(sel) = self.state.selected_node else { return };
         let Some(tree) = &mut self.state.tree else { return };
-        if !tree.is_alive(sel) {
-            return;
-        }
-        let target = if tree.node(sel).is_dir() {
-            sel
-        } else {
-            match tree.node(sel).parent {
-                Some(p) => p,
-                None => return,
-            }
-        };
+        let Some(target) = tree.dir_of(sel) else { return };
         if let crate::scanner::tree::NodeKind::Directory { expanded, .. } =
             &mut tree.node_mut(target).kind
         {
@@ -652,16 +633,7 @@ impl eframe::App for App {
         }) {
             // Refresh just the selected directory (or its parent dir if a file is selected).
             if let Some(sel) = self.state.selected_node {
-                let target = self.state.tree.as_ref().and_then(|t| {
-                    if !t.is_alive(sel) {
-                        return None;
-                    }
-                    if t.node(sel).is_dir() {
-                        Some(sel)
-                    } else {
-                        t.node(sel).parent
-                    }
-                });
+                let target = self.state.tree.as_ref().and_then(|t| t.dir_of(sel));
                 if let Some(t) = target {
                     self.start_partial_refresh(t);
                 }

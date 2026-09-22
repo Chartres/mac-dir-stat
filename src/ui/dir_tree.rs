@@ -86,16 +86,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         let root = tree.root();
         let root_size = tree.node(root).size;
 
-        // Determine which directory to highlight:
-        // If selected node is a file, highlight its parent directory
-        let highlighted_dir = state.selected_node.and_then(|sel| {
-            let tree = state.tree.as_ref()?;
-            if tree.node(sel).is_dir() {
-                Some(sel)
-            } else {
-                tree.node(sel).parent
-            }
-        });
+        // A selected file highlights its parent directory row.
+        let highlighted_dir = state.selected_node.and_then(|sel| tree.dir_of(sel));
 
         egui::ScrollArea::both()
             .auto_shrink([false, false])

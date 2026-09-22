@@ -459,12 +459,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             state.selected_extension = None;
             state.expand_to_node(node_id);
             if let Some(tree) = &state.tree {
-                let dir_target = if tree.node(node_id).is_dir() {
-                    Some(node_id)
-                } else {
-                    tree.node(node_id).parent
-                };
-                state.scroll_dir_tree_to = dir_target;
+                state.scroll_dir_tree_to = tree.dir_of(node_id);
             }
         }
     }

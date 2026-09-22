@@ -83,10 +83,6 @@ impl Node {
         matches!(self.kind, NodeKind::Directory { .. })
     }
 
-    pub fn is_file(&self) -> bool {
-        matches!(self.kind, NodeKind::File { .. })
-    }
-
     pub fn children(&self) -> &[NodeId] {
         match &self.kind {
             NodeKind::Directory { children, .. } => children,
@@ -218,10 +214,17 @@ impl FileTree {
         id
     }
 
-    /// Aggregate a directory's `size`, `file_count` and `subdir_count` from its
+    /// Recompute a directory's `size`, `file_count` and `subdir_count` from its
     /// direct children. Requires the children's own counts to already be
     /// correct (true in a bottom-up reverse pass and after grafting).
-    fn aggregate_dir(&self, id: NodeId) -> (u64, u64, u64) {
+    fn aggregate_dir(&mut self, id: NodeId) {
+        let (size, files, dirs) = self.child_totals(id);
+        self.nodes[id].size = size;
+        self.nodes[id].file_count = files;
+        self.nodes[id].subdir_count = dirs;
+    }
+
+    fn child_totals(&self, id: NodeId) -> (u64, u64, u64) {
         let mut size = 0u64;
         let mut files = 0u64;
         let mut dirs = 0u64;
@@ -250,10 +253,7 @@ impl FileTree {
             if !self.nodes[i].alive || !self.nodes[i].is_dir() {
                 continue;
             }
-            let (size, files, dirs) = self.aggregate_dir(i);
-            self.nodes[i].size = size;
-            self.nodes[i].file_count = files;
-            self.nodes[i].subdir_count = dirs;
+            self.aggregate_dir(i);
         }
     }
 
@@ -362,32 +362,24 @@ impl FileTree {
         }
     }
 
-    pub fn collect_files(&self, root: NodeId) -> Vec<NodeId> {
-        let mut files = vec![];
-        self.collect_files_recursive(root, &mut files);
-        files
-    }
-
-    fn collect_files_recursive(&self, id: NodeId, files: &mut Vec<NodeId>) {
-        let node = &self.nodes[id];
-        if !node.alive {
-            return;
-        }
-        match &node.kind {
-            NodeKind::File { .. } => files.push(id),
-            NodeKind::Directory { children, .. } => {
-                for &child in children {
-                    self.collect_files_recursive(child, files);
-                }
-            }
-        }
-    }
-
     pub fn is_alive(&self, id: NodeId) -> bool {
         if id >= self.nodes.len() {
             return false;
         }
         self.nodes[id].alive
+    }
+
+    /// The directory a node belongs to: the node itself when it's a directory,
+    /// otherwise its parent. `None` for dead or out-of-range ids.
+    pub fn dir_of(&self, id: NodeId) -> Option<NodeId> {
+        if !self.is_alive(id) {
+            return None;
+        }
+        if self.nodes[id].is_dir() {
+            Some(id)
+        } else {
+            self.nodes[id].parent
+        }
     }
 
     /// Marks all descendants of `target` as dead and empties its children
@@ -410,10 +402,7 @@ impl FileTree {
                 break;
             }
             if self.nodes[id].is_dir() {
-                let (size, files, dirs) = self.aggregate_dir(id);
-                self.nodes[id].size = size;
-                self.nodes[id].file_count = files;
-                self.nodes[id].subdir_count = dirs;
+                self.aggregate_dir(id);
             }
             current = self.nodes[id].parent;
         }
@@ -479,10 +468,7 @@ impl FileTree {
         // than their parents), then propagate target + ancestors upward.
         for i in (first_new..self.nodes.len()).rev() {
             if self.nodes[i].is_dir() {
-                let (size, files, dirs) = self.aggregate_dir(i);
-                self.nodes[i].size = size;
-                self.nodes[i].file_count = files;
-                self.nodes[i].subdir_count = dirs;
+                self.aggregate_dir(i);
             }
         }
 

@@ -1,27 +1,44 @@
 use crate::ui::theme;
 use egui::{Color32, CornerRadius, Margin, RichText, Stroke, Ui, Vec2};
 
-/// Filled accent button — primary call to action.
-pub fn primary_button(ui: &mut Ui, label: &str) -> egui::Response {
+/// Solid-fill button with a bold white label. `active_stroke` is the
+/// pressed-state outline. Shared by `primary_button` and `danger_button`.
+fn filled_button(
+    ui: &mut Ui,
+    label: &str,
+    fill: Color32,
+    hover_fill: Color32,
+    active_stroke: Stroke,
+) -> egui::Response {
     ui.scope(|ui| {
         let v = &mut ui.style_mut().visuals.widgets;
-        v.inactive.bg_fill = theme::ACCENT;
-        v.inactive.weak_bg_fill = theme::ACCENT;
-        v.inactive.bg_stroke = Stroke::NONE;
-        v.inactive.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-        v.hovered.bg_fill = theme::ACCENT_HOVER;
-        v.hovered.weak_bg_fill = theme::ACCENT_HOVER;
-        v.hovered.bg_stroke = Stroke::NONE;
-        v.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-        v.active.bg_fill = theme::ACCENT;
-        v.active.weak_bg_fill = theme::ACCENT;
-        v.active.bg_stroke = Stroke::new(1.0, theme::ACCENT_LIGHT);
-        v.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+        for (state, bg) in [
+            (&mut v.inactive, fill),
+            (&mut v.hovered, hover_fill),
+            (&mut v.active, fill),
+        ] {
+            state.bg_fill = bg;
+            state.weak_bg_fill = bg;
+            state.bg_stroke = Stroke::NONE;
+            state.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+        }
+        v.active.bg_stroke = active_stroke;
         ui.add(egui::Button::new(
             RichText::new(label).color(Color32::WHITE).strong(),
         ))
     })
     .inner
+}
+
+/// Filled accent button — primary call to action.
+pub fn primary_button(ui: &mut Ui, label: &str) -> egui::Response {
+    filled_button(
+        ui,
+        label,
+        theme::ACCENT,
+        theme::ACCENT_HOVER,
+        Stroke::new(1.0, theme::ACCENT_LIGHT),
+    )
 }
 
 /// Outlined / subtle button — secondary actions.
@@ -47,25 +64,7 @@ pub fn ghost_button(ui: &mut Ui, label: &str) -> egui::Response {
 
 /// Destructive action button — red fill, used in confirm dialogs.
 pub fn danger_button(ui: &mut Ui, label: &str) -> egui::Response {
-    ui.scope(|ui| {
-        let v = &mut ui.style_mut().visuals.widgets;
-        v.inactive.bg_fill = theme::DANGER;
-        v.inactive.weak_bg_fill = theme::DANGER;
-        v.inactive.bg_stroke = Stroke::NONE;
-        v.inactive.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-        v.hovered.bg_fill = theme::DANGER_HOVER;
-        v.hovered.weak_bg_fill = theme::DANGER_HOVER;
-        v.hovered.bg_stroke = Stroke::NONE;
-        v.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-        v.active.bg_fill = theme::DANGER;
-        v.active.weak_bg_fill = theme::DANGER;
-        v.active.bg_stroke = Stroke::NONE;
-        v.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-        ui.add(egui::Button::new(
-            RichText::new(label).color(Color32::WHITE).strong(),
-        ))
-    })
-    .inner
+    filled_button(ui, label, theme::DANGER, theme::DANGER_HOVER, Stroke::NONE)
 }
 
 /// Centered, chrome-free confirmation modal: heading, one line of detail, and

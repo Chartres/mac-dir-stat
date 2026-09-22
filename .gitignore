@@ -2,3 +2,5 @@
 /dist
 .superpowers/
 .DS_Store
+.omc/
+.wrangler/
