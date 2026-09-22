@@ -275,7 +275,7 @@ impl App {
     /// isn't a directory.
     pub fn start_partial_refresh(&mut self, node_id: NodeId) {
         let Some(tree) = &self.state.tree else { return };
-        if !tree.node(node_id).is_dir() {
+        if !tree.is_alive(node_id) || !tree.node(node_id).is_dir() {
             return;
         }
         let path = tree.full_path(node_id);
@@ -653,6 +653,9 @@ impl eframe::App for App {
             // Refresh just the selected directory (or its parent dir if a file is selected).
             if let Some(sel) = self.state.selected_node {
                 let target = self.state.tree.as_ref().and_then(|t| {
+                    if !t.is_alive(sel) {
+                        return None;
+                    }
                     if t.node(sel).is_dir() {
                         Some(sel)
                     } else {
@@ -692,17 +695,21 @@ impl eframe::App for App {
         if ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command) {
             if let Some(node_id) = self.state.selected_node {
                 if let Some(tree) = &self.state.tree {
-                    let name = tree.name(node_id).to_string();
-                    let size = tree.node(node_id).size;
-                    self.state.pending_action = Some(PendingAction::ConfirmTrash(node_id, name, size));
+                    if tree.is_alive(node_id) {
+                        let name = tree.name(node_id).to_string();
+                        let size = tree.node(node_id).size;
+                        self.state.pending_action = Some(PendingAction::ConfirmTrash(node_id, name, size));
+                    }
                 }
             }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
             if let Some(node_id) = self.state.selected_node {
                 if let Some(tree) = &self.state.tree {
-                    let path = tree.full_path(node_id);
-                    crate::platform::finder::reveal_in_finder(&path);
+                    if tree.is_alive(node_id) {
+                        let path = tree.full_path(node_id);
+                        crate::platform::finder::reveal_in_finder(&path);
+                    }
                 }
             }
         }
