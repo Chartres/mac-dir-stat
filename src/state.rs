@@ -66,5 +66,10 @@ pub fn save(scan_root: &Path, color_mode: ColorMode) {
         scan_root.display(),
         mode_str,
     );
-    let _ = std::fs::write(path, content);
+    // Write atomically: write to a temp file then rename so a crash mid-write
+    // never corrupts the persisted state.
+    let tmp = path.with_extension("tmp");
+    if std::fs::write(&tmp, content).is_ok() {
+        let _ = std::fs::rename(&tmp, &path);
+    }
 }
