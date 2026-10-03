@@ -6,13 +6,9 @@
 //! again. Without FDA the scanner still works; it just can't see TCC-protected
 //! locations, which it already prunes to avoid a wall of permission prompts.
 
+use crate::state::state_dir;
 use std::path::PathBuf;
 use std::process::Command;
-
-fn state_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join("Library/Application Support/mac-dir-stat"))
-}
 
 /// Open System Settings → Privacy & Security → Full Disk Access.
 pub fn open_settings() {
