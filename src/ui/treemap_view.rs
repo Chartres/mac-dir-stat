@@ -359,54 +359,42 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
 
     // Selected node highlight — works for both files AND directories
     if let Some(selected_id) = state.selected_node {
-        // First check if it's a directory (selected from tree panel)
-        let mut found = false;
-        for dr in &state.dir_rects {
-            if dr.node_id == selected_id {
-                let rect = to_screen(&dr.rect);
-                painter.rect_stroke(
-                    rect,
-                    0.0,
-                    egui::Stroke::new(2.5, theme::ACCENT),
-                    StrokeKind::Inside,
-                );
-                // Subtle fill overlay to make the region stand out
-                painter.rect_filled(
-                    rect,
-                    0.0,
-                    Color32::from_rgba_unmultiplied(
-                        theme::ACCENT.r(),
-                        theme::ACCENT.g(),
-                        theme::ACCENT.b(),
-                        24,
-                    ),
-                );
-                found = true;
-                break;
-            }
-        }
-        // If not a directory, check files
-        if !found {
-            for cr in &state.colored_rects {
-                if cr.node_id == selected_id {
-                    let rect = to_screen(&cr.rect);
-                    // Inner white + outer accent ring — readable against any
-                    // treemap color.
-                    painter.rect_stroke(
-                        rect,
-                        2.0,
-                        egui::Stroke::new(2.0, Color32::WHITE),
-                        StrokeKind::Outside,
-                    );
-                    painter.rect_stroke(
-                        rect.expand(2.0),
-                        3.0,
-                        egui::Stroke::new(2.0, theme::ACCENT),
-                        StrokeKind::Outside,
-                    );
-                    break;
-                }
-            }
+        // Directory first (selected from tree panel), then files.
+        if let Some(dr) = state.dir_rects.iter().find(|dr| dr.node_id == selected_id) {
+            let rect = to_screen(&dr.rect);
+            painter.rect_stroke(
+                rect,
+                0.0,
+                egui::Stroke::new(2.5, theme::ACCENT),
+                StrokeKind::Inside,
+            );
+            // Subtle fill overlay to make the region stand out
+            painter.rect_filled(
+                rect,
+                0.0,
+                Color32::from_rgba_unmultiplied(
+                    theme::ACCENT.r(),
+                    theme::ACCENT.g(),
+                    theme::ACCENT.b(),
+                    24,
+                ),
+            );
+        } else if let Some(cr) = state.colored_rects.iter().find(|cr| cr.node_id == selected_id) {
+            let rect = to_screen(&cr.rect);
+            // Inner white + outer accent ring — readable against any
+            // treemap color.
+            painter.rect_stroke(
+                rect,
+                2.0,
+                egui::Stroke::new(2.0, Color32::WHITE),
+                StrokeKind::Outside,
+            );
+            painter.rect_stroke(
+                rect.expand(2.0),
+                3.0,
+                egui::Stroke::new(2.0, theme::ACCENT),
+                StrokeKind::Outside,
+            );
         }
     }
 
