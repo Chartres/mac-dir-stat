@@ -470,6 +470,15 @@ impl App {
             self.state
                 .cleanup_candidates
                 .retain(|c| tree_ref.is_alive(c.node_id));
+            // Sanitize navigation state: deleted nodes may have been view_root
+            // or ancestors in the zoom stack.
+            self.state.zoom_stack.retain(|id| tree_ref.is_alive(*id));
+            if self.state.zoom_stack.is_empty() {
+                self.state.zoom_stack.push(root);
+            }
+            if self.state.view_root.map(|id| !tree_ref.is_alive(id)).unwrap_or(false) {
+                self.state.view_root = Some(*self.state.zoom_stack.last().unwrap_or(&root));
+            }
         }
         for id in &succeeded {
             if self.state.selected_node == Some(*id) {
