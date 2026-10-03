@@ -302,6 +302,7 @@ impl App {
                     }
                     ScanProgress::Error(e) => {
                         eprintln!("Partial refresh error: {}", e);
+                        self.state.status_message = Some(format!("Refresh error: {e}"));
                         error_occurred = true;
                         break;
                     }
@@ -432,6 +433,7 @@ impl App {
                         self.state
                             .flywheel
                             .log_error(&msg, serde_json::json!({ "where": "scan" }));
+                        self.state.status_message = Some(format!("Scan error: {msg}"));
                         self.state.scan_progress.scanning = false;
                     }
                 }
