@@ -240,8 +240,12 @@ impl FileTree {
                     files += child.file_count;
                 } else {
                     // Synthetic nodes (__free_space__, __skipped__) must not inflate file_count.
+                    // Use exact matches to avoid false positives on real extensions like __bak.
                     let is_synthetic = if let NodeKind::File { extension } = &child.kind {
-                        extension.map(|r| self.strings.get(r).starts_with(b"__")).unwrap_or(false)
+                        extension.map(|r| {
+                            let e = self.strings.get(r);
+                            e == b"__free_space__" || e == b"__skipped__"
+                        }).unwrap_or(false)
                     } else {
                         false
                     };
@@ -358,7 +362,8 @@ impl FileTree {
                     .unwrap_or_default();
                 // Skip synthetic extensions used for the free-space and
                 // skipped-bytes treemap blocks — they're not real files.
-                if ext.starts_with("__") {
+                // Exact match to avoid filtering files like foo.__bak.
+                if ext == "__free_space__" || ext == "__skipped__" {
                     return;
                 }
                 let entry = map.entry(ext).or_insert((0, 0));
