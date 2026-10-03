@@ -19,6 +19,11 @@ pub enum ScanProgress {
 
 pub fn scan(root: PathBuf, tx: Sender<ScanProgress>) {
     std::thread::spawn(move || {
-        walk::walk_directory(root, tx);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            walk::walk_directory(root, tx.clone());
+        }));
+        if result.is_err() {
+            let _ = tx.send(ScanProgress::Error("Scanner panicked".into()));
+        }
     });
 }
