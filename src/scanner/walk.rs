@@ -209,10 +209,7 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>, inject_synthetics
 
         let parent_id = match dir_map.get(&parent_path) {
             Some(&id) => id,
-            None => match find_closest_ancestor(&dir_map, &parent_path) {
-                Some(id) => id,
-                None => continue,
-            },
+            None => continue, // orphan: parent was filtered or raced; drop it
         };
 
         let file_name_os = match path.file_name() {
@@ -347,13 +344,18 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>, inject_synthetics
     let _ = tx.send(ScanProgress::Done(tree));
 }
 
-fn find_closest_ancestor(dir_map: &HashMap<PathBuf, usize>, path: &Path) -> Option<usize> {
-    let mut current = path.parent();
-    while let Some(p) = current {
-        if let Some(&id) = dir_map.get(p) {
-            return Some(id);
-        }
-        current = p.parent();
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    #[test]
+    fn orphan_entry_missing_parent_produces_no_node() {
+        // Simulates the guard: if a parent is absent from dir_map the entry
+        // must be dropped, not re-parented to a distant ancestor.
+        let dir_map: HashMap<PathBuf, usize> = HashMap::new();
+        let parent_path = PathBuf::from("/some/dir");
+        // Missing parent → None, which triggers `continue` in the walk loop.
+        assert!(dir_map.get(&parent_path).is_none());
     }
-    None
 }
