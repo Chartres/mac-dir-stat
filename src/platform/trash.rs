@@ -5,8 +5,9 @@ pub fn move_to_trash(path: &Path) -> Result<(), String> {
     trash::delete(path).map_err(|e| format!("Failed to move to trash: {}", e))
 }
 
-/// Empties the user's Trash via Finder in a background thread so the UI
-/// frame is not blocked while Finder moves files.
+/// Empties the user's Trash by spawning `osascript` as a background process.
+/// Returns immediately after spawn — success only means the process started,
+/// not that the trash was emptied.  Finder performs the actual work.
 pub fn empty_trash() -> Result<(), String> {
     Command::new("osascript")
         .args([
