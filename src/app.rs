@@ -358,14 +358,19 @@ impl App {
             }
             self.state.partial_refresh_receiver = None;
             self.state.treemap_dirty = true;
-            // A ConfirmTrash may hold a node id that the graft just replaced;
-            // drop it so the user isn't presented with a stale trash dialog.
-            if let Some(PendingAction::ConfirmTrash(id, _, _)) = self.state.pending_action {
-                if let Some(tree) = &self.state.tree {
-                    if !tree.is_alive(id) {
-                        self.state.pending_action = None;
-                    }
+            // A ConfirmTrash/ConfirmBatchTrash may hold node ids that the graft
+            // just replaced; drop it so the user isn't presented with a stale dialog.
+            let stale = match &self.state.pending_action {
+                Some(PendingAction::ConfirmTrash(id, _, _)) => {
+                    self.state.tree.as_ref().map(|t| !t.is_alive(*id)).unwrap_or(false)
                 }
+                Some(PendingAction::ConfirmBatchTrash(ids, _)) => {
+                    self.state.tree.as_ref().map(|t| ids.iter().any(|id| !t.is_alive(*id))).unwrap_or(false)
+                }
+                _ => false,
+            };
+            if stale {
+                self.state.pending_action = None;
             }
         }
     }
