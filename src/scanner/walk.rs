@@ -66,7 +66,12 @@ fn volume_space(path: &Path) -> Option<(u64, u64)> {
 /// directory-listing stage (via jwalk's process_read_dir) so the walker never
 /// even tries to enter these paths — which is what avoids triggering macOS
 /// TCC permission prompts in the first place.
+///
+/// When the app has Full Disk Access the TCC-protected subdirectories are
+/// readable, so we only skip the structural paths (firmlinks, snapshots).
 fn build_skip_paths() -> Vec<PathBuf> {
+    let has_fda = crate::platform::fda::has_full_disk_access();
+
     let mut paths: Vec<PathBuf> = vec![
         // APFS firmlinks (duplicate the entire fs)
         PathBuf::from("/System/Volumes"),
@@ -76,31 +81,33 @@ fn build_skip_paths() -> Vec<PathBuf> {
         PathBuf::from("/.PKInstallSandboxManager-SystemSoftware"),
     ];
 
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        // TCC-protected user dirs — accessing any of these triggers a system
-        // permission prompt. Skip preemptively.
-        for sub in [
-            "Library/Mail",
-            "Library/Messages",
-            "Library/Calendars",
-            "Library/Reminders",
-            "Library/Safari",
-            "Library/Cookies",
-            "Library/HomeKit",
-            "Library/IdentityServices",
-            "Library/Suggestions",
-            "Library/PersonalizationPortrait",
-            "Library/Sharing",
-            "Library/Metadata/CoreSpotlight",
-            "Library/CoreFollowUp",
-            "Library/Application Support/AddressBook",
-            "Library/Application Support/CallHistoryDB",
-            "Library/Application Support/CallHistoryTransactions",
-            "Library/Application Support/com.apple.TCC",
-            "Library/Caches/com.apple.Safari",
-            "Library/Containers/com.apple.mail",
-        ] {
-            paths.push(home.join(sub));
+    if !has_fda {
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            // TCC-protected user dirs — accessing any of these triggers a
+            // system permission prompt. Skip preemptively.
+            for sub in [
+                "Library/Mail",
+                "Library/Messages",
+                "Library/Calendars",
+                "Library/Reminders",
+                "Library/Safari",
+                "Library/Cookies",
+                "Library/HomeKit",
+                "Library/IdentityServices",
+                "Library/Suggestions",
+                "Library/PersonalizationPortrait",
+                "Library/Sharing",
+                "Library/Metadata/CoreSpotlight",
+                "Library/CoreFollowUp",
+                "Library/Application Support/AddressBook",
+                "Library/Application Support/CallHistoryDB",
+                "Library/Application Support/CallHistoryTransactions",
+                "Library/Application Support/com.apple.TCC",
+                "Library/Caches/com.apple.Safari",
+                "Library/Containers/com.apple.mail",
+            ] {
+                paths.push(home.join(sub));
+            }
         }
     }
     paths
