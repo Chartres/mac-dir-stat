@@ -167,13 +167,7 @@ pub fn segmented_control<T: Copy + PartialEq>(
                         v.active.corner_radius = CornerRadius::same(theme::RADIUS_SM);
                         ui.spacing_mut().button_padding = Vec2::new(10.0, 4.0);
                         ui.add(egui::Button::new(
-                            RichText::new(label)
-                                .size(11.5)
-                                .color(if is_active {
-                                    theme::TEXT_PRIMARY
-                                } else {
-                                    theme::TEXT_SECONDARY
-                                }),
+                            RichText::new(label).size(11.5).color(fg),
                         ))
                     })
                     .inner;
