@@ -27,9 +27,10 @@ impl StringArena {
     }
 
     pub fn intern_bytes(&mut self, b: &[u8]) -> StrRef {
-        let offset = self.buf.len() as u32;
+        let offset = u32::try_from(self.buf.len()).expect("string arena > 4 GiB");
         self.buf.extend_from_slice(b);
-        StrRef { offset, len: b.len() as u32 }
+        let len = u32::try_from(b.len()).expect("string > 4 GiB");
+        StrRef { offset, len }
     }
 
     pub fn intern_str(&mut self, s: &str) -> StrRef {
