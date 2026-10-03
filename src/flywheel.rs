@@ -394,10 +394,13 @@ mod tests {
 
     #[test]
     fn no_telemetry_env_var_opts_out() {
-        // Safe: no other test touches MACDIRSTAT_NO_TELEMETRY.
+        // Serialize env mutation so parallel test workers don't race.
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("MACDIRSTAT_NO_TELEMETRY", "1");
-        assert!(telemetry_opted_out(), "MACDIRSTAT_NO_TELEMETRY=1 should opt out");
+        let result = telemetry_opted_out();
         std::env::remove_var("MACDIRSTAT_NO_TELEMETRY");
+        assert!(result, "MACDIRSTAT_NO_TELEMETRY=1 should opt out");
     }
 
     #[test]
