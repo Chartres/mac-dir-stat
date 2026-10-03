@@ -239,7 +239,15 @@ impl FileTree {
                     dirs += 1 + child.subdir_count;
                     files += child.file_count;
                 } else {
-                    files += 1;
+                    // Synthetic nodes (__free_space__, __skipped__) must not inflate file_count.
+                    let is_synthetic = if let NodeKind::File { extension } = &child.kind {
+                        extension.map(|r| self.strings.get(r).starts_with(b"__")).unwrap_or(false)
+                    } else {
+                        false
+                    };
+                    if !is_synthetic {
+                        files += 1;
+                    }
                 }
             }
         }
