@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn cargo_target_with_cargo_toml_is_classified() {
-        let dir = std::env::temp_dir().join("mac_dir_stat_test_cargo");
+        let dir = std::env::temp_dir().join(format!("mac_dir_stat_test_cargo_{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("Cargo.toml"), "[package]").unwrap();
         let target = dir.join("target");
@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn target_without_cargo_toml_is_not_classified() {
-        let dir = std::env::temp_dir().join("mac_dir_stat_test_notcargo");
+        let dir = std::env::temp_dir().join(format!("mac_dir_stat_test_notcargo_{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         // No Cargo.toml in parent
         let target = dir.join("target");
