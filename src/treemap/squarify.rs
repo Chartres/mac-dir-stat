@@ -27,7 +27,7 @@ pub fn layout(items: &[LayoutItem], bounds: &Rect) -> Vec<PlacedRect> {
         return vec![];
     }
     let mut sorted: Vec<LayoutItem> = items.to_vec();
-    sorted.sort_by(|a, b| b.size.partial_cmp(&a.size).unwrap());
+    sorted.sort_by(|a, b| b.size.partial_cmp(&a.size).unwrap_or(std::cmp::Ordering::Equal));
     let mut result = Vec::with_capacity(sorted.len());
     let mut remaining = *bounds;
     let area = bounds.w * bounds.h;
