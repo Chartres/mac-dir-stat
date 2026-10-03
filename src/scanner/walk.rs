@@ -36,6 +36,11 @@ fn is_volume_root(path: &Path) -> bool {
     const APFS_FIRMLINKS: &[&str] = &[
         "/Applications", "/Library", "/Users",
         "/cores", "/home", "/opt", "/private",
+        // Additional firmlinks confirmed to have a different st_dev from /
+        "/usr", "/usr/local",
+        "/System/Library/Caches",
+        "/System/Library/Assets",
+        "/System/Library/AssetsV2",
     ];
     if APFS_FIRMLINKS.iter().any(|&p| path == Path::new(p)) {
         return false;
