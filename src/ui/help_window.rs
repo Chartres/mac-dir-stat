@@ -100,11 +100,7 @@ fn feedback_section(ui: &mut egui::Ui, state: &mut AppState) {
     );
     ui.add_space(4.0);
     if state.feedback_sent {
-        ui.label(
-            RichText::new("Thanks — feedback sent.")
-                .color(theme::TEXT_SECONDARY)
-                .size(11.0),
-        );
+        tip(ui, "Thanks — feedback sent.");
         return;
     }
     ui.horizontal(|ui| {
@@ -158,14 +154,11 @@ fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
             .size(12.0),
     );
     ui.add_space(4.0);
-    ui.label(
-        RichText::new(
-            "MacDirStat sends anonymous, cookieless usage counts (app opens, scans, \
-             space reclaimed) to help prioritize features. No file names or paths are \
-             ever sent. You can turn this off.",
-        )
-        .color(theme::TEXT_SECONDARY)
-        .size(11.0),
+    tip(
+        ui,
+        "MacDirStat sends anonymous, cookieless usage counts (app opens, scans, \
+         space reclaimed) to help prioritize features. No file names or paths are \
+         ever sent. You can turn this off.",
     );
     ui.add_space(4.0);
     let mut opted_out = crate::flywheel::telemetry_opted_out();
