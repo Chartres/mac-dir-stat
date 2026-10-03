@@ -2,6 +2,64 @@ use mac_dir_stat::scanner::tree::FileTree;
 use std::time::SystemTime;
 
 #[test]
+fn test_clear_descendants() {
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let dir = tree.add_dir(root, b"dir", false, SystemTime::now(), 1);
+    tree.add_file(dir, b"a.rs", 100, Some("rs"), SystemTime::now(), 2);
+    tree.add_file(dir, b"b.rs", 200, Some("rs"), SystemTime::now(), 2);
+    tree.compute_sizes();
+
+    tree.clear_descendants(dir);
+
+    assert_eq!(tree.node(dir).children().len(), 0, "children cleared");
+    // dir node itself stays alive
+    assert!(tree.is_alive(dir));
+}
+
+#[test]
+fn test_recompute_sizes_upward() {
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let dir = tree.add_dir(root, b"src", false, SystemTime::now(), 1);
+    tree.add_file(dir, b"a.rs", 400, Some("rs"), SystemTime::now(), 2);
+    tree.compute_sizes();
+    assert_eq!(tree.node(root).size, 400);
+
+    // Simulate adding a file directly (bypassing normal path) by recomputing.
+    tree.add_file(dir, b"b.rs", 600, Some("rs"), SystemTime::now(), 2);
+    tree.recompute_sizes_upward(dir);
+
+    assert_eq!(tree.node(dir).size, 1000);
+    assert_eq!(tree.node(root).size, 1000);
+}
+
+#[test]
+fn test_graft_under_replaces_subtree() {
+    // Build target tree with one child under a dir.
+    let mut target = FileTree::new();
+    let root = target.root();
+    let dir = target.add_dir(root, b"src", false, SystemTime::now(), 1);
+    target.add_file(dir, b"old.rs", 100, Some("rs"), SystemTime::now(), 2);
+    target.compute_sizes();
+    assert_eq!(target.node(root).size, 100);
+
+    // Build source subtree with different files.
+    let mut source = FileTree::new();
+    let sroot = source.root();
+    source.add_file(sroot, b"new.rs", 999, Some("rs"), SystemTime::now(), 1);
+    source.compute_sizes();
+
+    target.graft_under(dir, source);
+
+    // Old file gone, new one present, sizes correct.
+    let children = target.node(dir).children().to_vec();
+    assert_eq!(children.len(), 1);
+    assert_eq!(target.node(children[0]).size, 999);
+    assert_eq!(target.node(root).size, 999, "root size updated after graft");
+}
+
+#[test]
 fn test_add_file_and_directory() {
     let mut tree = FileTree::new();
     let root = tree.root();
