@@ -76,19 +76,10 @@ pub fn age_color(modified: SystemTime) -> GradientPair {
     let cool_start: [f64; 3] = [49.0, 46.0, 129.0];
     let cool_end: [f64; 3] = [79.0, 70.0, 229.0];
     let lerp = |a: f64, b: f64| -> u8 { (a + (b - a) * t).clamp(0.0, 255.0) as u8 };
-    let start = [
-        lerp(warm_start[0], cool_start[0]),
-        lerp(warm_start[1], cool_start[1]),
-        lerp(warm_start[2], cool_start[2]),
-        255,
-    ];
-    let end = [
-        lerp(warm_end[0], cool_end[0]),
-        lerp(warm_end[1], cool_end[1]),
-        lerp(warm_end[2], cool_end[2]),
-        255,
-    ];
-    (start, end)
+    let mix = |warm: [f64; 3], cool: [f64; 3]| -> Color {
+        [lerp(warm[0], cool[0]), lerp(warm[1], cool[1]), lerp(warm[2], cool[2]), 255]
+    };
+    (mix(warm_start, cool_start), mix(warm_end, cool_end))
 }
 
 fn simple_hash(s: &str) -> usize {
