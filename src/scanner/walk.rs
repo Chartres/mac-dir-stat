@@ -200,16 +200,31 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
         };
         let file_name_bytes = file_name_os.as_bytes();
 
+        let depth = path.components().count().saturating_sub(root.components().count()) as u16;
+
         let metadata = match entry.metadata() {
             Ok(m) => m,
             Err(_) => {
                 error_count += 1;
+                // If this is a directory, add a stub node so its children
+                // get the right parent instead of falling back to closest-
+                // ancestor, which produces wrong full_paths for Trash/Reveal.
+                if entry.file_type().is_dir() {
+                    let node_id = tree.add_dir(
+                        parent_id,
+                        file_name_bytes,
+                        false,
+                        SystemTime::UNIX_EPOCH,
+                        depth,
+                    );
+                    dir_map.insert(path.to_path_buf(), node_id);
+                    dir_count += 1;
+                }
                 continue;
             }
         };
 
         let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        let depth = path.components().count().saturating_sub(root.components().count()) as u16;
 
         if metadata.is_dir() {
             let node_id = tree.add_dir(
