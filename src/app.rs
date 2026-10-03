@@ -483,7 +483,7 @@ impl App {
             // Sanitize navigation state: deleted nodes may have been view_root
             // or ancestors in the zoom stack.
             self.state.zoom_stack.retain(|id| tree_ref.is_alive(*id));
-            if self.state.zoom_stack.is_empty() {
+            if self.state.zoom_stack.is_empty() && tree_ref.is_alive(root) {
                 self.state.zoom_stack.push(root);
             }
             if self.state.view_root.map(|id| !tree_ref.is_alive(id)).unwrap_or(false) {
@@ -588,7 +588,7 @@ impl App {
                         // descendants are now dead — reset anything that pointed at them.
                         // Always clean the stack; dead entries can appear at any depth.
                         self.state.zoom_stack.retain(|id| tree_ref.is_alive(*id));
-                        if self.state.zoom_stack.is_empty() {
+                        if self.state.zoom_stack.is_empty() && tree_ref.is_alive(root) {
                             self.state.zoom_stack.push(root);
                         }
                         if self.state.view_root.map(|id| !tree_ref.is_alive(id)).unwrap_or(false) {
