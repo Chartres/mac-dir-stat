@@ -105,12 +105,10 @@ fn layout_recursive(
             for p in &placed {
                 let child_id = kids[p.id];
                 let mut child_bounds = p.rect;
-                if gap > 0.0 {
-                    child_bounds.x += gap;
-                    child_bounds.y += gap;
-                    child_bounds.w -= gap * 2.0;
-                    child_bounds.h -= gap * 2.0;
-                }
+                child_bounds.x += gap;
+                child_bounds.y += gap;
+                child_bounds.w -= gap * 2.0;
+                child_bounds.h -= gap * 2.0;
                 if child_bounds.w <= 0.0 || child_bounds.h <= 0.0 {
                     continue;
                 }
