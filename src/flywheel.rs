@@ -18,7 +18,6 @@
 //! persisted in `telemetry.txt`. With no config baked, the SDK ships dark.
 
 use crate::state::state_dir;
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
