@@ -190,6 +190,65 @@ mod tests {
         assert!(desc.contains("credentials") || desc.contains("gradle.properties"),
             "description should warn about credentials");
     }
+
+    #[test]
+    fn find_candidates_1mib_threshold() {
+        use std::time::SystemTime;
+        let mut tree = FileTree::new();
+        let root = tree.root();
+        // Build: root → "Users" → "pavol" → "Library" → "Caches"
+        let users = tree.add_dir(root, b"Users", false, SystemTime::now(), 1);
+        let pavol = tree.add_dir(users, b"pavol", false, SystemTime::now(), 2);
+        let lib   = tree.add_dir(pavol, b"Library", false, SystemTime::now(), 3);
+        let caches = tree.add_dir(lib, b"Caches", false, SystemTime::now(), 4);
+
+        // Under 1 MiB → should not surface.
+        tree.add_file(caches, b"tiny.dat", 512 * 1024, None, SystemTime::now(), 5);
+        tree.compute_sizes();
+        assert!(find_candidates(&tree, root).is_empty(), "below 1 MiB threshold");
+
+        // Over 1 MiB → should surface exactly once.
+        tree.add_file(caches, b"big.dat", 1024 * 1024 + 1, None, SystemTime::now(), 5);
+        tree.compute_sizes();
+        let candidates = find_candidates(&tree, root);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].category, "Application Caches");
+    }
+
+    #[test]
+    fn find_candidates_no_recursion_into_match() {
+        use std::time::SystemTime;
+        let mut tree = FileTree::new();
+        let root = tree.root();
+        // root → "Users" → "pavol" → "Library" → "Caches" → "node_modules"
+        let users   = tree.add_dir(root, b"Users", false, SystemTime::now(), 1);
+        let pavol   = tree.add_dir(users, b"pavol", false, SystemTime::now(), 2);
+        let lib     = tree.add_dir(pavol, b"Library", false, SystemTime::now(), 3);
+        let caches  = tree.add_dir(lib, b"Caches", false, SystemTime::now(), 4);
+        let nm      = tree.add_dir(caches, b"node_modules", false, SystemTime::now(), 5);
+        tree.add_file(nm, b"pkg.js", 5 * 1024 * 1024, None, SystemTime::now(), 6);
+        tree.compute_sizes();
+        // Caches matches first; node_modules inside must not produce a second candidate.
+        let candidates = find_candidates(&tree, root);
+        assert_eq!(candidates.len(), 1, "no recursion into matched dir");
+        assert_eq!(candidates[0].category, "Application Caches");
+    }
+
+    #[test]
+    fn find_candidates_skips_dead_node() {
+        use std::time::SystemTime;
+        let mut tree = FileTree::new();
+        let root = tree.root();
+        let users   = tree.add_dir(root, b"Users", false, SystemTime::now(), 1);
+        let pavol   = tree.add_dir(users, b"pavol", false, SystemTime::now(), 2);
+        let lib     = tree.add_dir(pavol, b"Library", false, SystemTime::now(), 3);
+        let caches  = tree.add_dir(lib, b"Caches", false, SystemTime::now(), 4);
+        tree.add_file(caches, b"big.dat", 10 * 1024 * 1024, None, SystemTime::now(), 5);
+        tree.compute_sizes();
+        tree.remove_node(caches);
+        let candidates = find_candidates(&tree, root);
+        assert!(candidates.is_empty(), "dead node must not surface");
+    }
 }
 
 fn walk(tree: &FileTree, id: NodeId, out: &mut Vec<CleanupCandidate>) {
