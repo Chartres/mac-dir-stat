@@ -418,6 +418,7 @@ impl App {
     fn perform_batch_delete(&mut self, ids: Vec<NodeId>) {
         let mut succeeded: Vec<NodeId> = Vec::new();
         let mut freed: u64 = 0;
+        let mut failed: usize = 0;
         for id in &ids {
             let (path, size) = match &self.state.tree {
                 Some(t) if t.is_alive(*id) => (t.full_path(*id), t.node(*id).size),
@@ -425,6 +426,7 @@ impl App {
             };
             if let Err(e) = crate::platform::trash::move_to_trash(&path) {
                 eprintln!("Batch trash failed for {}: {}", path.display(), e);
+                failed += 1;
                 continue;
             }
             succeeded.push(*id);
@@ -461,6 +463,12 @@ impl App {
             self.state.cleanup_selected.remove(id);
         }
         self.state.treemap_dirty = true;
+        if failed > 0 {
+            self.state.status_message = Some(format!(
+                "{} item(s) could not be moved to Trash",
+                failed
+            ));
+        }
     }
 
     /// Move the directory-list selection up or down through the visible rows.
