@@ -53,8 +53,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         state.last_canvas_size = canvas_size;
     }
 
-    // Recompute if dirty
-    if state.treemap_dirty && state.tree.is_some() {
+    if state.treemap_dirty {
         if let (Some(tree), Some(view_root)) = (&state.tree, state.view_root) {
             let bounds = TRect {
                 x: canvas_rect.min.x as f64,
