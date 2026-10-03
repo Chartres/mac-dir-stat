@@ -220,33 +220,22 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         }
 
         // Compute alpha for filtering
-        let dimmed = if let Some(ref sel_ext) = state.selected_extension {
-            if let Some(tree) = &state.tree {
+        let dimmed = state.tree.as_ref().is_some_and(|tree| {
+            let ext_dimmed = state.selected_extension.as_deref().is_some_and(|sel_ext| {
                 if sel_ext.is_empty() {
                     // "(none)" selected: highlight extensionless files only
                     tree.extension(cr.node_id).is_some()
                 } else {
-                    tree.extension(cr.node_id) != Some(sel_ext.as_str())
+                    tree.extension(cr.node_id) != Some(sel_ext)
                 }
-            } else {
-                false
-            }
-        } else {
-            false
-        };
+            });
+            let search_dimmed = search_query_lower
+                .as_deref()
+                .is_some_and(|query| !tree.name(cr.node_id).to_lowercase().contains(query));
+            ext_dimmed || search_dimmed
+        });
 
-        let search_dimmed = if let Some(ref query) = search_query_lower {
-            if let Some(tree) = &state.tree {
-                let name = tree.name(cr.node_id);
-                !name.to_lowercase().contains(query.as_str())
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-
-        let alpha: u8 = if dimmed || search_dimmed { 40 } else { 255 };
+        let alpha: u8 = if dimmed { 40 } else { 255 };
 
         let c_start = Color32::from_rgba_unmultiplied(
             cr.color_start[0],
