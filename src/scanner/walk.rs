@@ -73,9 +73,9 @@ fn build_skip_paths() -> Vec<PathBuf> {
     let has_fda = crate::platform::fda::has_full_disk_access();
 
     let mut paths: Vec<PathBuf> = vec![
-        // APFS firmlinks (duplicate the entire fs)
-        PathBuf::from("/System/Volumes"),
         // Time Machine local snapshots and installer sandboxes
+        // Note: /System/Volumes is NOT in this list — should_skip() handles
+        // it with a scan-root exception so scanning /System/Volumes/Data works.
         PathBuf::from("/.MobileBackups"),
         PathBuf::from("/.PKInstallSandboxManager"),
         PathBuf::from("/.PKInstallSandboxManager-SystemSoftware"),
