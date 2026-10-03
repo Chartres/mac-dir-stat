@@ -130,15 +130,10 @@ fn show_node(
     let indent = depth as f32 * 10.0;
     let has_children = !children.is_empty();
 
-    let frame = if is_selected {
-        egui::Frame::new()
-            .fill(theme::BG_SELECTION)
-            .inner_margin(egui::Margin { left: 3, right: 3, top: 1, bottom: 1 })
-            .corner_radius(theme::RADIUS_SM)
-    } else {
-        egui::Frame::new()
-            .inner_margin(egui::Margin { left: 3, right: 3, top: 1, bottom: 1 })
-    };
+    let mut frame = egui::Frame::new().inner_margin(egui::Margin::symmetric(3, 1));
+    if is_selected {
+        frame = frame.fill(theme::BG_SELECTION).corner_radius(theme::RADIUS_SM);
+    }
 
     let frame_response = frame.show(ui, |ui| {
         ui.horizontal(|ui| {
