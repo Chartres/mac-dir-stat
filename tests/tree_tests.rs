@@ -121,6 +121,23 @@ fn test_counts_decrement_on_remove() {
 }
 
 #[test]
+fn test_remove_node_dead_is_idempotent() {
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let file = tree.add_file(root, b"a.txt", 1000, Some("txt"), SystemTime::now(), 1);
+    tree.compute_sizes();
+
+    tree.remove_node(file);
+    assert_eq!(tree.node(root).size, 0);
+    assert_eq!(tree.node(root).file_count, 0);
+
+    // Second remove must not double-subtract
+    tree.remove_node(file);
+    assert_eq!(tree.node(root).size, 0);
+    assert_eq!(tree.node(root).file_count, 0);
+}
+
+#[test]
 fn test_full_path() {
     let mut tree = FileTree::new();
     let root = tree.root();
