@@ -18,6 +18,6 @@ pub fn empty_trash() -> Result<(), String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map(|_| ())
+        .map(|mut child| { std::thread::spawn(move || { let _ = child.wait(); }); })
         .map_err(|e| format!("osascript failed to start: {}", e))
 }
