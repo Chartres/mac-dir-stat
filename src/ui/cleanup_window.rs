@@ -68,13 +68,17 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             // Batch action bar
             if !state.cleanup_candidates.is_empty() {
                 ui.horizontal(|ui| {
-                    let selected_count = state.cleanup_selected.len();
                     let selected_total: u64 = state
                         .cleanup_candidates
                         .iter()
                         .filter(|c| state.cleanup_selected.contains(&c.node_id))
                         .map(|c| c.size)
                         .sum();
+                    let selected_count = state
+                        .cleanup_candidates
+                        .iter()
+                        .filter(|c| state.cleanup_selected.contains(&c.node_id))
+                        .count();
 
                     if widgets::ghost_button(ui, "Select all").clicked() {
                         state.cleanup_selected = state
