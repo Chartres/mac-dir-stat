@@ -29,6 +29,17 @@ fn is_volume_root(path: &Path) -> bool {
     if path == Path::new("/") {
         return true;
     }
+    // APFS firmlinks (/Users, /Applications, /Library, /private, …) appear on a
+    // different st_dev from / but are not real mount points — they are firmlinks
+    // into the APFS Data volume. Treating them as roots adds spurious Free Space
+    // and Hidden/Skipped nodes under each of them.
+    const APFS_FIRMLINKS: &[&str] = &[
+        "/Applications", "/Library", "/Users",
+        "/cores", "/home", "/opt", "/private",
+    ];
+    if APFS_FIRMLINKS.iter().any(|&p| path == Path::new(p)) {
+        return false;
+    }
     match (device_id(path), path.parent().and_then(device_id)) {
         (Some(dev), Some(parent_dev)) => dev != parent_dev,
         _ => false,
