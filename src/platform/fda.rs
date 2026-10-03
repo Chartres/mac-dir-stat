@@ -12,9 +12,12 @@ use std::process::Command;
 
 /// Open System Settings → Privacy & Security → Full Disk Access.
 pub fn open_settings() {
-    let _ = Command::new("open")
+    if let Ok(mut child) = Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
-        .spawn();
+        .spawn()
+    {
+        std::thread::spawn(move || { let _ = child.wait(); });
+    }
 }
 
 /// Best-effort check for whether the app already has Full Disk Access: try to
