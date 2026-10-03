@@ -47,6 +47,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
         .map(|t| t.node(node).is_dir())
         .unwrap_or(false);
 
+    let is_synthetic = state.tree.as_ref().and_then(|t| t.extension(node))
+        .map(|ext| ext == "__free_space__" || ext == "__skipped__")
+        .unwrap_or(false);
+
     // The folder to act on for "Open Terminal Here": the node itself if a
     // directory, otherwise its containing folder.
     let dir_for_terminal = if is_dir {
@@ -55,21 +59,25 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
         path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| path.clone())
     };
 
-    if ui.button("Open").clicked() {
-        crate::platform::finder::open_path(&path);
-        ui.close_menu();
-    }
-    if ui.button("Show in Finder").clicked() {
-        crate::platform::finder::reveal_in_finder(&path);
-        ui.close_menu();
+    if !is_synthetic {
+        if ui.button("Open").clicked() {
+            crate::platform::finder::open_path(&path);
+            ui.close_menu();
+        }
+        if ui.button("Show in Finder").clicked() {
+            crate::platform::finder::reveal_in_finder(&path);
+            ui.close_menu();
+        }
     }
     if ui.button("Open Terminal Here").clicked() {
         crate::platform::finder::open_terminal_at(&dir_for_terminal);
         ui.close_menu();
     }
-    if ui.button("Get Info").clicked() {
-        crate::platform::finder::get_info(&path);
-        ui.close_menu();
+    if !is_synthetic {
+        if ui.button("Get Info").clicked() {
+            crate::platform::finder::get_info(&path);
+            ui.close_menu();
+        }
     }
     if ui.button("Copy Path").clicked() {
         ui.ctx().copy_text(path.to_string_lossy().to_string());
@@ -91,9 +99,6 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     }
     ui.separator();
     let is_root = state.tree.as_ref().map(|t| t.root() == node).unwrap_or(true);
-    let is_synthetic = state.tree.as_ref().and_then(|t| t.extension(node))
-        .map(|ext| ext == "__free_space__" || ext == "__skipped__")
-        .unwrap_or(false);
     if !is_root && !is_synthetic {
         if ui
             .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))

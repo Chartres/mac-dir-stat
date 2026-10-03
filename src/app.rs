@@ -770,7 +770,10 @@ impl eframe::App for App {
             if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
                 if let Some(node_id) = self.state.selected_node {
                     if let Some(tree) = &self.state.tree {
-                        if tree.is_alive(node_id) {
+                        let is_synthetic = tree.extension(node_id)
+                            .map(|e| e == "__free_space__" || e == "__skipped__")
+                            .unwrap_or(false);
+                        if tree.is_alive(node_id) && !is_synthetic {
                             let path = tree.full_path(node_id);
                             crate::platform::finder::reveal_in_finder(&path);
                         }
