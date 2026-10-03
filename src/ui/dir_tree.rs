@@ -228,7 +228,7 @@ fn show_node(
         state.selected_node = Some(id);
         state.selected_extension = None;
     }
-    if row_response.double_clicked() {
+    if row_response.double_clicked() && state.view_root != Some(id) {
         state.view_root = Some(id);
         state.zoom_stack.push(id);
         state.treemap_dirty = true;
