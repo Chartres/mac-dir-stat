@@ -517,6 +517,9 @@ impl App {
 
     fn perform_delete(&mut self, node_id: NodeId) {
         if let Some(tree) = &self.state.tree {
+            if !tree.is_alive(node_id) {
+                return;
+            }
             let path = tree.full_path(node_id);
             let size = tree.node(node_id).size;
             match crate::platform::trash::move_to_trash(&path) {
