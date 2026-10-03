@@ -46,9 +46,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
                         if widgets::ghost_button(ui, "Empty Trash…").clicked() {
-                            state.pending_action = Some(
-                                crate::app::PendingAction::ConfirmEmptyTrash,
-                            );
+                            state.pending_action = Some(PendingAction::ConfirmEmptyTrash);
                         }
                     },
                 );
@@ -68,17 +66,15 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             // Batch action bar
             if !state.cleanup_candidates.is_empty() {
                 ui.horizontal(|ui| {
-                    let selected_total: u64 = state
+                    let selected: Vec<&CleanupCandidate> = state
                         .cleanup_candidates
                         .iter()
                         .filter(|c| state.cleanup_selected.contains(&c.node_id))
-                        .map(|c| c.size)
-                        .sum();
-                    let selected_count = state
-                        .cleanup_candidates
-                        .iter()
-                        .filter(|c| state.cleanup_selected.contains(&c.node_id))
-                        .count();
+                        .collect();
+                    let selected_count = selected.len();
+                    let selected_total: u64 = selected.iter().map(|c| c.size).sum();
+                    let selected_ids: Vec<crate::scanner::tree::NodeId> =
+                        selected.iter().map(|c| c.node_id).collect();
 
                     if widgets::ghost_button(ui, "Select all").clicked() {
                         state.cleanup_selected = state
@@ -104,21 +100,13 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                             };
                             let enabled = selected_count > 0;
                             ui.add_enabled_ui(enabled, |ui| {
-                                if widgets::danger_button(ui, &label).clicked() {
-                                    let ids: Vec<crate::scanner::tree::NodeId> = state
-                                        .cleanup_candidates
-                                        .iter()
-                                        .filter(|c| state.cleanup_selected.contains(&c.node_id))
-                                        .map(|c| c.node_id)
-                                        .collect();
-                                    if !ids.is_empty() {
-                                        state.pending_action = Some(
-                                            crate::app::PendingAction::ConfirmBatchTrash(
-                                                ids,
-                                                selected_total,
-                                            ),
-                                        );
-                                    }
+                                if widgets::danger_button(ui, &label).clicked()
+                                    && !selected_ids.is_empty()
+                                {
+                                    state.pending_action = Some(PendingAction::ConfirmBatchTrash(
+                                        selected_ids,
+                                        selected_total,
+                                    ));
                                 }
                             });
                         },
