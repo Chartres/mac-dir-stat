@@ -88,11 +88,17 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
         }
     }
     ui.separator();
-    if ui
-        .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
-        .clicked()
-    {
-        state.pending_action = Some(PendingAction::ConfirmTrash(node, name.clone(), size));
-        ui.close_menu();
+    let is_root = state.tree.as_ref().map(|t| t.root() == node).unwrap_or(true);
+    let is_synthetic = state.tree.as_ref().and_then(|t| t.extension(node))
+        .map(|ext| ext == "__free_space__" || ext == "__skipped__")
+        .unwrap_or(false);
+    if !is_root && !is_synthetic {
+        if ui
+            .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
+            .clicked()
+        {
+            state.pending_action = Some(PendingAction::ConfirmTrash(node, name.clone(), size));
+            ui.close_menu();
+        }
     }
 }
