@@ -154,7 +154,7 @@ fn should_skip(path: &Path, scan_root: &Path, skip_paths: &[PathBuf]) -> bool {
     false
 }
 
-pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
+pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>, inject_synthetics: bool) {
     let mut tree = FileTree::new();
     tree.rename_root(root.as_os_str().as_bytes());
 
@@ -296,7 +296,7 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     // volume root (`/` or a mounted volume like /Volumes/External). For
     // sub-roots (e.g. ~/Downloads), the disk's free space doesn't belong
     // inside the scanned tree.
-    if is_volume_root(&root) {
+    if inject_synthetics && is_volume_root(&root) {
         if let Some((total, avail)) = volume_space(&root) {
             let used = tree.node(tree.root()).size;
 

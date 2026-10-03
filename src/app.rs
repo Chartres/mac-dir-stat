@@ -285,7 +285,9 @@ impl App {
         let path = tree.full_path(node_id);
         let (tx, rx) = crossbeam_channel::unbounded();
         self.state.partial_refresh_receiver = Some((node_id, rx));
-        crate::scanner::scan(path, tx);
+        // Use scan_subtree so synthetic Free Space/Hidden nodes are not
+        // injected into the middle of the main tree.
+        crate::scanner::scan_subtree(path, tx);
     }
 
     fn poll_partial_refresh(&mut self) {
