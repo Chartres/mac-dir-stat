@@ -8,11 +8,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         ui.spacing_mut().item_spacing.x = 8.0;
 
         if widgets::primary_button(ui, "Scan Directory…").clicked() {
-            if let Some(path) = rfd::FileDialog::new()
-                .set_title("Select directory to scan")
-                .set_directory(&state.scan_root)
-                .pick_folder()
-            {
+            if let Some(path) = crate::platform::dialogs::pick_folder(&state.scan_root) {
                 state.scan_root = path;
                 state.request_rescan = true;
             }
