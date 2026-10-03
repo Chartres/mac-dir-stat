@@ -478,10 +478,19 @@ impl App {
             self.state.extension_stats = tree.collect_extensions(root);
             // Cheap: dead candidates can only disappear (not appear),
             // since find_candidates doesn't recurse into matched dirs.
+            // Also refresh sizes — individual file deletes inside a candidate
+            // directory update the tree node's size but not the cached value.
             let tree_ref = &*tree;
             self.state
                 .cleanup_candidates
-                .retain(|c| tree_ref.is_alive(c.node_id));
+                .retain_mut(|c| {
+                    if tree_ref.is_alive(c.node_id) {
+                        c.size = tree_ref.node(c.node_id).size;
+                        true
+                    } else {
+                        false
+                    }
+                });
             // Sanitize navigation state: deleted nodes may have been view_root
             // or ancestors in the zoom stack.
             self.state.zoom_stack.retain(|id| tree_ref.is_alive(*id));
@@ -585,7 +594,14 @@ impl App {
                         let tree_ref = &*tree;
                         self.state
                             .cleanup_candidates
-                            .retain(|c| tree_ref.is_alive(c.node_id));
+                            .retain_mut(|c| {
+                                if tree_ref.is_alive(c.node_id) {
+                                    c.size = tree_ref.node(c.node_id).size;
+                                    true
+                                } else {
+                                    false
+                                }
+                            });
                         // Sanitize navigation state: the deleted node and its
                         // descendants are now dead — reset anything that pointed at them.
                         // Always clean the stack; dead entries can appear at any depth.
