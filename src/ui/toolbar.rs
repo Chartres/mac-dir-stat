@@ -47,8 +47,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             } else {
                 "Cleanup…".to_string()
             };
-            let resp = widgets::ghost_button(ui, &label);
-            let resp = resp.on_hover_text(
+            let resp = widgets::ghost_button(ui, &label).on_hover_text(
                 "Opens a review window listing safe-to-delete folders \
                  (caches, Xcode build artifacts, node_modules, simulators, …). \
                  Nothing is deleted until you tick items and confirm a Trash action.",
@@ -69,7 +68,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 theme::format_size(tree.node(tree.root()).size),
             )
         } else {
-            format!("{}", state.scan_root.display())
+            state.scan_root.display().to_string()
         };
         ui.label(
             RichText::new(path_text)
