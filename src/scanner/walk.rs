@@ -196,12 +196,6 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>, inject_synthetics
             continue;
         }
 
-        // Defensive — process_read_dir already filters most cases, but keep
-        // this for the rare entry that slips through.
-        if should_skip(&path, &root, &skip_paths) {
-            continue;
-        }
-
         let parent_path = match path.parent() {
             Some(p) => p.to_path_buf(),
             None => continue,
