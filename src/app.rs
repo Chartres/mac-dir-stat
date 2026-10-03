@@ -61,6 +61,9 @@ pub struct AppState {
     // Search
     pub search_active: bool,
     pub search_query: String,
+    /// True for exactly one frame when search opens, so the text field gets
+    /// focus once without stealing it back on every subsequent frame.
+    pub search_just_opened: bool,
 
     // UI
     pub pending_action: Option<PendingAction>,
@@ -217,6 +220,7 @@ impl App {
                 help_window_open: false,
                 search_active: false,
                 search_query: String::new(),
+                search_just_opened: false,
                 pending_action: None,
                 last_screen_size: egui::Vec2::ZERO,
                 last_canvas_size: egui::Vec2::ZERO,
@@ -671,7 +675,9 @@ impl eframe::App for App {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::F) && i.modifiers.command) {
             self.state.search_active = !self.state.search_active;
-            if !self.state.search_active {
+            if self.state.search_active {
+                self.state.search_just_opened = true;
+            } else {
                 self.state.search_query.clear();
             }
         }

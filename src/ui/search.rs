@@ -25,7 +25,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     .font(egui::FontId::proportional(13.0))
                     .text_color(theme::TEXT_PRIMARY),
             );
-            response.request_focus();
+            if state.search_just_opened {
+                response.request_focus();
+                state.search_just_opened = false;
+            }
 
             if ui
                 .add(
