@@ -313,6 +313,11 @@ impl App {
         }
         if let Some((target_id, new_subtree)) = completed {
             if let Some(tree) = &mut self.state.tree {
+                if !tree.is_alive(target_id) {
+                    // Target was deleted between refresh start and completion; discard.
+                    self.state.partial_refresh_receiver = None;
+                    return;
+                }
                 tree.graft_under(target_id, new_subtree);
                 let root = tree.root();
                 self.state.extension_stats = tree.collect_extensions(root);
