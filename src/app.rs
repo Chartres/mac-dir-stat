@@ -329,6 +329,11 @@ impl App {
                         if self.state.zoom_stack.is_empty() {
                             self.state.zoom_stack.push(root);
                         }
+                        // Ensure target_id is on the stack so breadcrumbs
+                        // and view_root stay in sync.
+                        if self.state.zoom_stack.last() != Some(&target_id) {
+                            self.state.zoom_stack.push(target_id);
+                        }
                     }
                 }
                 if let Some(sel) = self.state.selected_node {

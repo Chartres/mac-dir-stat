@@ -467,7 +467,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         if let Some(hovered) = state.hovered_node {
             if let Some(tree) = &state.tree {
                 if let Some(pid) = tree.node(hovered).parent {
-                    if tree.node(pid).is_dir() {
+                    if tree.node(pid).is_dir() && state.view_root != Some(pid) {
                         state.view_root = Some(pid);
                         state.zoom_stack.push(pid);
                         state.treemap_dirty = true;
