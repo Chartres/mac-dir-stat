@@ -510,6 +510,16 @@ impl App {
             }
             self.state.cleanup_selected.remove(id);
         }
+        // Clear selections pointing at dead nodes (e.g. children inside a
+        // just-trashed directory that wasn't the exact selection target).
+        if let Some(tree) = &self.state.tree {
+            if self.state.selected_node.map(|id| !tree.is_alive(id)).unwrap_or(false) {
+                self.state.selected_node = None;
+            }
+            if self.state.hovered_node.map(|id| !tree.is_alive(id)).unwrap_or(false) {
+                self.state.hovered_node = None;
+            }
+        }
         self.state.treemap_dirty = true;
         if failed > 0 {
             self.state.status_message = Some(format!(
