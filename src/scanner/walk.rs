@@ -129,6 +129,14 @@ fn should_skip(path: &Path, scan_root: &Path, skip_paths: &[PathBuf]) -> bool {
     if scan_root == Path::new("/") && path.starts_with("/Volumes") {
         return true;
     }
+    // /net and /home are autofs mounts that stall on lookup when accessed
+    // from outside. Skip them unless the user explicitly scanned into them.
+    for autofs in &["/net", "/home"] {
+        let ap = Path::new(autofs);
+        if path.starts_with(ap) && !scan_root.starts_with(ap) {
+            return true;
+        }
+    }
     // TCC-protected paths
     for p in skip_paths {
         if path.starts_with(p) {
