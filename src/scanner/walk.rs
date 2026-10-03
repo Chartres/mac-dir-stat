@@ -119,8 +119,9 @@ fn is_photos_library(path: &Path) -> bool {
 }
 
 fn should_skip(path: &Path, scan_root: &Path, skip_paths: &[PathBuf]) -> bool {
-    // APFS firmlinks
-    if path.starts_with("/System/Volumes") {
+    // APFS firmlinks — skip sibling volumes under /System/Volumes, but not
+    // when the scan root itself is inside /System/Volumes (e.g. /System/Volumes/Data).
+    if path.starts_with("/System/Volumes") && !path.starts_with(scan_root) {
         return true;
     }
     // When scanning from /, skip /Volumes entries (mount points / firmlinks
