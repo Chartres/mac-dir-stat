@@ -143,9 +143,16 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
 
 /// Walks the tree once and returns all directories matching cleanup rules,
 /// sorted by size descending. Doesn't recurse into matched directories.
+///
+/// The scan root itself is never classified — only its descendants are
+/// examined. This prevents the "Trash" button from targeting the entire
+/// scanned directory when the root path matches a cleanup pattern (e.g.
+/// the user scanned ~/Library/Caches directly).
 pub fn find_candidates(tree: &FileTree, root: NodeId) -> Vec<CleanupCandidate> {
     let mut candidates = Vec::new();
-    walk(tree, root, &mut candidates);
+    for &child in tree.node(root).children() {
+        walk(tree, child, &mut candidates);
+    }
     candidates.sort_by(|a, b| b.size.cmp(&a.size));
     candidates
 }
