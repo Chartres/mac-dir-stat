@@ -42,10 +42,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 let max_to_show = 50;
-                let show_count = stats.len().min(max_to_show);
 
-                for i in 0..show_count {
-                    let (ext, bytes, count) = &stats[i];
+                for (i, (ext, bytes, count)) in stats.iter().take(max_to_show).enumerate() {
                     let is_selected = state.selected_extension.as_deref() == Some(ext.as_str());
                     let colors = extension_color(ext);
                     let swatch_color = Color32::from_rgba_premultiplied(
