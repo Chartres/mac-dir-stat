@@ -253,14 +253,9 @@ fn candidate_row(ui: &mut egui::Ui, state: &mut AppState, cand: &CleanupCandidat
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
                     if widgets::ghost_button(ui, "Trash").clicked() {
-                        let name = cand
-                            .path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| cand.path.display().to_string());
                         state.pending_action = Some(PendingAction::ConfirmTrash(
                             cand.node_id,
-                            name,
+                            cand.path.clone(),
                             cand.size,
                         ));
                     }

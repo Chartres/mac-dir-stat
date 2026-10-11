@@ -103,7 +103,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
             .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
             .clicked()
         {
-            state.pending_action = Some(PendingAction::ConfirmTrash(node, name.clone(), size));
+            state.pending_action = Some(PendingAction::ConfirmTrash(node, path.clone(), size));
             ui.close_menu();
         }
     }

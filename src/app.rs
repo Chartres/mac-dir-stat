@@ -161,7 +161,7 @@ impl ExtSortMode {
 }
 
 pub enum PendingAction {
-    ConfirmTrash(NodeId, String, u64),
+    ConfirmTrash(NodeId, PathBuf, u64),
     ConfirmBatchTrash(Vec<NodeId>, u64),
     ConfirmEmptyTrash,
     RefreshSubtree(NodeId),
@@ -745,9 +745,9 @@ impl eframe::App for App {
         if ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command) {
             if let Some(node_id) = self.state.selected_node {
                 if let Some(tree) = &self.state.tree {
-                    let name = tree.name(node_id).to_string();
+                    let path = tree.full_path(node_id);
                     let size = tree.node(node_id).size;
-                    self.state.pending_action = Some(PendingAction::ConfirmTrash(node_id, name, size));
+                    self.state.pending_action = Some(PendingAction::ConfirmTrash(node_id, path, size));
                 }
             }
         }
@@ -964,17 +964,10 @@ impl eframe::App for App {
         let mut empty_trash_confirmed: Option<bool> = None;
         if let Some(action) = &self.state.pending_action {
             match action {
-                PendingAction::ConfirmTrash(node_id, name, size) => {
+                PendingAction::ConfirmTrash(node_id, path, size) => {
                     let node_id = *node_id;
-                    let name = name.clone();
+                    let path = path.clone();
                     let size = *size;
-                    let display_name = if name.chars().count() > 36 {
-                        let mut iter = name.chars();
-                        let head: String = iter.by_ref().take(34).collect();
-                        format!("{}…", head)
-                    } else {
-                        name.clone()
-                    };
                     egui::Window::new("Confirm Delete")
                         .title_bar(false)
                         .collapsible(false)
@@ -982,7 +975,7 @@ impl eframe::App for App {
                         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                         .default_width(300.0)
                         .show(ctx, |ui| {
-                            ui.set_max_width(320.0);
+                            ui.set_max_width(380.0);
                             ui.label(
                                 egui::RichText::new("Move to Trash?")
                                     .color(ui::theme::TEXT_PRIMARY)
@@ -993,7 +986,7 @@ impl eframe::App for App {
                             ui.label(
                                 egui::RichText::new(format!(
                                     "{}  ·  {}",
-                                    display_name,
+                                    path.display(),
                                     ui::theme::format_size(size),
                                 ))
                                 .color(ui::theme::TEXT_SECONDARY)
