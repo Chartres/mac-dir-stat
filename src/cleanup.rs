@@ -139,10 +139,9 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
                 ".cache directories",
                 "App- and tool-specific caches. Generally regenerable.",
             )),
-            ".Trash" | ".Trashes" => Some((
-                "Trash",
-                "Files in the macOS Trash. Empty when you're sure you don't need them.",
-            )),
+            // .Trash / .Trashes are intentionally excluded: moving them to the
+            // Trash via the cleanup button would incorrectly nest the system
+            // Trash inside itself. Use the dedicated "Empty Trash…" button.
             _ => None,
         };
     }
