@@ -463,32 +463,7 @@ impl App {
                 "kind": "batch",
             }));
         }
-        if let Some(tree) = &mut self.state.tree {
-            for id in &succeeded {
-                tree.remove_node(*id);
-            }
-            let root = tree.root();
-            self.state.extension_stats = tree.collect_extensions(root);
-            // Cheap: dead candidates can only disappear (not appear),
-            // since find_candidates doesn't recurse into matched dirs.
-            let tree_ref = &*tree;
-            self.state
-                .cleanup_candidates
-                .retain(|c| tree_ref.is_alive(c.node_id));
-            // If the user trashed the currently-zoomed directory, reset the
-            // treemap view to the root so it doesn't go blank.
-            self.state.reset_dead_view_root(root);
-        }
-        for id in &succeeded {
-            if self.state.selected_node == Some(*id) {
-                self.state.selected_node = None;
-            }
-            if self.state.hovered_node == Some(*id) {
-                self.state.hovered_node = None;
-            }
-            self.state.cleanup_selected.remove(id);
-        }
-        self.state.treemap_dirty = true;
+        self.state.remove_trashed(&succeeded);
     }
 
     /// Move the directory-list selection up or down through the visible rows.
@@ -578,23 +553,7 @@ impl App {
                         "items": 1,
                         "kind": "single",
                     }));
-                    if let Some(tree) = &mut self.state.tree {
-                        tree.remove_node(node_id);
-                        let root = tree.root();
-                        self.state.extension_stats = tree.collect_extensions(root);
-                        let tree_ref = &*tree;
-                        self.state
-                            .cleanup_candidates
-                            .retain(|c| tree_ref.is_alive(c.node_id));
-                        self.state.reset_dead_view_root(root);
-                    }
-                    if self.state.selected_node == Some(node_id) {
-                        self.state.selected_node = None;
-                    }
-                    if self.state.hovered_node == Some(node_id) {
-                        self.state.hovered_node = None;
-                    }
-                    self.state.treemap_dirty = true;
+                    self.state.remove_trashed(&[node_id]);
                 }
                 Err(e) => {
                     eprintln!("Delete failed: {}", e);
@@ -606,6 +565,36 @@ impl App {
 }
 
 impl AppState {
+    /// Drop nodes that were just moved to Trash from the tree and from every
+    /// piece of state that might still reference them.
+    fn remove_trashed(&mut self, ids: &[NodeId]) {
+        if let Some(tree) = &mut self.tree {
+            for &id in ids {
+                tree.remove_node(id);
+            }
+            let root = tree.root();
+            self.extension_stats = tree.collect_extensions(root);
+            // Cheap: dead candidates can only disappear (not appear),
+            // since find_candidates doesn't recurse into matched dirs.
+            let tree_ref = &*tree;
+            self.cleanup_candidates
+                .retain(|c| tree_ref.is_alive(c.node_id));
+            // If the user trashed the currently-zoomed directory, reset the
+            // treemap view to the root so it doesn't go blank.
+            self.reset_dead_view_root(root);
+        }
+        for id in ids {
+            if self.selected_node == Some(*id) {
+                self.selected_node = None;
+            }
+            if self.hovered_node == Some(*id) {
+                self.hovered_node = None;
+            }
+            self.cleanup_selected.remove(id);
+        }
+        self.treemap_dirty = true;
+    }
+
     /// If the zoomed-into directory died (trashed or replaced by a graft),
     /// jump the treemap to `fallback` and drop dead entries from the zoom
     /// stack, keeping at least the tree root.
