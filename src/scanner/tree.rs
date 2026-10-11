@@ -265,6 +265,9 @@ impl FileTree {
     }
 
     pub fn remove_node(&mut self, id: NodeId) {
+        if !self.nodes[id].alive {
+            return;
+        }
         let size = self.nodes[id].size;
         let parent = self.nodes[id].parent;
 
