@@ -278,7 +278,7 @@ impl Flywheel {
     /// so a slow or unreachable network can't stall a UI frame.
     fn post(&self, table: &str, body: &str) {
         let endpoint = format!("{}/rest/v1/{}", self.url, table);
-        let _ = Command::new("curl")
+        let child = Command::new("curl")
             .args([
                 "-s",
                 "-m",
@@ -301,6 +301,10 @@ impl Flywheel {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn();
+        // Reap the child on a background thread so it doesn't become a zombie.
+        if let Ok(mut child) = child {
+            std::thread::spawn(move || { let _ = child.wait(); });
+        }
     }
 }
 
