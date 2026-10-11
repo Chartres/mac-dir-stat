@@ -260,6 +260,7 @@ impl App {
         };
         self.state.scan_start = Some(Instant::now());
         self.state.freed_this_session = 0;
+        self.state.partial_refresh_receiver = None;
         self.state.tree = None;
         self.state.colored_rects.clear();
         self.state.dir_rects.clear();
