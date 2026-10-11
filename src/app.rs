@@ -783,7 +783,7 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 if let Some(tree) = &self.state.tree {
                     let root = tree.root();
-                    let file_count = tree.collect_files(root).len();
+                    let file_count = tree.node(root).file_count as usize;
                     let freed_str = if self.state.freed_this_session > 0 {
                         format!(
                             "  •  freed {}",
