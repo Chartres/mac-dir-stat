@@ -246,6 +246,11 @@ impl App {
         // Cheap once-per-scan recheck so the FDA affordance clears after the
         // user grants access and re-scans.
         self.state.has_fda = crate::platform::fda::has_full_disk_access();
+        // A Confirm Trash dialog (or any other pending action) stores NodeIds
+        // from the old tree. Clear it before starting a new scan so a
+        // confirmation that arrives after the new tree loads doesn't act on a
+        // recycled id.
+        self.state.pending_action = None;
         let (tx, rx) = crossbeam_channel::unbounded();
         self.state.scan_receiver = Some(rx);
         self.state.scan_progress = ScanProgressInfo {
