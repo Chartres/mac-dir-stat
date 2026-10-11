@@ -219,6 +219,17 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             // see for a given (dev, ino) pair. The file still appears in the
             // tree at its canonical position; it just contributes 0 bytes for
             // subsequent hard links so totals don't overcount.
+            //
+            // NOTE: We use metadata.len() (logical EOF size), not
+            // stat.st_blocks * 512 (allocated disk blocks). This means:
+            //   • Sparse files (e.g. Docker.raw) are OVERCOUNTED — they appear
+            //     larger than the disk space they actually consume.
+            //   • APFS clones and transparently-compressed files may also be
+            //     overcounted because their physical footprint is smaller.
+            // Upgrade path: replace `metadata.len()` with
+            // `(metadata.blocks() * 512).max(metadata.len())` guarded by
+            // `metadata.blocks() > 0` to handle special files where st_blocks
+            // is zero (FIFOs, sockets, device nodes).
             let size = if metadata.nlink() > 1 {
                 let key = (metadata.dev(), metadata.ino());
                 if seen_inodes.insert(key) { metadata.len() } else { 0 }
