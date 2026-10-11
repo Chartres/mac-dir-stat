@@ -347,66 +347,81 @@ impl App {
     }
 
     fn poll_scan(&mut self) {
+        let mut disconnected = false;
         if let Some(rx) = &self.state.scan_receiver {
-            while let Ok(msg) = rx.try_recv() {
-                match msg {
-                    ScanProgress::Counting {
-                        files,
-                        dirs,
-                        bytes,
-                        errors,
-                        current_path,
-                    } => {
-                        self.state.scan_progress.files = files;
-                        self.state.scan_progress.dirs = dirs;
-                        self.state.scan_progress.bytes = bytes;
-                        self.state.scan_progress.errors = errors;
-                        self.state.scan_progress.current_path = current_path;
-                    }
-                    ScanProgress::Done(tree) => {
-                        if let Some(start) = self.state.scan_start {
-                            self.state.scan_duration_secs = start.elapsed().as_secs_f32();
+            loop {
+                match rx.try_recv() {
+                    Ok(msg) => match msg {
+                        ScanProgress::Counting {
+                            files,
+                            dirs,
+                            bytes,
+                            errors,
+                            current_path,
+                        } => {
+                            self.state.scan_progress.files = files;
+                            self.state.scan_progress.dirs = dirs;
+                            self.state.scan_progress.bytes = bytes;
+                            self.state.scan_progress.errors = errors;
+                            self.state.scan_progress.current_path = current_path;
                         }
-                        self.state.flywheel.track(
-                            "scan_completed",
-                            serde_json::json!({
-                                "files": self.state.scan_progress.files,
-                                "dirs": self.state.scan_progress.dirs,
-                                "bytes": self.state.scan_progress.bytes,
-                                "errors": self.state.scan_progress.errors,
-                                "duration_secs": self.state.scan_duration_secs,
-                            }),
-                        );
-                        let root = tree.root();
-                        self.state.extension_stats = tree.collect_extensions(root);
-                        self.state.cleanup_candidates =
-                            crate::cleanup::find_candidates(&tree, root);
-                        self.state.view_root = Some(root);
-                        self.state.zoom_stack = vec![root];
-                        self.state.tree = Some(tree);
+                        ScanProgress::Done(tree) => {
+                            if let Some(start) = self.state.scan_start {
+                                self.state.scan_duration_secs = start.elapsed().as_secs_f32();
+                            }
+                            self.state.flywheel.track(
+                                "scan_completed",
+                                serde_json::json!({
+                                    "files": self.state.scan_progress.files,
+                                    "dirs": self.state.scan_progress.dirs,
+                                    "bytes": self.state.scan_progress.bytes,
+                                    "errors": self.state.scan_progress.errors,
+                                    "duration_secs": self.state.scan_duration_secs,
+                                }),
+                            );
+                            let root = tree.root();
+                            self.state.extension_stats = tree.collect_extensions(root);
+                            self.state.cleanup_candidates =
+                                crate::cleanup::find_candidates(&tree, root);
+                            self.state.view_root = Some(root);
+                            self.state.zoom_stack = vec![root];
+                            self.state.tree = Some(tree);
+                            self.state.scan_progress.scanning = false;
+                            self.state.treemap_dirty = true;
+                            // Old NodeIds are gone; reset all hover/selection state.
+                            // hovered_dir must be cleared here — is_alive(old_id) on
+                            // a shorter new tree panics with an out-of-bounds index.
+                            self.state.cleanup_selected.clear();
+                            self.state.hovered_node = None;
+                            self.state.hovered_dir = None;
+                            self.state.context_menu_target = None;
+                            crate::state::save(
+                                &self.state.scan_root,
+                                self.state.color_mode,
+                            );
+                        }
+                        ScanProgress::Error(msg) => {
+                            eprintln!("Scan error: {}", msg);
+                            self.state
+                                .flywheel
+                                .log_error(&msg, serde_json::json!({ "where": "scan" }));
+                            self.state.scan_progress.scanning = false;
+                        }
+                    },
+                    Err(crossbeam_channel::TryRecvError::Empty) => break,
+                    Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                        // Walker thread panicked or dropped without sending Done —
+                        // end the spinner so it doesn't spin forever.
+                        eprintln!("Scan channel disconnected unexpectedly");
                         self.state.scan_progress.scanning = false;
-                        self.state.treemap_dirty = true;
-                        // Old NodeIds are gone; reset all hover/selection state.
-                        // hovered_dir must be cleared here — is_alive(old_id) on
-                        // a shorter new tree panics with an out-of-bounds index.
-                        self.state.cleanup_selected.clear();
-                        self.state.hovered_node = None;
-                        self.state.hovered_dir = None;
-                        self.state.context_menu_target = None;
-                        crate::state::save(
-                            &self.state.scan_root,
-                            self.state.color_mode,
-                        );
-                    }
-                    ScanProgress::Error(msg) => {
-                        eprintln!("Scan error: {}", msg);
-                        self.state
-                            .flywheel
-                            .log_error(&msg, serde_json::json!({ "where": "scan" }));
-                        self.state.scan_progress.scanning = false;
+                        disconnected = true;
+                        break;
                     }
                 }
             }
+        }
+        if disconnected {
+            self.state.scan_receiver = None;
         }
     }
 
