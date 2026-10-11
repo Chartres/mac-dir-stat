@@ -959,57 +959,20 @@ impl eframe::App for App {
         ui::fda_window::show(ctx, &mut self.state);
 
         // Handle pending actions
-        let mut action_to_process: Option<Option<NodeId>> = None;
-        let mut batch_to_process: Option<Option<Vec<NodeId>>> = None;
-        let mut empty_trash_confirmed: Option<bool> = None;
+        let mut decision: Option<bool> = None;
         if let Some(action) = &self.state.pending_action {
             match action {
-                PendingAction::ConfirmTrash(node_id, path, size) => {
-                    let node_id = *node_id;
-                    let path = path.clone();
-                    let size = *size;
-                    egui::Window::new("Confirm Delete")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(300.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(380.0);
-                            ui.label(
-                                egui::RichText::new("Move to Trash?")
-                                    .color(ui::theme::TEXT_PRIMARY)
-                                    .size(13.0)
-                                    .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{}  ·  {}",
-                                    path.display(),
-                                    ui::theme::format_size(size),
-                                ))
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(ui, "Move to Trash")
-                                            .clicked()
-                                        {
-                                            action_to_process = Some(Some(node_id));
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            action_to_process = Some(None);
-                                        }
-                                    },
-                                );
-                            });
-                        });
+                PendingAction::ConfirmTrash(_, path, size) => {
+                    let detail =
+                        format!("{}  ·  {}", path.display(), ui::theme::format_size(*size));
+                    decision = confirm_dialog(
+                        ctx,
+                        "Confirm Delete",
+                        (300.0, 380.0),
+                        "Move to Trash?",
+                        &detail,
+                        "Move to Trash",
+                    );
                 }
                 PendingAction::RefreshSubtree(node_id) => {
                     let node_id = *node_id;
@@ -1017,121 +980,90 @@ impl eframe::App for App {
                     self.start_partial_refresh(node_id);
                 }
                 PendingAction::ConfirmEmptyTrash => {
-                    egui::Window::new("Confirm Empty Trash")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(320.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(360.0);
-                            ui.label(
-                                egui::RichText::new("Empty Trash?")
-                                    .color(ui::theme::TEXT_PRIMARY)
-                                    .size(13.0)
-                                    .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(
-                                    "Permanently deletes everything currently in your Trash. \
-                                     Cannot be undone.",
-                                )
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(ui, "Empty Trash")
-                                            .clicked()
-                                        {
-                                            empty_trash_confirmed = Some(true);
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            empty_trash_confirmed = Some(false);
-                                        }
-                                    },
-                                );
-                            });
-                        });
+                    decision = confirm_dialog(
+                        ctx,
+                        "Confirm Empty Trash",
+                        (320.0, 360.0),
+                        "Empty Trash?",
+                        "Permanently deletes everything currently in your Trash. \
+                         Cannot be undone.",
+                        "Empty Trash",
+                    );
                 }
                 PendingAction::ConfirmBatchTrash(ids, total_size) => {
-                    let ids = ids.clone();
-                    let total_size = *total_size;
-                    egui::Window::new("Confirm Batch Delete")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(320.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(360.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "Move {} item{} to Trash?",
-                                    ids.len(),
-                                    if ids.len() == 1 { "" } else { "s" },
-                                ))
-                                .color(ui::theme::TEXT_PRIMARY)
-                                .size(13.0)
-                                .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "Total {}",
-                                    ui::theme::format_size(total_size),
-                                ))
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(
-                                            ui,
-                                            &format!("Move {} to Trash", ids.len()),
-                                        )
-                                        .clicked()
-                                        {
-                                            batch_to_process = Some(Some(ids.clone()));
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            batch_to_process = Some(None);
-                                        }
-                                    },
-                                );
-                            });
-                        });
+                    let n = ids.len();
+                    decision = confirm_dialog(
+                        ctx,
+                        "Confirm Batch Delete",
+                        (320.0, 360.0),
+                        &format!("Move {} item{} to Trash?", n, if n == 1 { "" } else { "s" }),
+                        &format!("Total {}", ui::theme::format_size(*total_size)),
+                        &format!("Move {} to Trash", n),
+                    );
                 }
             }
         }
-        if let Some(result) = action_to_process {
-            self.state.pending_action = None;
-            if let Some(node_id) = result {
-                self.perform_delete(node_id);
-            }
-        }
-        if let Some(result) = batch_to_process {
-            self.state.pending_action = None;
-            if let Some(ids) = result {
-                self.perform_batch_delete(ids);
-            }
-        }
-        if let Some(confirmed) = empty_trash_confirmed {
-            self.state.pending_action = None;
+        if let Some(confirmed) = decision {
+            let action = self.state.pending_action.take();
             if confirmed {
-                if let Err(e) = crate::platform::trash::empty_trash() {
-                    eprintln!("Empty trash failed: {}", e);
+                match action {
+                    Some(PendingAction::ConfirmTrash(node_id, ..)) => self.perform_delete(node_id),
+                    Some(PendingAction::ConfirmBatchTrash(ids, _)) => self.perform_batch_delete(ids),
+                    Some(PendingAction::ConfirmEmptyTrash) => {
+                        if let Err(e) = crate::platform::trash::empty_trash() {
+                            eprintln!("Empty trash failed: {}", e);
+                        }
+                    }
+                    Some(PendingAction::RefreshSubtree(_)) | None => {}
                 }
             }
         }
     }
+}
+
+/// Centered modal with a title, a detail line, and Cancel / danger-confirm
+/// buttons. Returns `Some(true)` on confirm, `Some(false)` on cancel.
+fn confirm_dialog(
+    ctx: &egui::Context,
+    id: &str,
+    (default_width, max_width): (f32, f32),
+    title: &str,
+    detail: &str,
+    confirm_label: &str,
+) -> Option<bool> {
+    let mut decision = None;
+    egui::Window::new(id)
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .default_width(default_width)
+        .show(ctx, |ui| {
+            ui.set_max_width(max_width);
+            ui.label(
+                egui::RichText::new(title)
+                    .color(ui::theme::TEXT_PRIMARY)
+                    .size(13.0)
+                    .strong(),
+            );
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new(detail)
+                    .color(ui::theme::TEXT_SECONDARY)
+                    .size(11.0),
+            );
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui::widgets::danger_button(ui, confirm_label).clicked() {
+                        decision = Some(true);
+                    }
+                    if ui::widgets::ghost_button(ui, "Cancel").clicked() {
+                        decision = Some(false);
+                    }
+                });
+            });
+        });
+    decision
 }
