@@ -216,7 +216,7 @@ impl FileTree {
     /// Aggregate a directory's `size`, `file_count` and `subdir_count` from its
     /// direct children. Requires the children's own counts to already be
     /// correct (true in a bottom-up reverse pass and after grafting).
-    fn aggregate_dir(&self, id: NodeId) -> (u64, u64, u64) {
+    fn aggregate_dir(&mut self, id: NodeId) {
         let mut size = 0u64;
         let mut files = 0u64;
         let mut dirs = 0u64;
@@ -235,7 +235,10 @@ impl FileTree {
                 }
             }
         }
-        (size, files, dirs)
+        let node = &mut self.nodes[id];
+        node.size = size;
+        node.file_count = files;
+        node.subdir_count = dirs;
     }
 
     pub fn compute_sizes(&mut self) {
@@ -245,10 +248,7 @@ impl FileTree {
             if !self.nodes[i].alive || !self.nodes[i].is_dir() {
                 continue;
             }
-            let (size, files, dirs) = self.aggregate_dir(i);
-            self.nodes[i].size = size;
-            self.nodes[i].file_count = files;
-            self.nodes[i].subdir_count = dirs;
+            self.aggregate_dir(i);
         }
     }
 
@@ -389,10 +389,7 @@ impl FileTree {
         let mut current = Some(target);
         while let Some(id) = current {
             if self.nodes[id].is_dir() {
-                let (size, files, dirs) = self.aggregate_dir(id);
-                self.nodes[id].size = size;
-                self.nodes[id].file_count = files;
-                self.nodes[id].subdir_count = dirs;
+                self.aggregate_dir(id);
             }
             current = self.nodes[id].parent;
         }
@@ -458,10 +455,7 @@ impl FileTree {
         // than their parents), then propagate target + ancestors upward.
         for i in (first_new..self.nodes.len()).rev() {
             if self.nodes[i].is_dir() {
-                let (size, files, dirs) = self.aggregate_dir(i);
-                self.nodes[i].size = size;
-                self.nodes[i].file_count = files;
-                self.nodes[i].subdir_count = dirs;
+                self.aggregate_dir(i);
             }
         }
 
