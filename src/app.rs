@@ -275,6 +275,7 @@ impl App {
         self.state.dir_rects.clear();
         self.state.extension_stats.clear();
         self.state.selected_node = None;
+        self.state.selected_extension = None;
         self.state.hovered_node = None;
         self.state.hovered_dir = None;
         self.state.view_root = None;
