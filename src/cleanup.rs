@@ -90,7 +90,13 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
     ];
     for &(suffix, label, desc) in SUFFIX_RULES {
         if s.ends_with(suffix) {
-            return Some((label, desc));
+            // Require a component boundary: the char before the suffix must be
+            // '/' (or the suffix covers the whole string). Without this check,
+            // "/x/MyLibrary/Caches" would match the "Library/Caches" rule.
+            let pos = s.len() - suffix.len();
+            if pos == 0 || s.as_bytes()[pos - 1] == b'/' {
+                return Some((label, desc));
+            }
         }
     }
 
