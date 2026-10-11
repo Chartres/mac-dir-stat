@@ -157,9 +157,17 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
 
 /// Walks the tree once and returns all directories matching cleanup rules,
 /// sorted by size descending. Doesn't recurse into matched directories.
+/// The root node itself is never a candidate — classifying the scan root
+/// (e.g. ~/Library) would be catastrophic.
 pub fn find_candidates(tree: &FileTree, root: NodeId) -> Vec<CleanupCandidate> {
     let mut candidates = Vec::new();
-    walk(tree, root, &mut candidates);
+    if tree.is_alive(root) {
+        // Skip root itself; walk children directly.
+        let children: Vec<NodeId> = tree.node(root).children().to_vec();
+        for child in children {
+            walk(tree, child, &mut candidates);
+        }
+    }
     candidates.sort_by(|a, b| b.size.cmp(&a.size));
     candidates
 }
