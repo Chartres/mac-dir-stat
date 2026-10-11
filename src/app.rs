@@ -270,6 +270,7 @@ impl App {
         self.state.extension_stats.clear();
         self.state.selected_node = None;
         self.state.hovered_node = None;
+        self.state.hovered_dir = None;
         self.state.view_root = None;
         self.state.zoom_stack.clear();
         crate::scanner::scan(self.state.scan_root.clone(), tx);
@@ -399,8 +400,12 @@ impl App {
                         self.state.tree = Some(tree);
                         self.state.scan_progress.scanning = false;
                         self.state.treemap_dirty = true;
-                        // Old NodeIds are gone; reset selection state.
+                        // Old NodeIds are gone; reset all hover/selection state.
+                        // hovered_dir must be cleared here — is_alive(old_id) on
+                        // a shorter new tree panics with an out-of-bounds index.
                         self.state.cleanup_selected.clear();
+                        self.state.hovered_node = None;
+                        self.state.hovered_dir = None;
                         self.state.context_menu_target = None;
                         crate::state::save(
                             &self.state.scan_root,
