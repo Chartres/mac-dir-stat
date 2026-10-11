@@ -222,7 +222,13 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         // Compute alpha for filtering
         let dimmed = if let Some(ref sel_ext) = state.selected_extension {
             if let Some(tree) = &state.tree {
-                tree.extension(cr.node_id) != Some(sel_ext.as_str())
+                // "(none)" is stored as "" but extension-less files return None,
+                // so treat empty sel_ext as matching None (no extension).
+                if sel_ext.is_empty() {
+                    tree.extension(cr.node_id).is_some()
+                } else {
+                    tree.extension(cr.node_id) != Some(sel_ext.as_str())
+                }
             } else {
                 false
             }
