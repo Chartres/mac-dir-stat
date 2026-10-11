@@ -2,8 +2,9 @@ use super::ScanProgress;
 use crate::scanner::tree::FileTree;
 use crossbeam_channel::Sender;
 use jwalk::WalkDir;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -134,6 +135,9 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut byte_count: u64 = 0;
     let mut error_count: usize = 0;
     let mut progress_counter: usize = 0;
+    // Track (dev, ino) to skip hard-linked duplicates; avoids double-counting
+    // files whose nlink > 1 that appear under multiple directories.
+    let mut seen_inodes: HashSet<(u64, u64)> = HashSet::new();
 
     let skip_paths = Arc::new(build_skip_paths());
     let walker_skip_paths = Arc::clone(&skip_paths);
@@ -211,7 +215,16 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             dir_map.insert(path.to_path_buf(), node_id);
             dir_count += 1;
         } else {
-            let size = metadata.len();
+            // De-duplicate hard links: only count size for the first path we
+            // see for a given (dev, ino) pair. The file still appears in the
+            // tree at its canonical position; it just contributes 0 bytes for
+            // subsequent hard links so totals don't overcount.
+            let size = if metadata.nlink() > 1 {
+                let key = (metadata.dev(), metadata.ino());
+                if seen_inodes.insert(key) { metadata.len() } else { 0 }
+            } else {
+                metadata.len()
+            };
             let extension_owned = path
                 .extension()
                 .map(|e| e.to_string_lossy().to_lowercase());
