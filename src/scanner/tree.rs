@@ -13,9 +13,7 @@ pub struct StrRef {
     len: u32,
 }
 
-impl StrRef {
-    pub const EMPTY: StrRef = StrRef { offset: 0, len: 0 };
-}
+impl StrRef {}
 
 /// Bump arena holding raw bytes for all node names + extensions.
 /// One contiguous `Vec<u8>` instead of millions of small heap allocs.
@@ -84,10 +82,6 @@ pub enum NodeKind {
 impl Node {
     pub fn is_dir(&self) -> bool {
         matches!(self.kind, NodeKind::Directory { .. })
-    }
-
-    pub fn is_file(&self) -> bool {
-        matches!(self.kind, NodeKind::File { .. })
     }
 
     pub fn children(&self) -> &[NodeId] {
@@ -219,10 +213,6 @@ impl FileTree {
             children.push(id);
         }
         id
-    }
-
-    pub fn node_count(&self) -> usize {
-        self.nodes.iter().filter(|n| n.alive).count()
     }
 
     /// Aggregate a directory's `size`, `file_count` and `subdir_count` from its
@@ -392,13 +382,6 @@ impl FileTree {
         }
     }
 
-    pub fn children_sorted(&self, id: NodeId) -> Vec<NodeId> {
-        let mut children: Vec<NodeId> = self.node(id).children().to_vec();
-        children.retain(|&c| self.nodes[c].alive);
-        children.sort_by(|&a, &b| self.nodes[b].size.cmp(&self.nodes[a].size));
-        children
-    }
-
     pub fn is_alive(&self, id: NodeId) -> bool {
         self.nodes[id].alive
     }
@@ -470,7 +453,7 @@ impl FileTree {
                     let ext_owned: Option<String> = extension.map(|r| {
                         String::from_utf8_lossy(source.strings.get(r)).into_owned()
                     });
-                    let new_id = self.add_file(
+                    self.add_file(
                         dst_parent,
                         &name_bytes,
                         src_node.size,
@@ -478,7 +461,6 @@ impl FileTree {
                         src_node.modified,
                         depth,
                     );
-                    let _ = new_id;
                 }
                 NodeKind::Directory { children, .. } => {
                     let new_id = self.add_dir(
