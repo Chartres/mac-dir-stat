@@ -432,11 +432,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 let node = tree.node(cr.node_id);
                 let name = tree.name(cr.node_id);
                 let max_chars = (w / 7.0) as usize;
-                let display_name = if name.len() > max_chars && max_chars > 3 {
-                    format!(
-                        "{}...",
-                        &name[..max_chars.min(name.len()).saturating_sub(3)]
-                    )
+                let display_name = if name.chars().count() > max_chars && max_chars > 3 {
+                    let s: String = name.chars().take(max_chars.saturating_sub(3)).collect();
+                    format!("{}...", s)
                 } else {
                     name.to_string()
                 };
