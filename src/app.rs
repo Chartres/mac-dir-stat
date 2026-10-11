@@ -98,6 +98,7 @@ pub struct AppState {
     pub has_fda: bool,
 }
 
+#[derive(Default)]
 pub struct ScanProgressInfo {
     pub files: usize,
     pub dirs: usize,
@@ -194,14 +195,7 @@ impl App {
                 tree: None,
                 scan_root,
                 scan_receiver: None,
-                scan_progress: ScanProgressInfo {
-                    files: 0,
-                    dirs: 0,
-                    bytes: 0,
-                    errors: 0,
-                    scanning: false,
-                    current_path: None,
-                },
+                scan_progress: ScanProgressInfo::default(),
                 scan_start: None,
                 scan_duration_secs: 0.0,
                 partial_refresh_receiver: None,
@@ -259,12 +253,8 @@ impl App {
         let (tx, rx) = crossbeam_channel::unbounded();
         self.state.scan_receiver = Some(rx);
         self.state.scan_progress = ScanProgressInfo {
-            files: 0,
-            dirs: 0,
-            bytes: 0,
-            errors: 0,
             scanning: true,
-            current_path: None,
+            ..Default::default()
         };
         self.state.scan_start = Some(Instant::now());
         self.state.freed_this_session = 0;
