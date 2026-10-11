@@ -121,10 +121,12 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
                 "DerivedData (loose)",
                 "Xcode build artifacts found outside the standard location.",
             )),
-            "target" => Some((
-                "Rust target/",
-                "`cargo build` recreates these. Often the largest single dir on a Rust dev machine.",
-            )),
+            "target" if path.parent().map(|p| p.join("Cargo.toml").exists()).unwrap_or(false) => {
+                Some((
+                    "Rust target/",
+                    "`cargo build` recreates these. Often the largest single dir on a Rust dev machine.",
+                ))
+            }
             ".next" => Some((
                 ".next/",
                 "Next.js build output. Regenerated on `next build`.",
