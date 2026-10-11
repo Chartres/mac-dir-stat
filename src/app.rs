@@ -157,8 +157,6 @@ impl ExtSortMode {
 }
 
 pub enum PendingAction {
-    RevealInFinder(PathBuf),
-    MoveToTrash(NodeId),
     ConfirmTrash(NodeId, String, u64),
     ConfirmBatchTrash(Vec<NodeId>, u64),
     ConfirmEmptyTrash,
@@ -1086,11 +1084,6 @@ impl eframe::App for App {
                                 );
                             });
                         });
-                }
-                _ => {
-                    // RevealInFinder / MoveToTrash variants are unused —
-                    // context menu performs those actions inline.
-                    self.state.pending_action = None;
                 }
             }
         }
