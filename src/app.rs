@@ -597,6 +597,7 @@ impl App {
                 }
                 Err(e) => {
                     eprintln!("Delete failed: {}", e);
+                    self.state.batch_error_msg = Some(format!("Could not move to Trash: {}", e));
                 }
             }
         }
@@ -1014,6 +1015,7 @@ impl eframe::App for App {
                     Some(PendingAction::ConfirmEmptyTrash) => {
                         if let Err(e) = crate::platform::trash::empty_trash() {
                             eprintln!("Empty trash failed: {}", e);
+                            self.state.batch_error_msg = Some(format!("Empty Trash failed: {}", e));
                         }
                     }
                     Some(PendingAction::RefreshSubtree(_)) | None => {}
