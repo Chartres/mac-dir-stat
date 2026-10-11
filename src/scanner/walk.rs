@@ -197,6 +197,26 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             Ok(m) => m,
             Err(_) => {
                 error_count += 1;
+                // For a directory whose metadata is unreadable, still register a
+                // stub node so that any children walkdir yields for it are
+                // attached at the correct path rather than being reparented to
+                // find_closest_ancestor, which would give them a wrong full_path
+                // and break Trash/Reveal operations.
+                if entry.file_type().is_dir() {
+                    let d = path
+                        .components()
+                        .count()
+                        .saturating_sub(root.components().count()) as u16;
+                    let stub_id = tree.add_dir(
+                        parent_id,
+                        file_name_bytes,
+                        d < 2,
+                        SystemTime::UNIX_EPOCH,
+                        d,
+                    );
+                    dir_map.insert(path.to_path_buf(), stub_id);
+                    dir_count += 1;
+                }
                 continue;
             }
         };
