@@ -328,16 +328,6 @@ impl App {
 
                 // Old node IDs under the target are now dead. Sanitize any
                 // state that referenced them.
-                if let Some(vr) = self.state.view_root {
-                    if !tree.is_alive(vr) {
-                        self.state.view_root = Some(target_id);
-                        self.state.zoom_stack
-                            .retain(|id| tree.is_alive(*id));
-                        if self.state.zoom_stack.is_empty() {
-                            self.state.zoom_stack.push(root);
-                        }
-                    }
-                }
                 if let Some(sel) = self.state.selected_node {
                     if !tree.is_alive(sel) {
                         self.state.selected_node = Some(target_id);
@@ -348,17 +338,8 @@ impl App {
                 self.state.context_menu_target = None;
                 self.state.scroll_dir_tree_to = Some(target_id);
                 // Drop any cleanup selections that became dead during graft.
-                let live_check: Vec<NodeId> = self
-                    .state
-                    .cleanup_selected
-                    .iter()
-                    .copied()
-                    .collect();
-                for id in live_check {
-                    if !tree.is_alive(id) {
-                        self.state.cleanup_selected.remove(&id);
-                    }
-                }
+                self.state.cleanup_selected.retain(|id| tree.is_alive(*id));
+                self.state.reset_dead_view_root(target_id);
             }
             self.state.partial_refresh_receiver = None;
             self.state.treemap_dirty = true;
@@ -479,15 +460,7 @@ impl App {
                 .retain(|c| tree_ref.is_alive(c.node_id));
             // If the user trashed the currently-zoomed directory, reset the
             // treemap view to the root so it doesn't go blank.
-            if let Some(vr) = self.state.view_root {
-                if !tree.is_alive(vr) {
-                    self.state.view_root = Some(root);
-                    self.state.zoom_stack.retain(|id| tree.is_alive(*id));
-                    if self.state.zoom_stack.is_empty() {
-                        self.state.zoom_stack.push(root);
-                    }
-                }
-            }
+            self.state.reset_dead_view_root(root);
         }
         for id in &succeeded {
             if self.state.selected_node == Some(*id) {
@@ -596,15 +569,7 @@ impl App {
                         self.state
                             .cleanup_candidates
                             .retain(|c| tree_ref.is_alive(c.node_id));
-                        if let Some(vr) = self.state.view_root {
-                            if !tree.is_alive(vr) {
-                                self.state.view_root = Some(root);
-                                self.state.zoom_stack.retain(|id| tree.is_alive(*id));
-                                if self.state.zoom_stack.is_empty() {
-                                    self.state.zoom_stack.push(root);
-                                }
-                            }
-                        }
+                        self.state.reset_dead_view_root(root);
                     }
                     if self.state.selected_node == Some(node_id) {
                         self.state.selected_node = None;
@@ -623,6 +588,22 @@ impl App {
 }
 
 impl AppState {
+    /// If the zoomed-into directory died (trashed or replaced by a graft),
+    /// jump the treemap to `fallback` and drop dead entries from the zoom
+    /// stack, keeping at least the tree root.
+    fn reset_dead_view_root(&mut self, fallback: NodeId) {
+        let Some(tree) = &self.tree else { return };
+        let Some(vr) = self.view_root else { return };
+        if tree.is_alive(vr) {
+            return;
+        }
+        self.view_root = Some(fallback);
+        self.zoom_stack.retain(|id| tree.is_alive(*id));
+        if self.zoom_stack.is_empty() {
+            self.zoom_stack.push(tree.root());
+        }
+    }
+
     pub fn expand_to_node(&mut self, node_id: NodeId) {
         if let Some(tree) = &mut self.tree {
             let mut current = tree.node(node_id).parent;
