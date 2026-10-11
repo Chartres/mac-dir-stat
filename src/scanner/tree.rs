@@ -284,16 +284,16 @@ impl FileTree {
             current = self.nodes[pid].parent;
         }
 
-        self.mark_dead_recursive(id);
+        self.mark_descendants_dead(id);
     }
 
-    fn mark_dead_recursive(&mut self, id: NodeId) {
-        if let NodeKind::Directory { ref children, .. } = self.nodes[id].kind {
-            let child_ids: Vec<NodeId> = children.clone();
-            for child in child_ids {
-                self.nodes[child].alive = false;
-                self.mark_dead_recursive(child);
-            }
+    /// Marks every node beneath `id` dead (not `id` itself). Iterative so a
+    /// pathologically deep tree can't overflow the stack.
+    fn mark_descendants_dead(&mut self, id: NodeId) {
+        let mut stack: Vec<NodeId> = self.nodes[id].children().to_vec();
+        while let Some(id) = stack.pop() {
+            self.nodes[id].alive = false;
+            stack.extend_from_slice(self.nodes[id].children());
         }
     }
 
@@ -367,16 +367,7 @@ impl FileTree {
     /// list. The node itself stays. Used as the first step of grafting a
     /// freshly-scanned subtree onto an existing tree.
     pub fn clear_descendants(&mut self, target: NodeId) {
-        let mut stack: Vec<NodeId> = Vec::new();
-        if let NodeKind::Directory { children, .. } = &self.nodes[target].kind {
-            stack.extend_from_slice(children);
-        }
-        while let Some(id) = stack.pop() {
-            self.nodes[id].alive = false;
-            if let NodeKind::Directory { children, .. } = &self.nodes[id].kind {
-                stack.extend_from_slice(children);
-            }
-        }
+        self.mark_descendants_dead(target);
         if let NodeKind::Directory { children, .. } = &mut self.nodes[target].kind {
             children.clear();
         }
