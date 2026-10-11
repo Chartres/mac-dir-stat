@@ -69,7 +69,7 @@ fn find_candidates_excludes_trash_includes_node_modules() {
         "node_modules should be a candidate"
     );
     assert!(
-        !candidates.iter().any(|c| c.category == "Trash"),
+        !candidates.iter().any(|c| c.path.ends_with(".Trash")),
         ".Trash must not appear as a candidate"
     );
 }
