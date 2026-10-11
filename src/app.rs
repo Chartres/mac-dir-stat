@@ -268,6 +268,7 @@ impl App {
         };
         self.state.scan_start = Some(Instant::now());
         self.state.freed_this_session = 0;
+        self.state.batch_error_msg = None;
         self.state.partial_refresh_receiver = None;
         self.state.tree = None;
         self.state.colored_rects.clear();
@@ -865,8 +866,8 @@ impl eframe::App for App {
                     );
                 }
 
-                // Batch-trash error feedback: show for one render cycle then clear.
-                if let Some(msg) = self.state.batch_error_msg.take() {
+                // Batch-trash error feedback: keep until the next scan or delete.
+                if let Some(msg) = &self.state.batch_error_msg {
                     ui.label(
                         egui::RichText::new(format!("⚠ {}", msg))
                             .color(egui::Color32::from_rgb(248, 113, 113))
