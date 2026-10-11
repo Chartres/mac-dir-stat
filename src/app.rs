@@ -455,6 +455,17 @@ impl App {
             self.state
                 .cleanup_candidates
                 .retain(|c| tree_ref.is_alive(c.node_id));
+            // If the user trashed the currently-zoomed directory, reset the
+            // treemap view to the root so it doesn't go blank.
+            if let Some(vr) = self.state.view_root {
+                if !tree.is_alive(vr) {
+                    self.state.view_root = Some(root);
+                    self.state.zoom_stack.retain(|id| tree.is_alive(*id));
+                    if self.state.zoom_stack.is_empty() {
+                        self.state.zoom_stack.push(root);
+                    }
+                }
+            }
         }
         for id in &succeeded {
             if self.state.selected_node == Some(*id) {
@@ -563,6 +574,15 @@ impl App {
                         self.state
                             .cleanup_candidates
                             .retain(|c| tree_ref.is_alive(c.node_id));
+                        if let Some(vr) = self.state.view_root {
+                            if !tree.is_alive(vr) {
+                                self.state.view_root = Some(root);
+                                self.state.zoom_stack.retain(|id| tree.is_alive(*id));
+                                if self.state.zoom_stack.is_empty() {
+                                    self.state.zoom_stack.push(root);
+                                }
+                            }
+                        }
                     }
                     if self.state.selected_node == Some(node_id) {
                         self.state.selected_node = None;
