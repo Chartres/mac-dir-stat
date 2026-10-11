@@ -76,6 +76,10 @@ pub struct AppState {
     // completed. Resets on each scan start. Shown in the status bar.
     pub freed_this_session: u64,
 
+    // Non-None when the last batch-trash had at least one failure. Shown in
+    // the status bar for one render cycle then cleared by the toolbar render.
+    pub batch_error_msg: Option<String>,
+
     // Sort modes for the directory tree and file-type list.
     pub dir_sort: DirSortMode,
     pub ext_sort: ExtSortMode,
@@ -225,6 +229,7 @@ impl App {
                 last_canvas_size: egui::Vec2::ZERO,
                 has_persisted_root,
                 freed_this_session: 0,
+                batch_error_msg: None,
                 dir_sort: DirSortMode::Size,
                 ext_sort: ExtSortMode::Size,
                 flywheel,
@@ -430,6 +435,7 @@ impl App {
     /// cleanup candidates once.
     fn perform_batch_delete(&mut self, ids: Vec<NodeId>) {
         let mut succeeded: Vec<NodeId> = Vec::new();
+        let mut failed: usize = 0;
         let mut freed: u64 = 0;
         for id in &ids {
             let (path, size) = match &self.state.tree {
@@ -438,10 +444,18 @@ impl App {
             };
             if let Err(e) = crate::platform::trash::move_to_trash(&path) {
                 eprintln!("Batch trash failed for {}: {}", path.display(), e);
+                failed += 1;
                 continue;
             }
             succeeded.push(*id);
             freed += size;
+        }
+        if failed > 0 {
+            self.state.batch_error_msg = Some(format!(
+                "{} item{} could not be moved to Trash",
+                failed,
+                if failed == 1 { "" } else { "s" },
+            ));
         }
         self.state.freed_this_session = self.state.freed_this_session.saturating_add(freed);
         if !succeeded.is_empty() {
@@ -847,6 +861,15 @@ impl eframe::App for App {
                         ))
                         .color(ui::theme::ACCENT_LIGHT)
                         .size(11.0),
+                    );
+                }
+
+                // Batch-trash error feedback: show for one render cycle then clear.
+                if let Some(msg) = self.state.batch_error_msg.take() {
+                    ui.label(
+                        egui::RichText::new(format!("⚠ {}", msg))
+                            .color(egui::Color32::from_rgb(248, 113, 113))
+                            .size(11.0),
                     );
                 }
 
