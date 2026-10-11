@@ -13,8 +13,6 @@ pub struct StrRef {
     len: u32,
 }
 
-impl StrRef {}
-
 /// Bump arena holding raw bytes for all node names + extensions.
 /// One contiguous `Vec<u8>` instead of millions of small heap allocs.
 #[derive(Debug, Default)]
@@ -356,27 +354,6 @@ impl FileTree {
             NodeKind::Directory { children, .. } => {
                 for &child in children {
                     self.collect_extensions_recursive(child, map);
-                }
-            }
-        }
-    }
-
-    pub fn collect_files(&self, root: NodeId) -> Vec<NodeId> {
-        let mut files = vec![];
-        self.collect_files_recursive(root, &mut files);
-        files
-    }
-
-    fn collect_files_recursive(&self, id: NodeId, files: &mut Vec<NodeId>) {
-        let node = &self.nodes[id];
-        if !node.alive {
-            return;
-        }
-        match &node.kind {
-            NodeKind::File { .. } => files.push(id),
-            NodeKind::Directory { children, .. } => {
-                for &child in children {
-                    self.collect_files_recursive(child, files);
                 }
             }
         }
