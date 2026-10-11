@@ -70,7 +70,7 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
         (
             "Library/Containers/com.docker.docker",
             "Docker Desktop Data",
-            "Docker images, volumes, build cache. Prefer `docker system prune -a` for finer-grained cleanup.",
+            "Docker images, build cache, and named volumes. Named volumes may contain database data that cannot be regenerated. Prefer `docker system prune` for finer-grained cleanup.",
         ),
         (
             "Library/Containers/com.apple.iCloud.iCloudDrive",
@@ -117,11 +117,11 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
             )),
             ".gradle" => Some((
                 "Gradle caches",
-                "Gradle redownloads dependencies on next build.",
+                "Gradle build cache and local dependency store. May contain gradle.properties with credentials — review before deleting.",
             )),
             ".m2" => Some((
                 "Maven local repo",
-                "Maven local artifacts cache; rebuilt on next dependency resolve.",
+                "Maven local artifact cache. May contain settings.xml with credentials — review before deleting.",
             )),
             "DerivedData" => Some((
                 "DerivedData (loose)",
