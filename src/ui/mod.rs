@@ -4,6 +4,7 @@ pub mod dir_tree;
 pub mod ext_list;
 pub mod fda_window;
 pub mod help_window;
+pub mod relocate_window;
 pub mod search;
 pub mod theme;
 pub mod toolbar;

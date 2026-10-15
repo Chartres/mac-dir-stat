@@ -4,6 +4,17 @@ All notable changes to MacDirStat are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Move to External Disk…** in the right-click menu: copy to another volume under
+  `MacDirStat Offload/<original path>`, verify file count and bytes, trash the original, and
+  optionally leave a symlink. Refuses system paths, same-disk moves, too little space, and
+  packages or symlinks on exFAT/FAT.
+- **`mac-dir-stat serve`**: a headless local server with a phone-friendly web UI, a versioned
+  REST API (`/api/v1`, OpenAPI 3.1) and an MCP endpoint (`/mcp`), all behind a bearer token.
+  Trash and move plans are reviewed and approved by you. AI clients can propose plans but cannot run them.
+
 ## [0.5.1] — 2026-06-18
 
 ### Changed

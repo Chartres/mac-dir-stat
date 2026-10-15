@@ -15,6 +15,8 @@ Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/em
 - **Refresh subtree**: right-click a folder (or `⇧⌘R` on a selected one) to re-scan only that subtree without losing your current view.
 - **Right-click menu** on every node — **Open**, Reveal in Finder, **Open Terminal Here**, **Get Info**, Copy Path, Refresh, Zoom Into, Move to Trash.
 - **Free & unknown space** — scanning any volume root (`/` or a mounted volume under `/Volumes`) adds `<Free Space>` and `<Hidden / Skipped>` blocks so the treemap accounts for the whole disk.
+- **Move to External Disk…** — right-click a file or folder to copy it to another disk, verify the copy, send the original to the Trash and optionally leave a symlink behind. See [Moving to another disk](#moving-to-another-disk).
+- **Headless server with a web UI, REST API and MCP endpoint** — `mac-dir-stat serve`. See [Server, API and your own AI](#server-api-and-your-own-ai).
 - **Drag-and-drop** a folder onto the window to scan it.
 - **Hover tooltip** with name, full path, size, type, and relative modified time.
 - **Scans on launch** — opens straight into a scan of your whole disk (or your last-scanned folder), no welcome screen to click through.
@@ -75,6 +77,75 @@ The app is **signed with a Developer ID and notarized by Apple**, so it opens no
 | `Esc` | Close help/cleanup/search · pop zoom · clear selection |
 | `?` | Toggle help / about window |
 
+## Moving to another disk
+
+Moved items land at `<volume>/MacDirStat Offload/<original absolute path>`, so you can always tell
+where something came from and move it back by hand. The steps are: copy with `/usr/bin/ditto`,
+verify that the copy has the same file count and total bytes, move the original to the Trash
+(so it can be put back), then, if you ask for it, create a symlink at the original path.
+
+It refuses, with the reason shown, when:
+
+- the item is a system path (`/System`, `/usr`, `/bin`, `/sbin`, `/private` except per-user temp
+  folders, `/Library` itself, your home folder itself, `~/Library` itself);
+- the destination is on the same disk, is not a mounted volume, is inside the item, or already exists;
+- the destination lacks the estimated space (rounded up to its cluster size) plus 1 GiB;
+- the destination is exFAT or FAT and the item is or contains an app bundle or package
+  (`.app`, `.photoslibrary`, `.bundle`, `.framework`, `.pkg`) or a symlink;
+- any part of the item cannot be read.
+
+On exFAT, Unix permissions and owners are not kept and extended attributes are stored as `._` files.
+
+## Server, API and your own AI
+
+```sh
+mac-dir-stat serve [--bind 127.0.0.1] [--port 7878] [--root /]
+# from the app bundle: /Applications/MacDirStat.app/Contents/MacOS/mac-dir-stat serve
+```
+
+This runs without a window: it scans `--root` and prints a link such as
+`http://127.0.0.1:7878/#token=…`. The page works on a phone in light and dark mode. It shows
+disks and free space, the largest folders and files, cleanup groups, and a find box (`node_modules`,
+`.venv`, `*.dmg`, …). Tick items, choose **Move to Trash** or **Move to <disk>**, and create a
+**plan**. The plan lists every item with its size, destination, errors and warnings. Nothing runs
+until you press **Approve**.
+
+To reach it from another device, for example over Tailscale, bind explicitly: `--bind 0.0.0.0`
+or `--bind <tailscale-ip>`. The default is loopback only.
+
+**Auth.** Every `/api` and `/mcp` request needs `Authorization: Bearer <token>`. The token is
+generated on first run and stored at `~/Library/Application Support/MacDirStat/server-token` (mode 0600).
+Delete the file to rotate it.
+
+**REST API**, versioned under `/api/v1`, JSON in and out, described by an OpenAPI 3.1 document at
+`/api/v1/openapi.json`:
+
+| Method | Path | |
+|---|---|---|
+| GET | `/volumes` | startup disk and `/Volumes/*`, with fs type, free and total bytes |
+| GET / POST | `/scan` | scan status / start a new scan (`{"root": …}`) |
+| GET | `/tree?path=&limit=` | a folder and its children, largest first |
+| GET | `/top?n=&kind=file\|dir` | largest files or content folders |
+| GET | `/find?pattern=&limit=` | glob on names, with sizes, modified times and a total |
+| GET | `/cleanup` | regenerable data grouped by category |
+| GET | `/summary` | plain-text digest for pasting into any chat |
+| GET / POST | `/plans` | list / propose (`{"ops":[{"action":"trash"\|"move","path":…,"volume":…,"link":true}]}`) |
+| GET | `/plans/{id}` | one plan with per-op results |
+| POST | `/plans/{id}/approve` · `/reject` | run it (pending → approved → done/failed) or reject it |
+
+**Bring your own AI.** MacDirStat never calls an AI. You can connect one in two ways:
+
+- **MCP** at `/mcp` (Streamable HTTP, JSON responses). The tools are `list_volumes`, `scan`, `get_tree`,
+  `top_items`, `find`, `cleanup_suggestions`, `propose_plan`, `list_plans` and `get_plan`. No tool
+  approves or runs a plan: the AI proposes and you approve in the web UI.
+  ```sh
+  claude mcp add --transport http macdirstat http://127.0.0.1:7878/mcp \
+    --header "Authorization: Bearer $(cat ~/Library/Application\ Support/MacDirStat/server-token)"
+  ```
+- **Any chat.** **Copy summary for any chat** in the web UI copies the largest items, the cleanup
+  groups and your disks, with instructions to answer in plan JSON. Paste the answer into
+  **Create plan from JSON** and review it like any other plan.
+
 ## Build from source
 
 ```sh
@@ -96,5 +167,8 @@ Tag-driven release: pushing `vX.Y.Z` triggers `.github/workflows/release.yml`, w
 - `src/treemap/` — squarified treemap layout, color gradients, palette.
 - `src/ui/` — egui chrome: toolbar, side panels, treemap viewport, search, cleanup window, context menu.
 - `src/cleanup.rs` — heuristic detection of regenerable directories.
+- `src/relocate.rs` — move-to-another-disk rules (pure) and copy / verify / trash / link (IO).
+- `src/plan.rs` — plans of trash/move ops and their approval state machine.
+- `src/server/` — `serve`: HTTP routing and auth (`mod.rs`), REST handlers (`api.rs`), MCP (`mcp.rs`), the embedded web page and OpenAPI document.
 - `src/state.rs` — persisted UI state (scan root, color mode).
 - `src/flywheel.rs` — optional anonymous usage analytics (off by default; see [Privacy](#privacy)).

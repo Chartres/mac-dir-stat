@@ -1,7 +1,10 @@
 pub mod app;
 pub mod cleanup;
 pub mod flywheel;
+pub mod plan;
 pub mod platform;
+pub mod relocate;
+pub mod server;
 pub mod scanner;
 pub mod state;
 pub mod treemap;

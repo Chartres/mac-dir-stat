@@ -92,6 +92,10 @@ pub struct AppState {
     // Cached FDA state — drives the persistent "Grant Full Disk Access"
     // toolbar affordance. Rechecked on each scan (see start_scan).
     pub has_fda: bool,
+
+    // "Move to External Disk…": the running copy job and its last result.
+    pub relocate_job: Option<(NodeId, String, Receiver<Result<crate::relocate::Outcome, String>>)>,
+    pub relocate_message: Option<String>,
 }
 
 pub struct ScanProgressInfo {
@@ -163,6 +167,7 @@ pub enum PendingAction {
     ConfirmBatchTrash(Vec<NodeId>, u64),
     ConfirmEmptyTrash,
     RefreshSubtree(NodeId),
+    ConfirmRelocate(Box<ui::relocate_window::RelocateDialog>),
 }
 
 impl App {
@@ -235,6 +240,8 @@ impl App {
                 feedback_sent: false,
                 show_fda_prompt,
                 has_fda,
+                relocate_job: None,
+                relocate_message: None,
                 // Auto-scan on launch (default target = whole disk via the `/`
                 // fallback above). The first update() frame starts the scan, so
                 // the app opens straight into a scan instead of a welcome screen.
@@ -538,6 +545,55 @@ impl App {
         }
     }
 
+    fn start_relocate(&mut self, node: NodeId, name: String, path: PathBuf, volume: PathBuf, link: bool) {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        std::thread::spawn(move || {
+            let _ = tx.send(crate::relocate::relocate(&path, &volume, link));
+        });
+        self.state.relocate_message = None;
+        self.state.relocate_job = Some((node, name, rx));
+    }
+
+    /// Applies a finished move: the node leaves the tree like a trash does.
+    fn poll_relocate(&mut self) {
+        let Some((node, name, rx)) = &self.state.relocate_job else { return };
+        let Ok(result) = rx.try_recv() else { return };
+        let (node, name) = (*node, name.clone());
+        self.state.relocate_job = None;
+        match result {
+            Ok(o) => {
+                self.state.relocate_message = Some(format!(
+                    "Moved {} ({}) to {}",
+                    name,
+                    ui::theme::format_size(o.bytes),
+                    o.dest.display()
+                ));
+                if let Some(tree) = &mut self.state.tree {
+                    if tree.is_alive(node) {
+                        let size = tree.node(node).size;
+                        self.state.freed_this_session = self.state.freed_this_session.saturating_add(size);
+                        tree.remove_node(node);
+                        let root = tree.root();
+                        self.state.extension_stats = tree.collect_extensions(root);
+                        let tree_ref = &*tree;
+                        self.state.cleanup_candidates.retain(|c| tree_ref.is_alive(c.node_id));
+                    }
+                }
+                if self.state.selected_node == Some(node) {
+                    self.state.selected_node = None;
+                }
+                if self.state.hovered_node == Some(node) {
+                    self.state.hovered_node = None;
+                }
+                self.state.treemap_dirty = true;
+            }
+            Err(e) => {
+                eprintln!("Move failed: {e}");
+                self.state.relocate_message = Some(format!("Move of {name} failed: {e}"));
+            }
+        }
+    }
+
     fn perform_delete(&mut self, node_id: NodeId) {
         if let Some(tree) = &self.state.tree {
             let path = tree.full_path(node_id);
@@ -599,6 +655,7 @@ impl eframe::App for App {
 
         self.poll_scan();
         self.poll_partial_refresh();
+        self.poll_relocate();
 
         if self.state.request_rescan {
             self.state.request_rescan = false;
@@ -805,7 +862,19 @@ impl eframe::App for App {
                         .color(ui::theme::TEXT_MUTED)
                         .size(11.0),
                     );
-                } else if self.state.scan_progress.scanning {
+                }
+                if let Some((_, name, _)) = &self.state.relocate_job {
+                    ui.spinner();
+                    ui.label(
+                        egui::RichText::new(format!("Moving {name}: copying and verifying…"))
+                            .color(ui::theme::ACCENT_LIGHT)
+                            .size(11.0),
+                    );
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+                } else if let Some(msg) = &self.state.relocate_message {
+                    ui.label(egui::RichText::new(msg).color(ui::theme::ACCENT_LIGHT).size(11.0));
+                }
+                if self.state.tree.is_none() && self.state.scan_progress.scanning {
                     ui.label(
                         egui::RichText::new(format!(
                             "Scanning... {} files  •  {} dirs  •  {}",
@@ -907,6 +976,11 @@ impl eframe::App for App {
         let mut action_to_process: Option<Option<NodeId>> = None;
         let mut batch_to_process: Option<Option<Vec<NodeId>>> = None;
         let mut empty_trash_confirmed: Option<bool> = None;
+        let mut relocate_choice = None;
+        if let Some(PendingAction::ConfirmRelocate(d)) = &mut self.state.pending_action {
+            relocate_choice = ui::relocate_window::show(ctx, d)
+                .map(|c| (c, d.node, d.name.clone(), d.path.clone()));
+        }
         if let Some(action) = &self.state.pending_action {
             match action {
                 PendingAction::ConfirmTrash(node_id, name, size) => {
@@ -963,6 +1037,7 @@ impl eframe::App for App {
                             });
                         });
                 }
+                PendingAction::ConfirmRelocate(_) => {}
                 PendingAction::RefreshSubtree(node_id) => {
                     let node_id = *node_id;
                     self.state.pending_action = None;
@@ -1080,6 +1155,12 @@ impl eframe::App for App {
             self.state.pending_action = None;
             if let Some(ids) = result {
                 self.perform_batch_delete(ids);
+            }
+        }
+        if let Some((choice, node, name, path)) = relocate_choice {
+            self.state.pending_action = None;
+            if let ui::relocate_window::Choice::Move { volume, link } = choice {
+                self.start_relocate(node, name, path, volume, link);
             }
         }
         if let Some(confirmed) = empty_trash_confirmed {

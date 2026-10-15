@@ -325,6 +325,22 @@ impl FileTree {
         path
     }
 
+    /// The live node at absolute `path`, if the scan covers it.
+    pub fn find_path(&self, path: &std::path::Path) -> Option<NodeId> {
+        let root_path = self.full_path(self.root);
+        let rel = path.strip_prefix(&root_path).ok()?;
+        let mut cur = self.root;
+        for comp in rel.components() {
+            let name = comp.as_os_str().as_bytes();
+            cur = *self
+                .node(cur)
+                .children()
+                .iter()
+                .find(|&&c| self.nodes[c].alive && self.name_bytes(c) == name)?;
+        }
+        Some(cur)
+    }
+
     pub fn collect_extensions(&self, root: NodeId) -> Vec<(String, u64, usize)> {
         let mut map: std::collections::HashMap<String, (u64, usize)> =
             std::collections::HashMap::new();

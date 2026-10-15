@@ -132,3 +132,18 @@ fn test_full_path() {
     let path = tree.full_path(file);
     assert_eq!(path.to_str().unwrap(), "/Users/pavol/test.txt");
 }
+
+#[test]
+fn test_find_path() {
+    let mut tree = FileTree::new();
+    tree.rename_root(b"/Users/me");
+    let root = tree.root();
+    let dir = tree.add_dir(root, b"proj", false, SystemTime::now(), 1);
+    let nm = tree.add_dir(dir, b"node_modules", false, SystemTime::now(), 2);
+    assert_eq!(tree.find_path(std::path::Path::new("/Users/me")), Some(root));
+    assert_eq!(tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")), Some(nm));
+    assert_eq!(tree.find_path(std::path::Path::new("/Users/me/nope")), None);
+    assert_eq!(tree.find_path(std::path::Path::new("/Users/other")), None);
+    tree.remove_node(nm);
+    assert_eq!(tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")), None);
+}

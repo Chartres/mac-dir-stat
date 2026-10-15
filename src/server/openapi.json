@@ -1,0 +1,225 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MacDirStat local API",
+    "version": "1.0.0",
+    "description": "Disk usage of this Mac and reviewed plans to trash or move items to another disk. Plans only run after POST /plans/{id}/approve. Every request needs `Authorization: Bearer <token>` (the token is printed by `mac-dir-stat serve` and stored in ~/Library/Application Support/MacDirStat/server-token)."
+  },
+  "servers": [{ "url": "/api/v1" }],
+  "security": [{ "bearer": [] }],
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "Error": { "type": "object", "properties": { "error": { "type": "string" } } },
+      "Node": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "name": { "type": "string" },
+          "size": { "type": "integer", "description": "Bytes" },
+          "is_dir": { "type": "boolean" },
+          "items": { "type": "integer", "description": "Files + folders beneath" },
+          "modified": { "type": "integer", "description": "Unix seconds" }
+        }
+      },
+      "Volume": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "fs_type": { "type": "string", "examples": ["apfs", "exfat"] },
+          "total_bytes": { "type": "integer" },
+          "free_bytes": { "type": "integer" },
+          "boot": { "type": "boolean" },
+          "can_offload_to": { "type": "boolean" }
+        }
+      },
+      "ScanStatus": {
+        "type": "object",
+        "properties": {
+          "root": { "type": "string" },
+          "scanning": { "type": "boolean" },
+          "has_result": { "type": "boolean" },
+          "files": { "type": "integer" },
+          "dirs": { "type": "integer" },
+          "bytes": { "type": "integer" },
+          "errors": { "type": "integer" },
+          "started": { "type": "integer" },
+          "finished": { "type": ["integer", "null"] },
+          "total_bytes": { "type": ["integer", "null"] }
+        }
+      },
+      "OpInput": {
+        "type": "object",
+        "required": ["action", "path"],
+        "properties": {
+          "action": { "type": "string", "enum": ["trash", "move"] },
+          "path": { "type": "string" },
+          "volume": { "type": "string", "description": "move only: destination volume root, e.g. /Volumes/External" },
+          "link": { "type": "boolean", "description": "move only: leave a symlink at the original path" }
+        }
+      },
+      "Plan": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "note": { "type": "string" },
+          "origin": { "type": "string", "examples": ["web", "mcp"] },
+          "created": { "type": "integer" },
+          "status": { "type": "string", "enum": ["pending", "approved", "done", "failed", "rejected"] },
+          "total_bytes": { "type": "integer" },
+          "valid": { "type": "boolean", "description": "No op has errors; only valid plans can be approved" },
+          "ops": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string" },
+                "action": { "type": "string" },
+                "volume": { "type": ["string", "null"] },
+                "link": { "type": ["boolean", "null"] },
+                "size": { "type": "integer" },
+                "dest": { "type": ["string", "null"], "description": "<volume>/MacDirStat Offload/<original path>" },
+                "errors": { "type": "array", "items": { "type": "string" } },
+                "warnings": { "type": "array", "items": { "type": "string" } },
+                "result": {
+                  "type": ["object", "null"],
+                  "properties": { "ok": { "type": "boolean" }, "message": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error": { "description": "Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    }
+  },
+  "paths": {
+    "/volumes": {
+      "get": {
+        "operationId": "listVolumes",
+        "summary": "Startup disk and volumes under /Volumes",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "volumes": { "type": "array", "items": { "$ref": "#/components/schemas/Volume" } } } } } } } }
+      }
+    },
+    "/scan": {
+      "get": {
+        "operationId": "getScan",
+        "summary": "Scan progress and status",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ScanStatus" } } } } }
+      },
+      "post": {
+        "operationId": "startScan",
+        "summary": "Start a new scan; the previous result stays available until it finishes",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "root": { "type": "string" } } } } } },
+        "responses": {
+          "202": { "description": "Started", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ScanStatus" } } } },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/tree": {
+      "get": {
+        "operationId": "getTree",
+        "summary": "A folder and its children, largest first",
+        "parameters": [
+          { "name": "path", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 100 } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "node": { "$ref": "#/components/schemas/Node" }, "children": { "type": "array", "items": { "$ref": "#/components/schemas/Node" } } } } } } },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/top": {
+      "get": {
+        "operationId": "topItems",
+        "summary": "Largest files, or largest content folders (folders not dominated by one subfolder)",
+        "parameters": [
+          { "name": "n", "in": "query", "schema": { "type": "integer", "default": 25 } },
+          { "name": "kind", "in": "query", "schema": { "type": "string", "enum": ["file", "dir"], "default": "file" } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "kind": { "type": "string" }, "items": { "type": "array", "items": { "$ref": "#/components/schemas/Node" } } } } } } } }
+      }
+    },
+    "/find": {
+      "get": {
+        "operationId": "find",
+        "summary": "Items whose name matches a case-insensitive glob (* and ?); matches are not searched inside",
+        "parameters": [
+          { "name": "pattern", "in": "query", "required": true, "schema": { "type": "string", "examples": ["node_modules", "*.dmg"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 200 } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "pattern": { "type": "string" }, "count": { "type": "integer" }, "total_bytes": { "type": "integer" }, "items": { "type": "array", "items": { "$ref": "#/components/schemas/Node" } } } } } } },
+          "400": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/cleanup": {
+      "get": {
+        "operationId": "cleanupSuggestions",
+        "summary": "Regenerable data grouped by category",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "groups": { "type": "array", "items": { "type": "object", "properties": { "category": { "type": "string" }, "description": { "type": "string" }, "count": { "type": "integer" }, "total_bytes": { "type": "integer" }, "items": { "type": "array", "items": { "$ref": "#/components/schemas/Node" } } } } } } } } } } }
+      }
+    },
+    "/summary": {
+      "get": {
+        "operationId": "summary",
+        "summary": "Plain-text digest of volumes, largest items and cleanup groups for pasting into any AI chat",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "text": { "type": "string" } } } } } } }
+      }
+    },
+    "/plans": {
+      "get": {
+        "operationId": "listPlans",
+        "summary": "All plans, newest first",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "plans": { "type": "array", "items": { "$ref": "#/components/schemas/Plan" } } } } } } } }
+      },
+      "post": {
+        "operationId": "createPlan",
+        "summary": "Propose a plan; it is validated but not run",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["ops"], "properties": { "note": { "type": "string" }, "ops": { "type": "array", "items": { "$ref": "#/components/schemas/OpInput" } } } } } } },
+        "responses": {
+          "201": { "description": "Created (pending)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Plan" } } } },
+          "400": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/plans/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+      "get": {
+        "operationId": "getPlan",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Plan" } } } },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/plans/{id}/approve": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+      "post": {
+        "operationId": "approvePlan",
+        "summary": "Run a pending, valid plan in the background (status becomes approved, then done or failed)",
+        "responses": {
+          "202": { "description": "Running", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Plan" } } } },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/plans/{id}/reject": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+      "post": {
+        "operationId": "rejectPlan",
+        "responses": {
+          "200": { "description": "Rejected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Plan" } } } },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  }
+}
