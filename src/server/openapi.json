@@ -3,7 +3,7 @@
   "info": {
     "title": "MacDirStat local API",
     "version": "1.0.0",
-    "description": "Disk usage of this Mac and reviewed plans to trash or move items to another disk. Plans only run after POST /plans/{id}/approve. Every request needs `Authorization: Bearer <token>` (the token is printed by `mac-dir-stat serve` and stored in ~/Library/Application Support/MacDirStat/server-token)."
+    "description": "Disk usage of this Mac and reviewed plans to trash or move items to another disk. Plans only run after POST /plans/{id}/approve. Every request needs `Authorization: Bearer <token>`. The admin token (~/Library/Application Support/MacDirStat/server-token) can do everything. The AI token (mcp-token) can read and create plans; approve, reject and rescan return 403."
   },
   "servers": [{ "url": "/api/v1" }],
   "security": [{ "bearer": [] }],
@@ -207,7 +207,18 @@
         "summary": "Run a pending, valid plan in the background (status becomes approved, then done or failed)",
         "responses": {
           "202": { "description": "Running", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Plan" } } } },
+          "403": { "$ref": "#/components/responses/Error" },
           "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/mcp-token": {
+      "get": {
+        "operationId": "getMcpToken",
+        "summary": "The AI token (admin token only). It can read and propose, but approve/reject return 403.",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "token": { "type": "string" } } } } } },
+          "403": { "$ref": "#/components/responses/Error" }
         }
       }
     },

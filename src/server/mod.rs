@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tiny_http::{Header, Request, Response};
 
 pub type Executor = Arc<dyn Fn(&Op) -> Result<String, String> + Send + Sync>;
@@ -34,8 +34,16 @@ pub struct ScanState {
     pub finished: Option<u64>,
 }
 
+/// Locks, ignoring poisoning: one panicked request must not take the server down.
+pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 pub struct Shared {
+    /// Admin token: everything, including approve/reject. For the human.
     pub token: String,
+    /// Token for AI clients: /mcp, REST reads and proposing plans only.
+    pub mcp_token: String,
     pub scan: Mutex<ScanState>,
     pub plans: Mutex<PlanStore>,
     pub executor: Executor,
@@ -45,8 +53,9 @@ pub struct Config {
     pub bind: IpAddr,
     pub port: u16,
     pub root: PathBuf,
-    /// Overrides the stored token (tests).
+    /// Override the stored tokens (tests).
     pub token: Option<String>,
+    pub mcp_token: Option<String>,
     /// Overrides how approved ops run (tests).
     pub executor: Option<Executor>,
 }
@@ -67,13 +76,18 @@ pub fn now() -> u64 {
 pub fn start(cfg: Config) -> Result<Handle, String> {
     let token = match cfg.token {
         Some(t) => t,
-        None => load_or_create_token()?,
+        None => load_or_create_token(ADMIN_TOKEN_FILE)?,
+    };
+    let mcp_token = match cfg.mcp_token {
+        Some(t) => t,
+        None => load_or_create_token(MCP_TOKEN_FILE)?,
     };
     let server = tiny_http::Server::http(SocketAddr::new(cfg.bind, cfg.port))
         .map_err(|e| format!("cannot listen on {}:{}: {e}", cfg.bind, cfg.port))?;
     let addr = server.server_addr().to_ip().ok_or("no IP address")?;
     let shared = Arc::new(Shared {
         token: token.clone(),
+        mcp_token,
         scan: Mutex::new(ScanState::default()),
         plans: Mutex::new(PlanStore::default()),
         executor: cfg
@@ -96,13 +110,22 @@ pub fn start(cfg: Config) -> Result<Handle, String> {
     })
 }
 
-/// `~/Library/Application Support/MacDirStat/server-token`, created 0600 on first run.
-pub fn load_or_create_token() -> Result<String, String> {
+pub const ADMIN_TOKEN_FILE: &str = "server-token";
+pub const MCP_TOKEN_FILE: &str = "mcp-token";
+
+/// `~/Library/Application Support/MacDirStat/<name>`.
+pub fn token_path(name: &str) -> Result<PathBuf, String> {
+    Ok(crate::relocate::home()
+        .ok_or("no home folder for this user")?
+        .join("Library/Application Support/MacDirStat")
+        .join(name))
+}
+
+/// Reads the token file, creating it (0600, 32 random bytes) on first run.
+pub fn load_or_create_token(name: &str) -> Result<String, String> {
     use std::os::unix::fs::OpenOptionsExt;
-    let dir = crate::relocate::home()
-        .ok_or("HOME is not set")?
-        .join("Library/Application Support/MacDirStat");
-    let path = dir.join("server-token");
+    let path = token_path(name)?;
+    let dir = path.parent().unwrap().to_path_buf();
     if let Ok(t) = std::fs::read_to_string(&path) {
         if t.trim().len() >= 32 {
             return Ok(t.trim().to_string());
@@ -125,17 +148,13 @@ pub fn load_or_create_token() -> Result<String, String> {
     Ok(token)
 }
 
-fn token_ok(req: &Request, token: &str) -> bool {
-    let Some(h) = req
-        .headers()
-        .iter()
-        .find(|h| h.field.equiv("Authorization"))
-    else {
-        return false;
-    };
-    let Some(given) = h.value.as_str().strip_prefix("Bearer ") else {
-        return false;
-    };
+#[derive(PartialEq)]
+enum Role {
+    Admin,
+    Mcp,
+}
+
+fn same(given: &str, token: &str) -> bool {
     // Constant-time compare.
     given.len() == token.len()
         && given
@@ -143,6 +162,29 @@ fn token_ok(req: &Request, token: &str) -> bool {
             .zip(token.bytes())
             .fold(0u8, |acc, (a, b)| acc | (a ^ b))
             == 0
+}
+
+fn role(req: &Request, sh: &Shared) -> Option<Role> {
+    let h = req
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("Authorization"))?;
+    let given = h.value.as_str().strip_prefix("Bearer ")?;
+    if same(given, &sh.token) {
+        Some(Role::Admin)
+    } else if same(given, &sh.mcp_token) {
+        Some(Role::Mcp)
+    } else {
+        None
+    }
+}
+
+/// What the AI token may do: MCP, reads, and proposing plans. Never approve,
+/// reject, rescan, or read the token itself.
+fn mcp_allowed(method: &str, path: &str) -> bool {
+    path == "/mcp"
+        || (method == "GET" && path != "/api/v1/mcp-token")
+        || (method == "POST" && path == "/api/v1/plans")
 }
 
 fn header(k: &str, v: &str) -> Header {
@@ -200,15 +242,25 @@ fn handle(sh: &Arc<Shared>, mut req: Request) {
         let resp = Response::from_string(include_str!("index.html"))
             .with_header(header("Content-Type", "text/html; charset=utf-8"))
             .with_header(header("Cache-Control", "no-store"))
-            .with_header(header("Referrer-Policy", "no-referrer"));
+            .with_header(header("Referrer-Policy", "no-referrer"))
+            .with_header(header("X-Frame-Options", "DENY"))
+            .with_header(header("Content-Security-Policy", "frame-ancestors 'none'"));
         let _ = req.respond(resp);
         return;
     }
     if !(path.starts_with("/api/") || path == "/mcp") {
         return respond_json(req, 404, &json!({"error": "not found"}));
     }
-    if !token_ok(&req, &sh.token) {
-        return respond_json(req, 401, &json!({"error": "missing or wrong bearer token"}));
+    match role(&req, sh) {
+        None => return respond_json(req, 401, &json!({"error": "missing or wrong bearer token"})),
+        Some(Role::Mcp) if !mcp_allowed(&method, path) => {
+            return respond_json(
+                req,
+                403,
+                &json!({"error": "the MCP token can read and propose plans; approving needs the admin token"}),
+            )
+        }
+        _ => {}
     }
 
     let mut body = String::new();
@@ -293,22 +345,45 @@ pub fn run_cli(args: &[String]) -> i32 {
         port,
         root: root.clone(),
         token: None,
+        mcp_token: None,
         executor: None,
     }) {
         Ok(h) => h,
         Err(e) => return fail(&e),
     };
-    let base = format!("http://{}", h.addr);
-    println!("MacDirStat server, scanning {}", root.display());
-    println!("  Web UI: {base}/#token={}", h.token);
-    println!("  API:    {base}/api/v1/openapi.json");
-    println!("  MCP:    {base}/mcp   (header Authorization: Bearer <token>)");
+    let tty = unsafe { libc::isatty(1) } == 1;
+    print!("{}", banner(&root, h.addr, &h.token, tty));
     if !bind.is_loopback() {
         println!("  Listening beyond this machine: replace {} with an address you can reach (e.g. its Tailscale IP).", h.addr.ip());
     }
     loop {
         std::thread::park();
     }
+}
+
+/// Start-up text. The token goes into the URL only on an interactive
+/// terminal, so it doesn't end up in launchd or other log files.
+pub fn banner(root: &std::path::Path, addr: SocketAddr, token: &str, tty: bool) -> String {
+    let base = format!("http://{addr}");
+    let path = |n| {
+        token_path(n)
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    };
+    let ui = if tty {
+        format!("{base}/#token={token}")
+    } else {
+        format!(
+            "{base}/   (paste the token from {})",
+            path(ADMIN_TOKEN_FILE)
+        )
+    };
+    format!(
+        "MacDirStat server, scanning {}\n  Web UI: {ui}\n  API:    {base}/api/v1/openapi.json\n  MCP:    {base}/mcp   (Bearer token for AI clients: {})\n  Admin token (approves plans): {}\n",
+        root.display(),
+        path(MCP_TOKEN_FILE),
+        path(ADMIN_TOKEN_FILE)
+    )
 }
 
 fn fail(msg: &str) -> i32 {
@@ -319,6 +394,28 @@ fn fail(msg: &str) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn banner_prints_the_token_only_on_a_terminal() {
+        let addr: SocketAddr = "127.0.0.1:7878".parse().unwrap();
+        let quiet = banner(std::path::Path::new("/"), addr, "SECRET123", false);
+        assert!(!quiet.contains("SECRET123"));
+        assert!(quiet.contains("server-token") && quiet.contains("mcp-token"));
+        assert!(
+            banner(std::path::Path::new("/"), addr, "SECRET123", true).contains("#token=SECRET123")
+        );
+    }
+
+    #[test]
+    fn mcp_token_scope() {
+        assert!(mcp_allowed("POST", "/mcp"));
+        assert!(mcp_allowed("GET", "/api/v1/plans/3"));
+        assert!(mcp_allowed("POST", "/api/v1/plans"));
+        assert!(!mcp_allowed("POST", "/api/v1/plans/3/approve"));
+        assert!(!mcp_allowed("POST", "/api/v1/plans/3/reject"));
+        assert!(!mcp_allowed("POST", "/api/v1/scan"));
+        assert!(!mcp_allowed("GET", "/api/v1/mcp-token"));
+    }
 
     #[test]
     fn query_parsing_decodes() {

@@ -80,18 +80,24 @@ The app is **signed with a Developer ID and notarized by Apple**, so it opens no
 ## Moving to another disk
 
 Moved items land at `<volume>/MacDirStat Offload/<original absolute path>`, so you can always tell
-where something came from and move it back by hand. The steps are: copy with `/usr/bin/ditto`,
-verify that the copy has the same file count and total bytes, move the original to the Trash
-(so it can be put back), then, if you ask for it, create a symlink at the original path.
+where something came from and move it back by hand. The steps are: copy with `/usr/bin/ditto`
+into a temporary `<name>.mds-partial-<pid>` folder next to the destination, flush it to disk
+(`F_FULLFSYNC`), check file count, total bytes and every byte against the original, rename it into
+place (refusing if the destination appeared meanwhile), move the original to the Trash, then, if you
+ask for it, create a symlink at the original path. A failure removes only the temporary copy.
+One move or plan runs at a time.
 
 It refuses, with the reason shown, when:
 
 - the item is a system path (`/System`, `/usr`, `/bin`, `/sbin`, `/private` except per-user temp
-  folders, `/Library` itself, your home folder itself, `~/Library` itself);
+  folders, `/Library` itself, `/Users/Shared`, other users' home folders, a whole volume, your home
+  folder itself, `~/Library` itself). Paths are checked in their on-disk letter case, so
+  `/users/me/library` is still `~/Library`;
 - the destination is on the same disk, is not a mounted volume, is inside the item, or already exists;
 - the destination lacks the estimated space (rounded up to its cluster size) plus 1 GiB;
 - the destination is exFAT or FAT and the item is or contains an app bundle or package
-  (`.app`, `.photoslibrary`, `.bundle`, `.framework`, `.pkg`) or a symlink;
+  (`.app`, `.photoslibrary`, `.bundle`, `.framework`, `.pkg`), a symlink, or a file named `._*`;
+- the destination is FAT32 and a file is 4 GiB or larger;
 - any part of the item cannot be read.
 
 On exFAT, Unix permissions and owners are not kept and extended attributes are stored as `._` files.
@@ -103,8 +109,9 @@ mac-dir-stat serve [--bind 127.0.0.1] [--port 7878] [--root /]
 # from the app bundle: /Applications/MacDirStat.app/Contents/MacOS/mac-dir-stat serve
 ```
 
-This runs without a window: it scans `--root` and prints a link such as
-`http://127.0.0.1:7878/#token=…`. The page works on a phone in light and dark mode. It shows
+This runs without a window. It scans `--root` and prints the web UI address. In a terminal the
+address includes the token (`http://127.0.0.1:7878/#token=…`); otherwise it prints where the token
+file is, so the token stays out of log files. The page works on a phone in light and dark mode. It shows
 disks and free space, the largest folders and files, cleanup groups, and a find box (`node_modules`,
 `.venv`, `*.dmg`, …). Tick items, choose **Move to Trash** or **Move to <disk>**, and create a
 **plan**. The plan lists every item with its size, destination, errors and warnings. Nothing runs
@@ -113,9 +120,14 @@ until you press **Approve**.
 To reach it from another device, for example over Tailscale, bind explicitly: `--bind 0.0.0.0`
 or `--bind <tailscale-ip>`. The default is loopback only.
 
-**Auth.** Every `/api` and `/mcp` request needs `Authorization: Bearer <token>`. The token is
-generated on first run and stored at `~/Library/Application Support/MacDirStat/server-token` (mode 0600).
-Delete the file to rotate it.
+**Auth.** Every `/api` and `/mcp` request needs `Authorization: Bearer <token>`. There are two
+tokens, generated on first run in `~/Library/Application Support/MacDirStat/` (mode 0600):
+
+- `server-token` (admin) can do everything, including approve and reject. It is for you and the web page.
+- `mcp-token` (AI) works on `/mcp`, on REST reads and on `POST /plans`. Approve, reject and rescan
+  return 403. Give this one to AI clients.
+
+Delete a file to rotate its token.
 
 **REST API**, versioned under `/api/v1`, JSON in and out, described by an OpenAPI 3.1 document at
 `/api/v1/openapi.json`:
@@ -140,7 +152,7 @@ Delete the file to rotate it.
   approves or runs a plan: the AI proposes and you approve in the web UI.
   ```sh
   claude mcp add --transport http macdirstat http://127.0.0.1:7878/mcp \
-    --header "Authorization: Bearer $(cat ~/Library/Application\ Support/MacDirStat/server-token)"
+    --header "Authorization: Bearer $(cat ~/Library/Application\ Support/MacDirStat/mcp-token)"
   ```
 - **Any chat.** **Copy summary for any chat** in the web UI copies the largest items, the cleanup
   groups and your disks, with instructions to answer in plan JSON. Paste the answer into

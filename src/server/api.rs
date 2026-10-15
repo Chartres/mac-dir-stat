@@ -1,7 +1,7 @@
 //! REST handlers. Each takes JSON params (query string or body) and returns
 //! JSON; the MCP tools call the same functions.
 
-use super::{now, Shared};
+use super::{lock, now, Shared};
 use crate::plan;
 use crate::scanner::tree::{FileTree, NodeId};
 use crate::scanner::ScanProgress;
@@ -53,6 +53,8 @@ pub fn route(
         ("GET", "/find") => ok(find(sh, p)?),
         ("GET", "/cleanup") => ok(cleanup(sh)?),
         ("GET", "/summary") => ok(summary(sh)),
+        // Admin only (see mcp_allowed): feeds the "claude mcp add" line.
+        ("GET", "/mcp-token") => ok(json!({ "token": sh.mcp_token })),
         ("GET", "/plans") => ok(list_plans(sh)),
         ("POST", "/plans") => Ok((201, propose(sh, p, "web")?)),
         _ => {
@@ -92,7 +94,7 @@ pub fn volumes() -> Value {
 /// Starts a scan of `root` in the background (startup and POST /scan).
 pub fn start_scan(sh: &Arc<Shared>, root: PathBuf) {
     {
-        let mut s = sh.scan.lock().unwrap();
+        let mut s = lock(&sh.scan);
         s.root = root.clone();
         s.scanning = true;
         (s.files, s.dirs, s.bytes, s.errors) = (0, 0, 0, 0);
@@ -104,7 +106,7 @@ pub fn start_scan(sh: &Arc<Shared>, root: PathBuf) {
     let sh = sh.clone();
     std::thread::spawn(move || {
         for msg in rx {
-            let mut s = sh.scan.lock().unwrap();
+            let mut s = lock(&sh.scan);
             match msg {
                 ScanProgress::Counting {
                     files,
@@ -132,12 +134,12 @@ pub fn start_scan(sh: &Arc<Shared>, root: PathBuf) {
 pub fn rescan(sh: &Arc<Shared>, root: Option<PathBuf>) -> Result<Value, ApiError> {
     let root = match root {
         Some(r) => r,
-        None => sh.scan.lock().unwrap().root.clone(),
+        None => lock(&sh.scan).root.clone(),
     };
     if !root.is_dir() {
         return Err(err(400, format!("{} is not a folder", root.display())));
     }
-    if sh.scan.lock().unwrap().scanning {
+    if lock(&sh.scan).scanning {
         return Err(err(409, "a scan is already running"));
     }
     start_scan(sh, root);
@@ -145,7 +147,7 @@ pub fn rescan(sh: &Arc<Shared>, root: Option<PathBuf>) -> Result<Value, ApiError
 }
 
 pub fn scan_status(sh: &Shared) -> Value {
-    let s = sh.scan.lock().unwrap();
+    let s = lock(&sh.scan);
     json!({
         "root": s.root.display().to_string(),
         "scanning": s.scanning,
@@ -161,7 +163,7 @@ pub fn scan_status(sh: &Shared) -> Value {
 }
 
 fn with_tree<T>(sh: &Shared, f: impl FnOnce(&FileTree) -> T) -> Result<T, ApiError> {
-    let s = sh.scan.lock().unwrap();
+    let s = lock(&sh.scan);
     match &s.tree {
         Some(t) => Ok(f(t)),
         None if s.scanning => Err(err(
@@ -396,10 +398,7 @@ pub fn summary(sh: &Shared) -> Value {
 }
 
 pub fn list_plans(sh: &Shared) -> Value {
-    let plans: Vec<Value> = sh
-        .plans
-        .lock()
-        .unwrap()
+    let plans: Vec<Value> = lock(&sh.plans)
         .list()
         .iter()
         .rev()
@@ -409,9 +408,7 @@ pub fn list_plans(sh: &Shared) -> Value {
 }
 
 pub fn get_plan(sh: &Shared, id: u64) -> Result<Value, ApiError> {
-    sh.plans
-        .lock()
-        .unwrap()
+    lock(&sh.plans)
         .get(id)
         .map(|p| p.to_json())
         .ok_or_else(|| err(404, format!("no plan {id}")))
@@ -425,44 +422,34 @@ pub fn propose(sh: &Shared, p: &Value, origin: &str) -> Result<Value, ApiError> 
     }
     let states: Vec<_> = ops.iter().map(plan::validate).collect();
     let note = p["note"].as_str().unwrap_or("");
-    Ok(sh
-        .plans
-        .lock()
-        .unwrap()
-        .create(states, note, origin)
-        .to_json())
+    Ok(lock(&sh.plans).create(states, note, origin).to_json())
 }
 
 /// Human approval: runs the plan in the background and returns at once.
 pub fn approve(sh: &Arc<Shared>, id: u64) -> Result<Value, ApiError> {
-    let ops = sh
-        .plans
-        .lock()
-        .unwrap()
-        .approve(id)
-        .map_err(|e| err(409, e))?;
+    let ops = lock(&sh.plans).approve(id).map_err(|e| err(409, e))?;
     let sh2 = sh.clone();
     std::thread::spawn(move || {
-        let results: Vec<_> = ops.iter().map(|op| (sh2.executor)(op)).collect();
+        // One plan at a time: overlapping moves must never race on a destination.
+        let results: Vec<_> = {
+            let _running = lock(&crate::relocate::EXEC_LOCK);
+            ops.iter().map(|op| (sh2.executor)(op)).collect()
+        };
         // Drop moved / trashed items from the scan, like the GUI does.
-        if let Some(t) = sh2.scan.lock().unwrap().tree.as_mut() {
+        if let Some(t) = lock(&sh2.scan).tree.as_mut() {
             for (op, r) in ops.iter().zip(&results) {
                 if let (Ok(_), Some(id)) = (r, t.find_path(&op.path)) {
                     t.remove_node(id);
                 }
             }
         }
-        let _ = sh2.plans.lock().unwrap().finish(id, results);
+        let _ = lock(&sh2.plans).finish(id, results);
     });
     get_plan(sh, id)
 }
 
 pub fn reject(sh: &Shared, id: u64) -> Result<Value, ApiError> {
-    sh.plans
-        .lock()
-        .unwrap()
-        .reject(id)
-        .map_err(|e| err(409, e))?;
+    lock(&sh.plans).reject(id).map_err(|e| err(409, e))?;
     get_plan(sh, id)
 }
 
