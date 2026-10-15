@@ -89,6 +89,15 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     }
     ui.separator();
     if ui
+        .add_enabled(state.relocate_job.is_none(), egui::Button::new("Move to External Disk…"))
+        .clicked()
+    {
+        state.pending_action = Some(PendingAction::ConfirmRelocate(Box::new(
+            crate::ui::relocate_window::RelocateDialog::new(node, name.clone(), path.clone()),
+        )));
+        ui.close_menu();
+    }
+    if ui
         .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
         .clicked()
     {

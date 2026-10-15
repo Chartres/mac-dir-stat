@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>MacDirStat</title>
+<style>
+:root {
+  --bg: #f6f6f4; --card: #ffffff; --text: #1b1b1f; --muted: #6b6b75; --line: #e3e3e0;
+  --accent: #3b6fd8; --accent-ink: #ffffff; --danger: #c93636; --warn: #a86a00; --ok: #23864a;
+  --bar: #dcdcd8; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141417; --card: #1d1d22; --text: #ececf0; --muted: #9a9aa6; --line: #2e2e35;
+    --accent: #6b97f0; --accent-ink: #0d0d10; --danger: #f07070; --warn: #e2a43b; --ok: #5ccf8a; --bar: #34343c;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, sans-serif; overflow-wrap: anywhere; }
+main { max-width: 920px; margin: 0 auto; padding: 12px 16px 120px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 6px 0 10px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 12px 0; }
+.muted { color: var(--muted); font-size: 13px; }
+button, select, input[type=text], textarea {
+  font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px;
+}
+button { cursor: pointer; white-space: nowrap; flex: none; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+input[type=text], textarea { width: 100%; }
+textarea { font: 12px/1.4 var(--mono); min-height: 70px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > *, header > * { min-width: 0; }
+header > .row { flex: 1 1 240px; justify-content: flex-end; }
+.grow { flex: 1; min-width: 0; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; font-size: 13px; padding: 3px 10px; }
+.seg button:first-child { border-radius: 7px 0 0 7px; }
+.seg button:last-child { border-radius: 0 7px 7px 0; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+ul.items { list-style: none; margin: 0; padding: 0; }
+ul.items li { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--line); }
+ul.items li:first-child { border-top: 0; }
+ul.items input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+.name { font-weight: 600; overflow-wrap: anywhere; }
+.path { font: 12px/1.35 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.size { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; margin-left: auto; padding-left: 8px; }
+.vol { padding: 6px 0; }
+.meter { height: 8px; background: var(--bar); border-radius: 4px; overflow: hidden; margin: 4px 0; }
+.meter > div { height: 100%; background: var(--accent); }
+.meter.full > div { background: var(--danger); }
+details summary { cursor: pointer; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+.badge { font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.s-pending { color: var(--warn); } .s-approved { color: var(--accent); } .s-done { color: var(--ok); }
+.s-failed, .s-rejected { color: var(--danger); }
+.err { color: var(--danger); font-size: 13px; } .warn { color: var(--warn); font-size: 13px; } .okmsg { color: var(--ok); font-size: 13px; }
+code { font: 12px var(--mono); overflow-wrap: anywhere; }
+pre { font: 12px/1.4 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; }
+.plan { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.plan:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+#tray { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); display: none; }
+#tray .inner { max-width: 920px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#tray select { max-width: 100%; }
+#toast { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; display: none; z-index: 9; max-width: 90vw; }
+#login { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>MacDirStat</h1>
+    <div class="row"><span id="scan" class="muted">…</span><button id="rescan">Rescan</button></div>
+  </header>
+
+  <section id="login">
+    <h2>Token needed</h2>
+    <p class="muted">Open the link printed by <code>mac-dir-stat serve</code>, or paste the token from <code>~/Library/Application Support/MacDirStat/server-token</code>.</p>
+    <div class="row"><input id="tok" type="text" class="grow" autocomplete="off"><button class="primary" id="tokgo">Use</button></div>
+  </section>
+
+  <section><h2>Disks</h2><div id="vols" class="muted">Loading…</div></section>
+
+  <section>
+    <h2>Largest <span class="seg"><button data-kind="dir" class="on">Folders</button><button data-kind="file">Files</button></span></h2>
+    <ul class="items" id="top"><li class="muted">Waiting for the scan…</li></ul>
+  </section>
+
+  <section><h2>Cleanup groups</h2><div id="groups" class="muted">Waiting for the scan…</div></section>
+
+  <section>
+    <h2>Find</h2>
+    <form id="findf" class="row"><input id="pattern" type="text" class="grow" placeholder="node_modules, .venv, target, *.dmg" autocapitalize="off"><button>Find</button></form>
+    <div id="findres"></div>
+  </section>
+
+  <section><h2>Plans <button id="refreshPlans">Refresh</button></h2><div id="plans" class="muted">No plans yet.</div></section>
+
+  <section>
+    <h2>Use with your AI</h2>
+    <p class="muted">MacDirStat never calls an AI. Connect your own: it can read the scan and propose plans, and only you can approve them here.</p>
+    <div class="muted">MCP endpoint</div>
+    <pre id="mcpurl"></pre>
+    <div class="muted">Claude Code</div>
+    <pre id="mcpadd"></pre>
+    <div class="row" style="flex-wrap:wrap"><button id="copyadd">Copy command</button><button id="copysum" class="primary">Copy summary for any chat</button></div>
+    <textarea id="sumtext" readonly hidden style="margin-top:8px"></textarea>
+    <p class="muted" style="margin-top:12px">Paste the plan your AI gave you (JSON list of ops):</p>
+    <textarea id="planjson" placeholder='[{"action":"move","path":"/Users/me/Movies","volume":"/Volumes/External","link":true}]'></textarea>
+    <div class="row" style="margin-top:6px"><button id="pasteplan">Create plan from JSON</button></div>
+  </section>
+</main>
+
+<div id="tray"><div class="inner">
+  <strong id="selinfo"></strong>
+  <select id="act"></select>
+  <label id="linkwrap" class="muted"><input type="checkbox" id="link" checked> leave a link behind</label>
+  <button class="primary" id="mkplan">Create plan</button>
+  <button id="clearsel">Clear</button>
+</div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (b) => { const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; b = Number(b) || 0; while (b >= 1024 && i < 4) { b /= 1024; i++; } return (i ? b.toFixed(1) : b) + " " + u[i]; };
+const ago = (t) => { if (!t) return ""; const d = (Date.now() / 1000 - t) / 86400; return d < 1 ? "today" : d < 60 ? Math.round(d) + " d ago" : d < 730 ? Math.round(d / 30) + " mo ago" : Math.round(d / 365) + " y ago"; };
+
+let token = "";
+try {
+  const m = location.hash.match(/token=([^&]+)/);
+  if (m) { token = decodeURIComponent(m[1]); localStorage.setItem("mds-token", token); history.replaceState(null, "", location.pathname); }
+  else token = localStorage.getItem("mds-token") || "";
+} catch (e) {}
+
+const sel = new Map(); // path -> size
+let topKind = "dir";
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(toast.h); toast.h = setTimeout(() => (t.style.display = "none"), 2600); }
+
+async function api(path, opts = {}) {
+  const r = await fetch("/api/v1" + path, { ...opts, headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" } });
+  if (r.status === 401) { $("#login").style.display = "block"; throw new Error("token"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+function itemRow(n, extra = "") {
+  const parent = n.path.slice(0, n.path.length - n.name.length);
+  return `<li><input type="checkbox" ${extra} data-path="${esc(n.path)}" data-size="${n.size}" ${sel.has(n.path) ? "checked" : ""}>
+    <div class="grow"><div class="name">${esc(n.name)}${n.is_dir ? "/" : ""}</div><div class="path">${esc(parent)}</div>
+    <div class="muted">${n.is_dir ? n.items.toLocaleString() + (n.items === 1 ? " item · " : " items · ") : ""}${ago(n.modified)}</div></div><div class="size">${fmt(n.size)}</div></li>`;
+}
+
+document.addEventListener("change", (e) => {
+  const c = e.target;
+  if (c.dataset.path) { c.checked ? sel.set(c.dataset.path, +c.dataset.size) : sel.delete(c.dataset.path); syncChecks(); }
+  if (c.dataset.group !== undefined) {
+    document.querySelectorAll(`[data-in-group="${c.dataset.group}"]`).forEach((x) => { c.checked ? sel.set(x.dataset.path, +x.dataset.size) : sel.delete(x.dataset.path); });
+    syncChecks();
+  }
+});
+
+function syncChecks() {
+  document.querySelectorAll("input[data-path]").forEach((x) => (x.checked = sel.has(x.dataset.path)));
+  let total = 0; sel.forEach((s) => (total += s));
+  $("#tray").style.display = sel.size ? "block" : "none";
+  $("#selinfo").textContent = `${sel.size} selected · ${fmt(total)}`;
+  $("#linkwrap").style.display = $("#act").value === "trash" ? "none" : "";
+}
+
+async function loadScan() {
+  const s = await api("/scan");
+  $("#scan").textContent = s.scanning ? `Scanning ${s.root} · ${s.files.toLocaleString()} files · ${fmt(s.bytes)}` : `${s.root} · ${fmt(s.total_bytes)}`;
+  $("#rescan").disabled = s.scanning;
+  return s;
+}
+
+async function loadVolumes() {
+  const volumes = (await api("/volumes")).volumes;
+  $("#vols").classList.remove("muted");
+  $("#vols").innerHTML = volumes.map((v) => {
+    const pct = v.total_bytes ? (100 * (v.total_bytes - v.free_bytes)) / v.total_bytes : 0;
+    return `<div class="vol"><div class="row"><strong class="grow">${esc(v.name)}</strong><span class="muted">${esc(v.fs_type)}</span></div>
+      <div class="meter ${pct > 90 ? "full" : ""}"><div style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="muted">${fmt(v.free_bytes)} free of ${fmt(v.total_bytes)} · <code>${esc(v.path)}</code></div></div>`;
+  }).join("");
+  const act = $("#act"), prev = act.value;
+  act.innerHTML = `<option value="trash">Move to Trash</option>` + volumes.filter((v) => v.can_offload_to).map((v) => `<option value="${esc(v.path)}">Move to ${esc(v.name)} (${fmt(v.free_bytes)} free)</option>`).join("");
+  if ([...act.options].some((o) => o.value === prev)) act.value = prev;
+}
+
+async function loadTop() {
+  const t = await api(`/top?n=30&kind=${topKind}`);
+  $("#top").innerHTML = t.items.map((n) => itemRow(n)).join("") || `<li class="muted">Nothing found.</li>`;
+}
+
+async function loadGroups() {
+  const g = (await api("/cleanup")).groups;
+  $("#groups").classList.toggle("muted", !g.length);
+  $("#groups").innerHTML = g.length ? `<ul class="items">` + g.map((gr, i) => `<li><input type="checkbox" data-group="${i}" aria-label="Select all ${esc(gr.category)}">
+    <details class="grow"><summary><div class="row"><span class="name grow">${esc(gr.category)}</span><span class="size">${fmt(gr.total_bytes)}</span></div>
+    <div class="muted">${gr.count} place${gr.count === 1 ? "" : "s"} · ${esc(gr.description)}</div></summary>
+    <ul class="items">${gr.items.map((n) => itemRow(n, `data-in-group="${i}"`)).join("")}</ul></details></li>`).join("") + `</ul>`
+    : "No known caches or build output over 1 MB.";
+}
+
+$("#findf").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const p = $("#pattern").value.trim(); if (!p) return;
+  try {
+    const f = await api("/find?limit=300&pattern=" + encodeURIComponent(p));
+    $("#findres").innerHTML = `<p class="muted">${f.count} match${f.count === 1 ? "" : "es"} · ${fmt(f.total_bytes)} ${f.count ? `<button id="selall">Select all shown</button>` : ""}</p><ul class="items">${f.items.map((n) => itemRow(n)).join("")}</ul>`;
+    const b = $("#selall"); if (b) b.onclick = () => { f.items.forEach((n) => sel.set(n.path, n.size)); syncChecks(); };
+  } catch (err) { toast(err.message); }
+});
+
+function planCard(p) {
+  const ops = p.ops.map((o) => `<li><div class="grow"><div class="name">${o.action === "trash" ? "Trash" : "Move"} · ${esc(o.path)}</div>
+    ${o.dest ? `<div class="path">→ ${esc(o.dest)}${o.link ? " (link left behind)" : ""}</div>` : ""}
+    ${o.errors.map((x) => `<div class="err">${esc(x)}</div>`).join("")}${o.warnings.map((x) => `<div class="warn">${esc(x)}</div>`).join("")}
+    ${o.result ? `<div class="${o.result.ok ? "okmsg" : "err"}">${esc(o.result.message)}</div>` : ""}</div><div class="size">${fmt(o.size)}</div></li>`).join("");
+  const act = p.status === "pending" ? `<div class="row" style="justify-content:flex-end"><button data-reject="${p.id}">Reject</button>
+    <button class="primary" data-approve="${p.id}" ${p.valid ? "" : "disabled title='Fix the errors first'"}>Approve ${fmt(p.total_bytes)}</button></div>` : "";
+  return `<div class="plan"><div class="row"><strong class="grow">Plan ${p.id} · ${p.ops.length} item${p.ops.length === 1 ? "" : "s"} · ${fmt(p.total_bytes)}</strong>
+    <span class="badge s-${p.status}">${p.status}</span></div><div class="muted">from ${esc(p.origin)}${p.note ? " · " + esc(p.note) : ""}</div><ul class="items">${ops}</ul>${act}</div>`;
+}
+
+async function loadPlans() {
+  const ps = (await api("/plans")).plans;
+  $("#plans").classList.toggle("muted", !ps.length);
+  $("#plans").innerHTML = ps.length ? ps.map(planCard).join("") : "No plans yet.";
+  if (ps.some((p) => p.status === "approved")) setTimeout(() => loadPlans().then(refreshData).catch((e) => toast(e.message)), 1500);
+}
+
+document.addEventListener("click", async (e) => {
+  const a = e.target.dataset.approve, r = e.target.dataset.reject;
+  if (!a && !r) return;
+  if (a && !confirm("Run this plan now? Trashed items go to the Trash. Moved items are copied, verified, then the original goes to the Trash.")) return;
+  try { await api(`/plans/${a || r}/${a ? "approve" : "reject"}`, { method: "POST" }); await loadPlans(); } catch (err) { toast(err.message); }
+});
+
+async function createPlan(ops, note) {
+  const p = await api("/plans", { method: "POST", body: JSON.stringify({ ops, note }) });
+  toast(p.valid ? `Plan ${p.id} is ready for review` : `Plan ${p.id} has errors`);
+  await loadPlans();
+  $("#plans").scrollIntoView({ behavior: "smooth" });
+}
+
+$("#mkplan").onclick = async () => {
+  const v = $("#act").value, link = $("#link").checked;
+  const ops = [...sel.keys()].map((path) => (v === "trash" ? { action: "trash", path } : { action: "move", path, volume: v, link }));
+  try { await createPlan(ops, ""); sel.clear(); syncChecks(); } catch (err) { toast(err.message); }
+};
+$("#clearsel").onclick = () => { sel.clear(); syncChecks(); };
+$("#act").onchange = syncChecks;
+$("#pasteplan").onclick = async () => {
+  let ops;
+  try { ops = JSON.parse($("#planjson").value.trim().replace(/^```(json)?/, "").replace(/```$/, "")); } catch (e) { return toast("That is not valid JSON"); }
+  if (!Array.isArray(ops)) ops = ops.ops;
+  try { await createPlan(ops, "pasted from an AI chat"); $("#planjson").value = ""; } catch (err) { toast(err.message); }
+};
+$("#refreshPlans").onclick = () => loadPlans().catch((e) => toast(e.message));
+document.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => {
+  document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("on", x === b));
+  topKind = b.dataset.kind; loadTop().catch((e) => toast(e.message));
+}));
+$("#rescan").onclick = async () => { try { await api("/scan", { method: "POST" }); poll(); } catch (e) { toast(e.message); } };
+$("#tokgo").onclick = () => { token = $("#tok").value.trim(); try { localStorage.setItem("mds-token", token); } catch (e) {} $("#login").style.display = "none"; boot(); };
+
+function copy(text) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text).then(() => toast("Copied"), () => toast("Copy failed"));
+  // Plain http (e.g. over Tailscale) has no clipboard API: copy via a selection.
+  const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select();
+  const ok = document.execCommand("copy"); t.remove(); toast(ok ? "Copied" : "Copy failed: select the text manually");
+}
+const mcpUrl = location.origin + "/mcp";
+$("#mcpurl").textContent = mcpUrl;
+const addCmd = () => `claude mcp add --transport http macdirstat ${mcpUrl} --header "Authorization: Bearer ${token}"`;
+$("#copyadd").onclick = () => copy(addCmd());
+$("#copysum").onclick = async () => {
+  try { const t = (await api("/summary")).text, box = $("#sumtext"); box.hidden = false; box.value = t; copy(t); } catch (e) { toast(e.message); }
+};
+
+async function refreshData() { await Promise.all([loadVolumes(), loadTop(), loadGroups()]); syncChecks(); }
+async function poll() {
+  const s = await loadScan();
+  if (s.scanning) return setTimeout(() => poll().catch((e) => toast(e.message)), 1500);
+  if (s.has_result) await refreshData();
+}
+async function boot() {
+  $("#mcpadd").textContent = addCmd();
+  try { await loadVolumes(); await loadPlans(); await poll(); } catch (e) { if (e.message !== "token") toast(e.message); }
+}
+if (!token) $("#login").style.display = "block"; else boot();
+</script>
+</body>
+</html>

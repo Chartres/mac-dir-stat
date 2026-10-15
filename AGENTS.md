@@ -27,6 +27,9 @@ locally before touching a file you can leave clean.
 ```bash
 cargo run --release          # launches the egui app; scans your disk on open
 ```
+```bash
+cargo run --release -- serve --root ~/Downloads   # headless server; prints the web UI link with token
+```
 Look at: treemap renders, directory tree syncs on click, file-type breakdown, cleanup window.
 Press `?` in-app for the shortcut list.
 
