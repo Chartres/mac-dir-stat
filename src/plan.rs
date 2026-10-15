@@ -137,8 +137,14 @@ pub fn parse_ops(v: &Value) -> Result<Vec<Op>, String> {
         .collect()
 }
 
-/// Checks one op against the filesystem (sizes, rules, free space).
+/// Checks one op against the filesystem (sizes, rules, free space). The
+/// returned op carries the normalized path: that is what is shown and run.
 pub fn validate(op: &Op) -> OpState {
+    let mut op = op.clone();
+    let normalized = crate::relocate::normalize(&op.path);
+    if let Ok(p) = &normalized {
+        op.path = p.clone();
+    }
     let mut st = OpState {
         op: op.clone(),
         size: 0,
@@ -148,7 +154,7 @@ pub fn validate(op: &Op) -> OpState {
         result: None,
     };
     match &op.action {
-        Action::Trash => match crate::relocate::normalize(&op.path) {
+        Action::Trash => match normalized {
             Err(e) => st.errors.push(e),
             Ok(p) => {
                 if let Some(r) =
@@ -182,9 +188,10 @@ pub fn execute(op: &Op) -> Result<String, String> {
     if !st.errors.is_empty() {
         return Err(st.errors.join("; "));
     }
+    let op = &st.op;
     match &op.action {
         Action::Trash => {
-            crate::platform::trash::move_to_trash(&op.path)?;
+            crate::platform::trash::move_to_trash_headless(&op.path)?;
             Ok("moved to Trash".into())
         }
         Action::Move { volume, link } => {
@@ -220,6 +227,17 @@ impl PlanStore {
             status: Status::Pending,
             ops,
         });
+        // ponytail: keep the newest 200; pending/running plans are never dropped.
+        while self.plans.len() > 200 {
+            let Some(i) = self
+                .plans
+                .iter()
+                .position(|p| !matches!(p.status, Status::Pending | Status::Approved))
+            else {
+                break;
+            };
+            self.plans.remove(i);
+        }
         self.plans.last().unwrap()
     }
 
@@ -386,5 +404,38 @@ mod tests {
             action: Action::Trash,
         });
         assert!(!st.errors.is_empty());
+    }
+
+    #[test]
+    fn validate_stores_the_normalized_path() {
+        // /var is a symlink to /private/var: the plan must show and run the real path.
+        let d = std::env::temp_dir().join(format!("mds-plan-norm-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("File.bin"), b"x").unwrap();
+        let st = validate(&Op {
+            path: d.join("file.bin"),
+            action: Action::Trash,
+        });
+        assert!(st.errors.is_empty(), "{:?}", st.errors);
+        assert!(
+            st.op.path.starts_with("/private"),
+            "{}",
+            st.op.path.display()
+        );
+        assert_eq!(st.op.path.file_name().unwrap(), "File.bin");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn finished_plans_are_pruned_beyond_200() {
+        let mut s = PlanStore::default();
+        let keep = s.create(vec![op_state("/a", vec![])], "", "web").id;
+        for _ in 0..250 {
+            let id = s.create(vec![op_state("/a", vec![])], "", "web").id;
+            s.reject(id).unwrap();
+        }
+        assert_eq!(s.list().len(), 200);
+        assert!(s.get(keep).is_some(), "pending plans are never pruned");
+        assert_eq!(s.list().last().unwrap().id, 251);
     }
 }

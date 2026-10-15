@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 const TOKEN: &str = "test-token-0123456789abcdef0123456789abcdef";
+const MCP_TOKEN: &str = "mcp-token-0123456789abcdef0123456789abcdef";
 
 fn fixture(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("mds-srv-{name}-{}", std::process::id()));
@@ -24,12 +25,9 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn start(root: &Path, runs: Arc<AtomicUsize>) -> Handle {
-    let h = server::start(Config {
-        bind: [127, 0, 0, 1].into(),
-        port: 0,
-        root: root.to_path_buf(),
-        token: Some(TOKEN.into()),
-        executor: Some(Arc::new(move |op: &Op| {
+    start_with(
+        root,
+        Arc::new(move |op: &Op| {
             runs.fetch_add(1, Ordering::SeqCst);
             match op.action {
                 Action::Trash => std::fs::remove_file(&op.path)
@@ -37,7 +35,18 @@ fn start(root: &Path, runs: Arc<AtomicUsize>) -> Handle {
                     .map_err(|e| e.to_string()),
                 Action::Move { .. } => Err("moves are not run in tests".into()),
             }
-        })),
+        }),
+    )
+}
+
+fn start_with(root: &Path, executor: server::Executor) -> Handle {
+    let h = server::start(Config {
+        bind: [127, 0, 0, 1].into(),
+        port: 0,
+        root: root.to_path_buf(),
+        token: Some(TOKEN.into()),
+        mcp_token: Some(MCP_TOKEN.into()),
+        executor: Some(executor),
     })
     .unwrap();
     for _ in 0..200 {
@@ -56,6 +65,17 @@ fn raw(
     token: Option<&str>,
     body: Option<&Value>,
 ) -> (u16, String) {
+    let (st, _, body) = raw_full(h, method, path, token, body);
+    (st, body)
+}
+
+fn raw_full(
+    h: &Handle,
+    method: &str,
+    path: &str,
+    token: Option<&str>,
+    body: Option<&Value>,
+) -> (u16, String, String) {
     let mut s = TcpStream::connect(h.addr).unwrap();
     let body = body.map(|b| b.to_string()).unwrap_or_default();
     let auth = token
@@ -70,12 +90,8 @@ fn raw(
     let mut out = String::new();
     s.read_to_string(&mut out).unwrap();
     let status = out[9..12].parse().unwrap();
-    let body = out
-        .split_once("\r\n\r\n")
-        .map(|x| x.1)
-        .unwrap_or("")
-        .to_string();
-    (status, body)
+    let (head, body) = out.split_once("\r\n\r\n").unwrap_or((&out, ""));
+    (status, head.to_string(), body.to_string())
 }
 
 fn call(h: &Handle, method: &str, path: &str, body: Option<&Value>) -> (u16, Value) {
@@ -186,18 +202,24 @@ fn plans_run_only_when_approved() {
     let runs = Arc::new(AtomicUsize::new(0));
     let h = start(&root, runs.clone());
     let dmg = root.join("big.dmg").display().to_string();
+    // Proposed through the /var symlink and in the wrong case: stored normalized.
+    let sloppy = dmg
+        .strip_prefix("/private")
+        .unwrap()
+        .replace("big.dmg", "BIG.DMG");
 
     // Propose → pending, nothing runs.
     let (st, p) = call(
         &h,
         "POST",
         "/api/v1/plans",
-        Some(&json!({"note": "t", "ops": [{"action": "trash", "path": dmg}]})),
+        Some(&json!({"note": "t", "ops": [{"action": "trash", "path": sloppy}]})),
     );
     assert_eq!(st, 201);
     assert_eq!(p["status"], "pending");
     assert_eq!(p["valid"], true);
     assert_eq!(p["total_bytes"], 3 << 20);
+    assert_eq!(p["ops"][0]["path"], dmg);
     assert_eq!(runs.load(Ordering::SeqCst), 0);
     let id = p["id"].as_u64().unwrap();
 
@@ -394,5 +416,141 @@ fn mcp_proposes_but_never_executes() {
         -32601
     );
     assert_eq!(raw(&h, "GET", "/mcp", Some(TOKEN), None).0, 405);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn mcp_token_can_read_and_propose_but_not_approve() {
+    let root = fixture("mcptok");
+    let runs = Arc::new(AtomicUsize::new(0));
+    let h = start(&root, runs.clone());
+    let as_ai = |m: &str, p: &str, b: Option<&Value>| raw(&h, m, p, Some(MCP_TOKEN), b).0;
+
+    assert_eq!(as_ai("GET", "/api/v1/top", None), 200);
+    assert_eq!(
+        as_ai(
+            "POST",
+            "/mcp",
+            Some(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}))
+        ),
+        200
+    );
+    let dmg = root.join("big.dmg").display().to_string();
+    let (st, body) = raw(
+        &h,
+        "POST",
+        "/api/v1/plans",
+        Some(MCP_TOKEN),
+        Some(&json!({"ops": [{"action": "trash", "path": dmg}]})),
+    );
+    assert_eq!(st, 201);
+    let id = serde_json::from_str::<Value>(&body).unwrap()["id"]
+        .as_u64()
+        .unwrap();
+
+    assert_eq!(
+        as_ai("POST", &format!("/api/v1/plans/{id}/approve"), None),
+        403
+    );
+    assert_eq!(
+        as_ai("POST", &format!("/api/v1/plans/{id}/reject"), None),
+        403
+    );
+    assert_eq!(as_ai("POST", "/api/v1/scan", None), 403);
+    assert_eq!(as_ai("GET", "/api/v1/mcp-token", None), 403);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert_eq!(runs.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        call(&h, "GET", &format!("/api/v1/plans/{id}"), None).1["status"],
+        "pending"
+    );
+
+    // The admin token reveals the MCP token for the "claude mcp add" line.
+    assert_eq!(
+        call(&h, "GET", "/api/v1/mcp-token", None).1["token"],
+        MCP_TOKEN
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn page_cannot_be_framed() {
+    let root = fixture("frame");
+    let h = start(&root, Arc::default());
+    let (st, head, body) = raw_full(&h, "GET", "/", None, None);
+    assert_eq!(st, 200);
+    assert!(head.contains("X-Frame-Options: DENY"), "{head}");
+    assert!(head.contains("frame-ancestors 'none'"), "{head}");
+    assert!(
+        body.contains("/mcp-token"),
+        "page must fetch the MCP token for the add line"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn approved_plans_run_one_at_a_time() {
+    let root = fixture("serial");
+    let active = Arc::new(AtomicUsize::new(0));
+    let max = Arc::new(AtomicUsize::new(0));
+    let (a, m) = (active.clone(), max.clone());
+    let h = start_with(
+        &root,
+        Arc::new(move |_op: &Op| {
+            let now = a.fetch_add(1, Ordering::SeqCst) + 1;
+            m.fetch_max(now, Ordering::SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            a.fetch_sub(1, Ordering::SeqCst);
+            Ok("ok".into())
+        }),
+    );
+    let mut ids = vec![];
+    for f in ["big.dmg", "small.txt"] {
+        let path = root.join(f).display().to_string();
+        let p = call(
+            &h,
+            "POST",
+            "/api/v1/plans",
+            Some(&json!({"ops": [{"action": "trash", "path": path}]})),
+        )
+        .1;
+        ids.push(p["id"].as_u64().unwrap());
+    }
+    for id in &ids {
+        assert_eq!(
+            call(&h, "POST", &format!("/api/v1/plans/{id}/approve"), None).0,
+            202
+        );
+    }
+    for id in ids {
+        assert_eq!(wait_plan(&h, id)["status"], "done");
+    }
+    assert_eq!(max.load(Ordering::SeqCst), 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_poisoned_lock_does_not_take_the_server_down() {
+    let root = fixture("poison");
+    let h = start(&root, Arc::default());
+    let sh = h.shared.clone();
+    let _ = std::thread::spawn(move || {
+        let _g = sh.plans.lock().unwrap();
+        panic!("poison the plans lock");
+    })
+    .join();
+    assert!(h.shared.plans.is_poisoned());
+    assert_eq!(call(&h, "GET", "/api/v1/plans", None).0, 200);
+    let txt = root.join("small.txt").display().to_string();
+    assert_eq!(
+        call(
+            &h,
+            "POST",
+            "/api/v1/plans",
+            Some(&json!({"ops": [{"action": "trash", "path": txt}]}))
+        )
+        .0,
+        201
+    );
     std::fs::remove_dir_all(root).unwrap();
 }

@@ -548,6 +548,9 @@ impl App {
     fn start_relocate(&mut self, node: NodeId, name: String, path: PathBuf, volume: PathBuf, link: bool) {
         let (tx, rx) = crossbeam_channel::bounded(1);
         std::thread::spawn(move || {
+            let _running = crate::relocate::EXEC_LOCK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             let _ = tx.send(crate::relocate::relocate(&path, &volume, link));
         });
         self.state.relocate_message = None;

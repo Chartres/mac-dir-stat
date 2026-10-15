@@ -15,6 +15,19 @@ All notable changes to MacDirStat are documented here. The format follows
   REST API (`/api/v1`, OpenAPI 3.1) and an MCP endpoint (`/mcp`), all behind a bearer token.
   Trash and move plans are reviewed and approved by you. AI clients can propose plans but cannot run them.
 
+### Fixed
+- Moves: case-folded paths (`/users/me/library`) no longer slip past the protected-path rules;
+  `/Users/Shared`, other users' homes and whole volumes are protected; the home folder comes from
+  the password database, not `$HOME`.
+- Moves copy into a temporary folder, flush it to disk, compare it byte for byte, and only then
+  rename it into place. A failed or racing move can no longer delete a verified copy. Only one move
+  or plan runs at a time.
+- exFAT/FAT refuses sources containing real `._*` files; FAT32 refuses files of 4 GiB or more.
+- The server has a separate AI token (`mcp-token`) that cannot approve or reject plans. Plans store
+  and run the normalized path, and items are trashed via NSFileManager (works headless).
+- The token is no longer printed when stdout is not a terminal, the page refuses framing, a crashed
+  request no longer wedges the server, and only the newest 200 finished plans are kept.
+
 ## [0.5.1] — 2026-06-18
 
 ### Changed

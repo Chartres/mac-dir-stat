@@ -5,14 +5,21 @@
 //! unit-tested; `inspect` gathers the facts from the filesystem and `relocate`
 //! does the IO.
 
-use std::ffi::CStr;
+use std::ffi::{CStr, CString, OsStr};
+use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
+use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 
 /// Folder created at the root of the destination volume. Everything we move
 /// lands under it, mirroring its original absolute path.
 pub const OFFLOAD_DIR: &str = "MacDirStat Offload";
+
+/// Held while trash/move ops run, so two plans (or a plan and the GUI) never
+/// copy into the same place at once within this process. Across processes the
+/// temp-copy + exclusive rename in `copy_verified` keeps copies apart.
+pub static EXEC_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Kept free on the destination on top of the estimated size.
 pub const FREE_MARGIN: u64 = 1 << 30;
@@ -57,6 +64,21 @@ pub fn protected_reason(path: &Path, home: Option<&Path>) -> Option<String> {
                 "{exact} itself is a system folder; pick something inside it"
             ));
         }
+    }
+    if path.parent() == Some(Path::new("/Volumes")) {
+        return Some(format!(
+            "{} is a whole volume; pick something inside it",
+            path.display()
+        ));
+    }
+    if path.starts_with("/Users/Shared") {
+        return Some("/Users/Shared belongs to every user on this Mac".into());
+    }
+    if path.starts_with("/Users") && !home.is_some_and(|h| path.starts_with(h)) {
+        return Some(format!(
+            "{} is in another user's home folder",
+            path.display()
+        ));
     }
     if let Some(home) = home {
         if path == home {
@@ -163,6 +185,10 @@ pub struct Measure {
     pub symlinks: u64,
     pub first_symlink: Option<PathBuf>,
     pub first_package: Option<PathBuf>,
+    /// A real file named `._*` (FAT copies would clobber it with AppleDouble data).
+    pub first_appledouble: Option<PathBuf>,
+    /// Largest single file, for FAT32's 4 GiB limit.
+    pub largest: u64,
     pub unreadable: u64,
 }
 
@@ -206,13 +232,16 @@ pub fn measure(path: &Path, skip_appledouble: bool) -> Measure {
                 Err(_) => m.unreadable += 1,
             }
         } else {
-            if skip_appledouble
-                && p.file_name()
-                    .is_some_and(|n| n.as_bytes().starts_with(b"._"))
+            if p.file_name()
+                .is_some_and(|n| n.as_bytes().starts_with(b"._"))
             {
-                continue;
+                if skip_appledouble {
+                    continue;
+                }
+                m.first_appledouble.get_or_insert(p.clone());
             }
             let len = md.len();
+            m.largest = m.largest.max(len);
             m.bytes += len;
             m.files += 1;
             for (k, slot) in m.alloc.iter_mut().enumerate() {
@@ -313,6 +342,19 @@ pub fn check(i: &Inputs) -> Check {
                         fs.fs_type
                     ));
                 }
+                if let Some(p) = &i.m.first_appledouble {
+                    errors.push(format!(
+                        "{} is named like a ._ AppleDouble file, which {} copies would overwrite",
+                        p.display(),
+                        fs.fs_type
+                    ));
+                }
+                if fs.fs_type == "msdos" && i.m.largest >= 4 << 30 {
+                    errors.push(format!(
+                        "FAT32 cannot store files of 4 GiB or more (largest here: {})",
+                        crate::ui::theme::format_size(i.m.largest)
+                    ));
+                }
                 warnings.push(format!(
                     "{} keeps no Unix permissions or owners; extended attributes become ._ files",
                     fs.fs_type
@@ -344,7 +386,9 @@ pub fn check(i: &Inputs) -> Check {
 }
 
 /// Absolute path with symlinks resolved in the parent but not in the last
-/// component (so moving a symlink is detected, not silently followed).
+/// component (so moving a symlink is detected, not silently followed). The
+/// on-disk letter case is restored too: APFS is case-insensitive, so
+/// `/users/me/library` must be checked as `/Users/me/Library`.
 pub fn normalize(src: &Path) -> Result<PathBuf, String> {
     if !src.is_absolute() {
         return Err(format!("{} is not an absolute path", src.display()));
@@ -355,11 +399,26 @@ pub fn normalize(src: &Path) -> Result<PathBuf, String> {
     let parent = parent
         .canonicalize()
         .map_err(|e| format!("{}: {e}", src.display()))?;
-    Ok(parent.join(name))
+    let joined = parent.join(name);
+    match std::fs::symlink_metadata(&joined) {
+        Ok(md) if !md.file_type().is_symlink() => joined
+            .canonicalize()
+            .map_err(|e| format!("{}: {e}", src.display())),
+        _ => Ok(joined),
+    }
 }
 
+/// Home folder of the user running us, from the password database (not
+/// `$HOME`, which a caller can set to anything).
 pub fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() || (*pw).pw_dir.is_null() {
+            return None;
+        }
+        let p = PathBuf::from(OsStr::from_bytes(CStr::from_ptr((*pw).pw_dir).to_bytes()));
+        Some(p.canonicalize().unwrap_or(p))
+    }
 }
 
 /// Gathers the facts for moving `src` to `volume` and runs `check`.
@@ -431,29 +490,10 @@ pub fn relocate(src: &Path, volume: &Path, link: bool) -> Result<Outcome, String
     let dest = c.dest.clone();
     let parent = dest.parent().ok_or("bad destination")?;
     std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
-
-    let copied = std::process::Command::new("/usr/bin/ditto")
-        .arg(&src)
-        .arg(&dest)
-        .output()
-        .map_err(|e| format!("ditto failed to start: {e}"))
-        .and_then(|o| {
-            if o.status.success() {
-                Ok(())
-            } else {
-                Err(format!(
-                    "ditto failed: {}",
-                    String::from_utf8_lossy(&o.stderr).trim()
-                ))
-            }
-        });
     let fat = fs_info(volume).is_some_and(|f| f.is_fat());
-    if let Err(e) = copied.and_then(|_| verify(&m, &measure(&dest, fat))) {
-        remove_partial(&dest, volume);
-        return Err(e);
-    }
+    copy_verified(&src, &dest, volume, &m, fat)?;
 
-    crate::platform::trash::move_to_trash(&src).map_err(|e| {
+    crate::platform::trash::move_to_trash_headless(&src).map_err(|e| {
         format!(
             "copied and verified to {}, but the original was not trashed: {e}",
             dest.display()
@@ -473,6 +513,158 @@ pub fn relocate(src: &Path, volume: &Path, link: bool) -> Result<Outcome, String
         files: m.files,
         linked: link,
     })
+}
+
+/// Where the copy is written before it is verified and renamed into place.
+fn partial_path(dest: &Path) -> PathBuf {
+    let name = dest.file_name().unwrap_or_default().to_string_lossy();
+    dest.with_file_name(format!("{name}.mds-partial-{}", std::process::id()))
+}
+
+/// ditto into a temp sibling → flush to disk → compare count, bytes and
+/// content → rename into place only if `dest` still does not exist. On any
+/// failure only the temp copy is removed, never `dest`.
+fn copy_verified(
+    src: &Path,
+    dest: &Path,
+    volume: &Path,
+    m: &Measure,
+    fat: bool,
+) -> Result<(), String> {
+    let tmp = partial_path(dest);
+    let _ = std::fs::remove_dir_all(&tmp).or_else(|_| std::fs::remove_file(&tmp));
+    let r = ditto(src, &tmp)
+        .and_then(|_| full_fsync_tree(&tmp))
+        .and_then(|_| verify(m, &measure(&tmp, fat)))
+        .and_then(|_| compare_trees(src, &tmp))
+        .and_then(|_| place(&tmp, dest));
+    if r.is_err() {
+        remove_partial(&tmp, volume);
+    }
+    r
+}
+
+fn ditto(src: &Path, dst: &Path) -> Result<(), String> {
+    let o = std::process::Command::new("/usr/bin/ditto")
+        .arg(src)
+        .arg(dst)
+        .output()
+        .map_err(|e| format!("ditto failed to start: {e}"))?;
+    if o.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "ditto failed: {}",
+            String::from_utf8_lossy(&o.stderr).trim()
+        ))
+    }
+}
+
+/// F_FULLFSYNC (falls back to fsync) so the copy is on the platters before the original goes.
+fn full_sync(f: &std::fs::File) -> std::io::Result<()> {
+    if unsafe { libc::fcntl(f.as_raw_fd(), libc::F_FULLFSYNC) } == 0 {
+        Ok(())
+    } else {
+        f.sync_all()
+    }
+}
+
+/// Flushes every file under `root` (required) and every folder (best effort).
+fn full_fsync_tree(root: &Path) -> Result<(), String> {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(p) = stack.pop() {
+        let md = std::fs::symlink_metadata(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+        if md.is_dir() {
+            let rd = std::fs::read_dir(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+            stack.extend(rd.flatten().map(|e| e.path()));
+            if let Ok(d) = std::fs::File::open(&p) {
+                let _ = full_sync(&d);
+            }
+        } else if md.is_file() {
+            std::fs::File::open(&p)
+                .and_then(|f| full_sync(&f))
+                .map_err(|e| format!("flushing {}: {e}", p.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Byte-for-byte comparison of every entry in `src` with its copy
+/// (symlinks by target). Extra `._*` files in the copy are ignored.
+fn compare_trees(src: &Path, copy: &Path) -> Result<(), String> {
+    let mut stack = vec![(src.to_path_buf(), copy.to_path_buf())];
+    while let Some((a, b)) = stack.pop() {
+        let md = std::fs::symlink_metadata(&a).map_err(|e| format!("{}: {e}", a.display()))?;
+        if md.file_type().is_symlink() {
+            if std::fs::read_link(&a).ok() != std::fs::read_link(&b).ok() {
+                return Err(format!("symlink {} differs in the copy", a.display()));
+            }
+        } else if md.is_dir() {
+            let rd = std::fs::read_dir(&a).map_err(|e| format!("{}: {e}", a.display()))?;
+            for e in rd.flatten() {
+                stack.push((e.path(), b.join(e.file_name())));
+            }
+        } else {
+            same_content(&a, &b)?;
+        }
+    }
+    Ok(())
+}
+
+fn same_content(a: &Path, b: &Path) -> Result<(), String> {
+    let differs = || format!("copy of {} differs from the original", a.display());
+    let open = |p: &Path| std::fs::File::open(p).map_err(|e| format!("{}: {e}", p.display()));
+    let (mut fa, mut fb) = (open(a)?, open(b)?);
+    let (mut ba, mut bb) = (vec![0u8; 1 << 20], vec![0u8; 1 << 20]);
+    loop {
+        let n = fa
+            .read(&mut ba)
+            .map_err(|e| format!("{}: {e}", a.display()))?;
+        if n == 0 {
+            // The original is exhausted; the copy must be too.
+            return match fb.read(&mut bb[..1]) {
+                Ok(0) => Ok(()),
+                _ => Err(differs()),
+            };
+        }
+        fb.read_exact(&mut bb[..n]).map_err(|_| differs())?;
+        if ba[..n] != bb[..n] {
+            return Err(differs());
+        }
+    }
+}
+
+/// Renames the verified copy to `dest`, refusing if `dest` exists (another
+/// process may have finished the same move): RENAME_EXCL where the
+/// filesystem supports it, else an existence check right before rename.
+fn place(tmp: &Path, dest: &Path) -> Result<(), String> {
+    let exists = || {
+        format!(
+            "{} appeared while copying; leaving it alone",
+            dest.display()
+        )
+    };
+    let c = |p: &Path| CString::new(p.as_os_str().as_bytes()).map_err(|e| e.to_string());
+    let (ct, cd) = (c(tmp)?, c(dest)?);
+    if unsafe { libc::renamex_np(ct.as_ptr(), cd.as_ptr(), libc::RENAME_EXCL) } != 0 {
+        let e = std::io::Error::last_os_error();
+        match e.raw_os_error() {
+            Some(libc::EEXIST) => return Err(exists()),
+            Some(libc::ENOTSUP) | Some(libc::EINVAL) => {
+                // ponytail: tiny race window on filesystems without RENAME_EXCL.
+                if std::fs::symlink_metadata(dest).is_ok() {
+                    return Err(exists());
+                }
+                std::fs::rename(tmp, dest)
+                    .map_err(|e| format!("rename to {}: {e}", dest.display()))?;
+            }
+            _ => return Err(format!("rename to {}: {e}", dest.display())),
+        }
+    }
+    if let Some(d) = dest.parent().and_then(|p| std::fs::File::open(p).ok()) {
+        let _ = full_sync(&d);
+    }
+    Ok(())
 }
 
 /// Deletes a failed copy (we created it: `check` refuses existing
@@ -557,6 +749,11 @@ mod tests {
             "/Users/me",
             "/Users/me/Library",
             "/Applications",
+            "/Users/Shared",
+            "/Users/Shared/Projects",
+            "/Users/other",
+            "/Users/other/Documents",
+            "/Volumes/Ext",
         ] {
             assert!(
                 protected_reason(Path::new(p), home).is_some(),
@@ -713,7 +910,11 @@ mod tests {
         std::fs::create_dir_all(&dest).unwrap();
         std::fs::write(dest.join("f"), b"x").unwrap();
         // exFAT: ditto leaves AppleDouble `._name` files next to what it copied.
-        for ad in ["MacDirStat Offload/._Users", "MacDirStat Offload/Users/._me", "MacDirStat Offload/Users/me/._x"] {
+        for ad in [
+            "MacDirStat Offload/._Users",
+            "MacDirStat Offload/Users/._me",
+            "MacDirStat Offload/Users/me/._x",
+        ] {
             std::fs::write(vol.join(ad), b"ad").unwrap();
         }
         remove_partial(&dest, &vol);
@@ -721,5 +922,142 @@ mod tests {
         assert!(!vol.join("MacDirStat Offload/._Users").exists());
         assert!(vol.join("MacDirStat Offload/keep/f").exists());
         std::fs::remove_dir_all(&vol).unwrap();
+    }
+
+    #[test]
+    fn case_folded_paths_are_still_protected() {
+        // APFS is case-insensitive: `/USERS` is `/Users`. normalize must
+        // restore the on-disk case before the protected-path rules run.
+        let home = home().expect("home from the password database");
+        let user = home.file_name().unwrap().to_string_lossy().to_string();
+        for p in [
+            "/USERS".to_string(),
+            "/applications".to_string(),
+            format!("/Users/{user}/library"),
+            format!("/Users/{}", user.to_uppercase()),
+            format!("/users/{user}"),
+        ] {
+            let n = normalize(Path::new(&p)).unwrap();
+            assert!(
+                protected_reason(&n, Some(&home)).is_some(),
+                "{p} (normalized {}) should be protected",
+                n.display()
+            );
+        }
+        let d = scratch("case");
+        std::fs::create_dir(d.join("MixedCase")).unwrap();
+        let n = normalize(&d.join("mixedcase")).unwrap();
+        assert_eq!(n.file_name().unwrap(), "MixedCase");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn fat_refuses_real_appledouble_names_and_msdos_big_files() {
+        let mut m = small();
+        m.first_appledouble = Some("/Users/me/x/._notes".into());
+        let ex = fs("exfat", "/Volumes/Ext", 100 << 30);
+        let c = check(&inputs(Path::new("/Users/me/x"), Some(&ex), &m));
+        assert!(
+            c.errors.iter().any(|e| e.contains("._notes")),
+            "{:?}",
+            c.errors
+        );
+        let apfs = fs("apfs", "/Volumes/Ext", 100 << 30);
+        assert!(check(&inputs(Path::new("/Users/me/x"), Some(&apfs), &m)).ok());
+
+        let mut m = small();
+        m.largest = 4 << 30;
+        let fat32 = fs("msdos", "/Volumes/Ext", 100 << 30);
+        let c = check(&inputs(Path::new("/Users/me/x"), Some(&fat32), &m));
+        assert!(
+            c.errors.iter().any(|e| e.contains("4 GiB")),
+            "{:?}",
+            c.errors
+        );
+        assert!(check(&inputs(Path::new("/Users/me/x"), Some(&ex), &m)).ok());
+    }
+
+    #[test]
+    fn measure_records_appledouble_and_largest() {
+        let d = scratch("ad");
+        std::fs::write(d.join("._real"), b"user data").unwrap();
+        std::fs::write(d.join("big"), vec![0u8; 3000]).unwrap();
+        let m = measure(&d, false);
+        assert!(m.first_appledouble.is_some());
+        assert_eq!(m.largest, 3000);
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    fn tree_fixture(d: &Path) -> PathBuf {
+        let src = d.join("src");
+        std::fs::create_dir_all(src.join("sub")).unwrap();
+        std::fs::write(src.join("a"), vec![7u8; 70_000]).unwrap();
+        std::fs::write(src.join("sub/b"), b"bee").unwrap();
+        src
+    }
+
+    #[test]
+    fn copy_goes_through_a_temp_sibling_and_is_fsynced() {
+        let d = scratch("copy");
+        let src = tree_fixture(&d);
+        let vol = d.join("vol");
+        let dest = vol.join("MacDirStat Offload/x/src");
+        std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        let m = measure(&src, false);
+        copy_verified(&src, &dest, &vol, &m, false).unwrap();
+        assert_eq!(std::fs::read(dest.join("sub/b")).unwrap(), b"bee");
+        assert!(!partial_path(&dest).exists());
+        assert!(full_fsync_tree(&dest).is_ok());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn copy_never_replaces_or_deletes_an_existing_destination() {
+        // Another process (GUI vs server) finished the same move first.
+        let d = scratch("race");
+        let src = tree_fixture(&d);
+        let vol = d.join("vol");
+        let dest = vol.join("MacDirStat Offload/x/src");
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(dest.join("theirs"), b"verified copy").unwrap();
+        let m = measure(&src, false);
+        assert!(copy_verified(&src, &dest, &vol, &m, false).is_err());
+        assert_eq!(
+            std::fs::read(dest.join("theirs")).unwrap(),
+            b"verified copy"
+        );
+        assert!(!partial_path(&dest).exists());
+
+        // Same for a single file destination (rename would overwrite it).
+        let f = d.join("one.bin");
+        std::fs::write(&f, b"new").unwrap();
+        let fdest = vol.join("MacDirStat Offload/one.bin");
+        std::fs::write(&fdest, b"old").unwrap();
+        assert!(copy_verified(&f, &fdest, &vol, &measure(&f, false), false).is_err());
+        assert_eq!(std::fs::read(&fdest).unwrap(), b"old");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn content_compare_catches_same_size_corruption() {
+        let d = scratch("cmp");
+        let src = tree_fixture(&d);
+        let copy = d.join("copy");
+        assert!(std::process::Command::new("/usr/bin/ditto")
+            .arg(&src)
+            .arg(&copy)
+            .status()
+            .unwrap()
+            .success());
+        assert!(compare_trees(&src, &copy).is_ok());
+        let mut bytes = std::fs::read(copy.join("a")).unwrap();
+        bytes[65_000] ^= 1;
+        std::fs::write(copy.join("a"), bytes).unwrap();
+        assert!(
+            verify(&measure(&src, false), &measure(&copy, false)).is_ok(),
+            "count+bytes alone miss it"
+        );
+        assert!(compare_trees(&src, &copy).is_err());
+        std::fs::remove_dir_all(&d).unwrap();
     }
 }

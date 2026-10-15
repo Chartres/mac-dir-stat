@@ -102,7 +102,7 @@ pre { font: 12px/1.4 var(--mono); background: var(--bg); border: 1px solid var(-
 
   <section>
     <h2>Use with your AI</h2>
-    <p class="muted">MacDirStat never calls an AI. Connect your own: it can read the scan and propose plans, and only you can approve them here.</p>
+    <p class="muted">MacDirStat never calls an AI. Connect your own: it can read the scan and propose plans, and only you can approve them here. The command below uses a separate AI token that cannot approve.</p>
     <div class="muted">MCP endpoint</div>
     <pre id="mcpurl"></pre>
     <div class="muted">Claude Code</div>
@@ -282,7 +282,9 @@ function copy(text) {
 }
 const mcpUrl = location.origin + "/mcp";
 $("#mcpurl").textContent = mcpUrl;
-const addCmd = () => `claude mcp add --transport http macdirstat ${mcpUrl} --header "Authorization: Bearer ${token}"`;
+// AI clients get the MCP token: it can read and propose, never approve.
+let mcpToken = "";
+const addCmd = () => `claude mcp add --transport http macdirstat ${mcpUrl} --header "Authorization: Bearer ${mcpToken}"`;
 $("#copyadd").onclick = () => copy(addCmd());
 $("#copysum").onclick = async () => {
   try { const t = (await api("/summary")).text, box = $("#sumtext"); box.hidden = false; box.value = t; copy(t); } catch (e) { toast(e.message); }
@@ -295,8 +297,9 @@ async function poll() {
   if (s.has_result) await refreshData();
 }
 async function boot() {
-  $("#mcpadd").textContent = addCmd();
-  try { await loadVolumes(); await loadPlans(); await poll(); } catch (e) { if (e.message !== "token") toast(e.message); }
+  try {
+    mcpToken = (await api("/mcp-token")).token;
+    $("#mcpadd").textContent = addCmd(); await loadVolumes(); await loadPlans(); await poll(); } catch (e) { if (e.message !== "token") toast(e.message); }
 }
 if (!token) $("#login").style.display = "block"; else boot();
 </script>
