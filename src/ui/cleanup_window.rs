@@ -142,7 +142,12 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    let candidates = state.cleanup_candidates.clone();
+                    // Sort by category name so headers appear once per group;
+                    // within each category keep size descending.
+                    let mut candidates = state.cleanup_candidates.clone();
+                    candidates.sort_by(|a, b| {
+                        a.category.cmp(b.category).then_with(|| b.size.cmp(&a.size))
+                    });
                     let mut current_category = "";
 
                     // Group totals
@@ -248,14 +253,9 @@ fn candidate_row(ui: &mut egui::Ui, state: &mut AppState, cand: &CleanupCandidat
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
                     if widgets::ghost_button(ui, "Trash").clicked() {
-                        let name = cand
-                            .path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| cand.path.display().to_string());
                         state.pending_action = Some(PendingAction::ConfirmTrash(
                             cand.node_id,
-                            name,
+                            cand.path.clone(),
                             cand.size,
                         ));
                     }

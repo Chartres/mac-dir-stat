@@ -1,4 +1,4 @@
-use mac_dir_stat::treemap::color::{extension_color, depth_color, age_color, ColorMode, GradientPair};
+use mac_dir_stat::treemap::color::{extension_color, depth_color, age_color, GradientPair};
 use std::time::{SystemTime, Duration};
 
 #[test]

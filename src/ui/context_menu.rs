@@ -41,11 +41,18 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     );
     ui.separator();
 
-    let is_dir = state
+    let (is_dir, is_scan_root, is_synthetic) = state
         .tree
         .as_ref()
-        .map(|t| t.node(node).is_dir())
-        .unwrap_or(false);
+        .map(|t| {
+            let ext = t.extension(node);
+            (
+                t.node(node).is_dir(),
+                node == t.root(),
+                matches!(ext, Some("__free_space__") | Some("__skipped__")),
+            )
+        })
+        .unwrap_or((false, false, false));
 
     // The folder to act on for "Open Terminal Here": the node itself if a
     // directory, otherwise its containing folder.
@@ -87,21 +94,26 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
             ui.close_menu();
         }
     }
-    ui.separator();
-    if ui
-        .add_enabled(state.relocate_job.is_none(), egui::Button::new("Move to External Disk…"))
-        .clicked()
-    {
-        state.pending_action = Some(PendingAction::ConfirmRelocate(Box::new(
-            crate::ui::relocate_window::RelocateDialog::new(node, name.clone(), path.clone()),
-        )));
-        ui.close_menu();
-    }
-    if ui
-        .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
-        .clicked()
-    {
-        state.pending_action = Some(PendingAction::ConfirmTrash(node, name.clone(), size));
-        ui.close_menu();
+    // Don't offer Trash or Move for the scan root (catastrophic), volume root
+    // (same id as scan root), or synthetic Free Space / Hidden / Skipped nodes
+    // (not real paths on disk).
+    if !is_scan_root && !is_synthetic {
+        ui.separator();
+        if ui
+            .add_enabled(state.relocate_job.is_none(), egui::Button::new("Move to External Disk…"))
+            .clicked()
+        {
+            state.pending_action = Some(PendingAction::ConfirmRelocate(Box::new(
+                crate::ui::relocate_window::RelocateDialog::new(node, name.clone(), path.clone()),
+            )));
+            ui.close_menu();
+        }
+        if ui
+            .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
+            .clicked()
+        {
+            state.pending_action = Some(PendingAction::ConfirmTrash(node, path.clone(), size));
+            ui.close_menu();
+        }
     }
 }

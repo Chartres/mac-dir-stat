@@ -147,3 +147,24 @@ fn test_find_path() {
     tree.remove_node(nm);
     assert_eq!(tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")), None);
 }
+
+#[test]
+fn test_remove_node_double_dead_is_noop() {
+    // Calling remove_node twice on the same node must not double-subtract
+    // sizes or panic. The second call is silently ignored.
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let dir = tree.add_dir(root, b"cache", false, SystemTime::now(), 1);
+    tree.add_file(dir, b"big.bin", 4096, Some("bin"), SystemTime::now(), 2);
+    tree.compute_sizes();
+
+    assert_eq!(tree.node(root).size, 4096);
+
+    tree.remove_node(dir);
+    assert_eq!(tree.node(root).size, 0);
+
+    // Second remove — must not underflow or panic.
+    tree.remove_node(dir);
+    assert_eq!(tree.node(root).size, 0, "double remove must not underflow");
+    assert!(!tree.is_alive(dir));
+}

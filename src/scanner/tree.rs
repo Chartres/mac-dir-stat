@@ -13,10 +13,6 @@ pub struct StrRef {
     len: u32,
 }
 
-impl StrRef {
-    pub const EMPTY: StrRef = StrRef { offset: 0, len: 0 };
-}
-
 /// Bump arena holding raw bytes for all node names + extensions.
 /// One contiguous `Vec<u8>` instead of millions of small heap allocs.
 #[derive(Debug, Default)]
@@ -84,10 +80,6 @@ pub enum NodeKind {
 impl Node {
     pub fn is_dir(&self) -> bool {
         matches!(self.kind, NodeKind::Directory { .. })
-    }
-
-    pub fn is_file(&self) -> bool {
-        matches!(self.kind, NodeKind::File { .. })
     }
 
     pub fn children(&self) -> &[NodeId] {
@@ -221,14 +213,10 @@ impl FileTree {
         id
     }
 
-    pub fn node_count(&self) -> usize {
-        self.nodes.iter().filter(|n| n.alive).count()
-    }
-
     /// Aggregate a directory's `size`, `file_count` and `subdir_count` from its
     /// direct children. Requires the children's own counts to already be
     /// correct (true in a bottom-up reverse pass and after grafting).
-    fn aggregate_dir(&self, id: NodeId) -> (u64, u64, u64) {
+    fn aggregate_dir(&mut self, id: NodeId) {
         let mut size = 0u64;
         let mut files = 0u64;
         let mut dirs = 0u64;
@@ -247,7 +235,10 @@ impl FileTree {
                 }
             }
         }
-        (size, files, dirs)
+        let node = &mut self.nodes[id];
+        node.size = size;
+        node.file_count = files;
+        node.subdir_count = dirs;
     }
 
     pub fn compute_sizes(&mut self) {
@@ -257,14 +248,14 @@ impl FileTree {
             if !self.nodes[i].alive || !self.nodes[i].is_dir() {
                 continue;
             }
-            let (size, files, dirs) = self.aggregate_dir(i);
-            self.nodes[i].size = size;
-            self.nodes[i].file_count = files;
-            self.nodes[i].subdir_count = dirs;
+            self.aggregate_dir(i);
         }
     }
 
     pub fn remove_node(&mut self, id: NodeId) {
+        if !self.nodes[id].alive {
+            return;
+        }
         let size = self.nodes[id].size;
         let parent = self.nodes[id].parent;
 
@@ -293,16 +284,16 @@ impl FileTree {
             current = self.nodes[pid].parent;
         }
 
-        self.mark_dead_recursive(id);
+        self.mark_descendants_dead(id);
     }
 
-    fn mark_dead_recursive(&mut self, id: NodeId) {
-        if let NodeKind::Directory { ref children, .. } = self.nodes[id].kind {
-            let child_ids: Vec<NodeId> = children.clone();
-            for child in child_ids {
-                self.nodes[child].alive = false;
-                self.mark_dead_recursive(child);
-            }
+    /// Marks every node beneath `id` dead (not `id` itself). Iterative so a
+    /// pathologically deep tree can't overflow the stack.
+    fn mark_descendants_dead(&mut self, id: NodeId) {
+        let mut stack: Vec<NodeId> = self.nodes[id].children().to_vec();
+        while let Some(id) = stack.pop() {
+            self.nodes[id].alive = false;
+            stack.extend_from_slice(self.nodes[id].children());
         }
     }
 
@@ -384,25 +375,21 @@ impl FileTree {
         }
     }
 
+    // Restored for src/server/api.rs (#5), which the sweep's dead-code pass predates.
     pub fn collect_files(&self, root: NodeId) -> Vec<NodeId> {
         let mut files = vec![];
-        self.collect_files_recursive(root, &mut files);
-        files
-    }
-
-    fn collect_files_recursive(&self, id: NodeId, files: &mut Vec<NodeId>) {
-        let node = &self.nodes[id];
-        if !node.alive {
-            return;
-        }
-        match &node.kind {
-            NodeKind::File { .. } => files.push(id),
-            NodeKind::Directory { children, .. } => {
-                for &child in children {
-                    self.collect_files_recursive(child, files);
-                }
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            let node = &self.nodes[id];
+            if !node.alive {
+                continue;
+            }
+            match &node.kind {
+                NodeKind::File { .. } => files.push(id),
+                NodeKind::Directory { children, .. } => stack.extend(children.iter().copied()),
             }
         }
+        files
     }
 
     pub fn children_sorted(&self, id: NodeId) -> Vec<NodeId> {
@@ -420,16 +407,7 @@ impl FileTree {
     /// list. The node itself stays. Used as the first step of grafting a
     /// freshly-scanned subtree onto an existing tree.
     pub fn clear_descendants(&mut self, target: NodeId) {
-        let mut stack: Vec<NodeId> = Vec::new();
-        if let NodeKind::Directory { children, .. } = &self.nodes[target].kind {
-            stack.extend_from_slice(children);
-        }
-        while let Some(id) = stack.pop() {
-            self.nodes[id].alive = false;
-            if let NodeKind::Directory { children, .. } = &self.nodes[id].kind {
-                stack.extend_from_slice(children);
-            }
-        }
+        self.mark_descendants_dead(target);
         if let NodeKind::Directory { children, .. } = &mut self.nodes[target].kind {
             children.clear();
         }
@@ -442,10 +420,7 @@ impl FileTree {
         let mut current = Some(target);
         while let Some(id) = current {
             if self.nodes[id].is_dir() {
-                let (size, files, dirs) = self.aggregate_dir(id);
-                self.nodes[id].size = size;
-                self.nodes[id].file_count = files;
-                self.nodes[id].subdir_count = dirs;
+                self.aggregate_dir(id);
             }
             current = self.nodes[id].parent;
         }
@@ -483,7 +458,7 @@ impl FileTree {
                     let ext_owned: Option<String> = extension.map(|r| {
                         String::from_utf8_lossy(source.strings.get(r)).into_owned()
                     });
-                    let new_id = self.add_file(
+                    self.add_file(
                         dst_parent,
                         &name_bytes,
                         src_node.size,
@@ -491,7 +466,6 @@ impl FileTree {
                         src_node.modified,
                         depth,
                     );
-                    let _ = new_id;
                 }
                 NodeKind::Directory { children, .. } => {
                     let new_id = self.add_dir(
@@ -512,10 +486,7 @@ impl FileTree {
         // than their parents), then propagate target + ancestors upward.
         for i in (first_new..self.nodes.len()).rev() {
             if self.nodes[i].is_dir() {
-                let (size, files, dirs) = self.aggregate_dir(i);
-                self.nodes[i].size = size;
-                self.nodes[i].file_count = files;
-                self.nodes[i].subdir_count = dirs;
+                self.aggregate_dir(i);
             }
         }
 

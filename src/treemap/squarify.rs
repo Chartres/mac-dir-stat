@@ -26,8 +26,8 @@ pub fn layout(items: &[LayoutItem], bounds: &Rect) -> Vec<PlacedRect> {
     if total_size <= 0.0 {
         return vec![];
     }
-    let mut sorted: Vec<LayoutItem> = items.to_vec();
-    sorted.sort_by(|a, b| b.size.partial_cmp(&a.size).unwrap());
+    // Callers (treemap/mod.rs) pre-sort by size descending; no re-sort needed.
+    let sorted: Vec<LayoutItem> = items.to_vec();
     let mut result = Vec::with_capacity(sorted.len());
     let mut remaining = *bounds;
     let area = bounds.w * bounds.h;

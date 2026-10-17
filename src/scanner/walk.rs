@@ -2,8 +2,9 @@ use super::ScanProgress;
 use crate::scanner::tree::FileTree;
 use crossbeam_channel::Sender;
 use jwalk::WalkDir;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -134,6 +135,9 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut byte_count: u64 = 0;
     let mut error_count: usize = 0;
     let mut progress_counter: usize = 0;
+    // Track (dev, ino) to skip hard-linked duplicates; avoids double-counting
+    // files whose nlink > 1 that appear under multiple directories.
+    let mut seen_inodes: HashSet<(u64, u64)> = HashSet::new();
 
     let skip_paths = Arc::new(build_skip_paths());
     let walker_skip_paths = Arc::clone(&skip_paths);
@@ -193,6 +197,26 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             Ok(m) => m,
             Err(_) => {
                 error_count += 1;
+                // For a directory whose metadata is unreadable, still register a
+                // stub node so that any children walkdir yields for it are
+                // attached at the correct path rather than being reparented to
+                // find_closest_ancestor, which would give them a wrong full_path
+                // and break Trash/Reveal operations.
+                if entry.file_type().is_dir() {
+                    let d = path
+                        .components()
+                        .count()
+                        .saturating_sub(root.components().count()) as u16;
+                    let stub_id = tree.add_dir(
+                        parent_id,
+                        file_name_bytes,
+                        d < 2,
+                        SystemTime::UNIX_EPOCH,
+                        d,
+                    );
+                    dir_map.insert(path.to_path_buf(), stub_id);
+                    dir_count += 1;
+                }
                 continue;
             }
         };
@@ -211,7 +235,27 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             dir_map.insert(path.to_path_buf(), node_id);
             dir_count += 1;
         } else {
-            let size = metadata.len();
+            // De-duplicate hard links: only count size for the first path we
+            // see for a given (dev, ino) pair. The file still appears in the
+            // tree at its canonical position; it just contributes 0 bytes for
+            // subsequent hard links so totals don't overcount.
+            //
+            // NOTE: We use metadata.len() (logical EOF size), not
+            // stat.st_blocks * 512 (allocated disk blocks). This means:
+            //   • Sparse files (e.g. Docker.raw) are OVERCOUNTED — they appear
+            //     larger than the disk space they actually consume.
+            //   • APFS clones and transparently-compressed files may also be
+            //     overcounted because their physical footprint is smaller.
+            // Upgrade path: replace `metadata.len()` with
+            // `(metadata.blocks() * 512).max(metadata.len())` guarded by
+            // `metadata.blocks() > 0` to handle special files where st_blocks
+            // is zero (FIFOs, sockets, device nodes).
+            let size = if metadata.nlink() > 1 {
+                let key = (metadata.dev(), metadata.ino());
+                if seen_inodes.insert(key) { metadata.len() } else { 0 }
+            } else {
+                metadata.len()
+            };
             let extension_owned = path
                 .extension()
                 .map(|e| e.to_string_lossy().to_lowercase());
