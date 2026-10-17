@@ -175,7 +175,7 @@ impl ExtSortMode {
 
 pub enum PendingAction {
     ConfirmTrash(NodeId, PathBuf, u64),
-    ConfirmBatchTrash(Vec<NodeId>, u64),
+    ConfirmBatchTrash(Vec<(NodeId, PathBuf)>, u64),
     ConfirmEmptyTrash,
     RefreshSubtree(NodeId),
     ConfirmRelocate(Box<ui::relocate_window::RelocateDialog>),
@@ -392,21 +392,22 @@ impl App {
         }
     }
 
-    /// Trash a batch of nodes from a single confirmation. Failed individual
-    /// items are logged and skipped; successful ones are removed from the
-    /// tree. After all items are processed, recompute extension stats and
-    /// cleanup candidates once.
-    fn perform_batch_delete(&mut self, ids: Vec<NodeId>) {
+    /// Trash a batch of nodes from a single confirmation. Each item carries
+    /// the path the user picked; an id that no longer sits at that path is
+    /// skipped. Failed items are logged and skipped; successful ones are
+    /// removed from the tree, then stats and candidates are recomputed once.
+    fn perform_batch_delete(&mut self, items: Vec<(NodeId, PathBuf)>) {
         let mut succeeded: Vec<NodeId> = Vec::new();
         let mut failed: usize = 0;
+        let mut stale: usize = 0;
         let mut first_error = String::new();
         let mut freed: u64 = 0;
-        for id in &ids {
-            let (path, size) = match &self.state.tree {
-                Some(t) if t.is_alive(*id) => (t.full_path(*id), t.node(*id).size),
-                _ => continue,
+        for (id, path) in &items {
+            let Some(size) = self.state.size_if_at(*id, path) else {
+                stale += 1;
+                continue;
             };
-            if let Err(e) = trash_unless_protected(&path) {
+            if let Err(e) = trash_unless_protected(path) {
                 eprintln!("Batch trash failed for {}: {}", path.display(), e);
                 if failed == 0 {
                     first_error = e;
@@ -417,13 +418,25 @@ impl App {
             succeeded.push(*id);
             freed += size;
         }
+        let plural = |n: usize| if n == 1 { "" } else { "s" };
+        let mut msgs = Vec::new();
         if failed > 0 {
-            self.state.batch_error_msg = Some(format!(
+            msgs.push(format!(
                 "{} item{} could not be moved to Trash: {}",
                 failed,
-                if failed == 1 { "" } else { "s" },
+                plural(failed),
                 first_error,
             ));
+        }
+        if stale > 0 {
+            msgs.push(format!(
+                "{} item{} not moved: changed since you picked them; try again",
+                stale,
+                plural(stale),
+            ));
+        }
+        if !msgs.is_empty() {
+            self.state.batch_error_msg = Some(msgs.join("; "));
         }
         self.state.freed_this_session = self.state.freed_this_session.saturating_add(freed);
         if !succeeded.is_empty() {
@@ -559,28 +572,29 @@ impl App {
         }
     }
 
-    fn perform_delete(&mut self, node_id: NodeId) {
-        if let Some(tree) = &self.state.tree {
-            if !tree.is_alive(node_id) {
-                return;
+    /// Trash the node the confirmation showed, refusing when `node_id` no
+    /// longer sits at `path` (a refresh or rescan changed the tree since).
+    fn perform_delete(&mut self, node_id: NodeId, path: &std::path::Path) {
+        let Some(size) = self.state.size_if_at(node_id, path) else {
+            self.state.batch_error_msg = Some(format!(
+                "Not moved to Trash: {} changed since you picked it; try again",
+                path.display()
+            ));
+            return;
+        };
+        match trash_unless_protected(path) {
+            Ok(()) => {
+                self.state.freed_this_session = self.state.freed_this_session.saturating_add(size);
+                self.state.flywheel.conversion(serde_json::json!({
+                    "freed_bytes": size,
+                    "items": 1,
+                    "kind": "single",
+                }));
+                self.state.remove_trashed(&[node_id]);
             }
-            let path = tree.full_path(node_id);
-            let size = tree.node(node_id).size;
-            match trash_unless_protected(&path) {
-                Ok(()) => {
-                    self.state.freed_this_session =
-                        self.state.freed_this_session.saturating_add(size);
-                    self.state.flywheel.conversion(serde_json::json!({
-                        "freed_bytes": size,
-                        "items": 1,
-                        "kind": "single",
-                    }));
-                    self.state.remove_trashed(&[node_id]);
-                }
-                Err(e) => {
-                    eprintln!("Delete failed: {}", e);
-                    self.state.batch_error_msg = Some(format!("Could not move to Trash: {}", e));
-                }
+            Err(e) => {
+                eprintln!("Delete failed: {}", e);
+                self.state.batch_error_msg = Some(format!("Could not move to Trash: {}", e));
             }
         }
     }
@@ -643,6 +657,14 @@ impl AppState {
             // the app opens straight into a scan instead of a welcome screen.
             request_rescan: true,
         }
+    }
+
+    /// The node's size if `id` is alive and still at `path` in the current
+    /// tree. Trash confirmations go through this so an id never reaches a
+    /// path other than the one the user picked.
+    fn size_if_at(&self, id: NodeId, path: &std::path::Path) -> Option<u64> {
+        let t = self.tree.as_ref()?;
+        (t.is_alive(id) && t.full_path(id) == path).then(|| t.node(id).size)
     }
 
     /// Drop nodes that were just moved to Trash from the tree and from every
@@ -1087,8 +1109,8 @@ impl eframe::App for App {
                         "Empty Trash",
                     );
                 }
-                PendingAction::ConfirmBatchTrash(ids, total_size) => {
-                    let n = ids.len();
+                PendingAction::ConfirmBatchTrash(items, total_size) => {
+                    let n = items.len();
                     decision = confirm_dialog(
                         ctx,
                         "Confirm Batch Delete",
@@ -1110,9 +1132,11 @@ impl eframe::App for App {
             let action = self.state.pending_action.take();
             if confirmed {
                 match action {
-                    Some(PendingAction::ConfirmTrash(node_id, ..)) => self.perform_delete(node_id),
-                    Some(PendingAction::ConfirmBatchTrash(ids, _)) => {
-                        self.perform_batch_delete(ids)
+                    Some(PendingAction::ConfirmTrash(node_id, path, _)) => {
+                        self.perform_delete(node_id, &path)
+                    }
+                    Some(PendingAction::ConfirmBatchTrash(items, _)) => {
+                        self.perform_batch_delete(items)
                     }
                     Some(PendingAction::ConfirmEmptyTrash) => {
                         if let Err(e) = crate::platform::trash::empty_trash() {
@@ -1229,11 +1253,44 @@ mod tests {
         (tree, ids)
     }
 
+    fn paired(app: &App, ids: &[NodeId]) -> Vec<(NodeId, PathBuf)> {
+        let tree = app.state.tree.as_ref().unwrap();
+        ids.iter().map(|&id| (id, tree.full_path(id))).collect()
+    }
+
+    #[test]
+    fn confirmed_trash_refuses_an_id_that_moved_to_another_path() {
+        // The dialog was built for a; the id now resolves to x.
+        let (tree, ids) = tree_under(b"/System", &[b"x", b"a"]);
+        let mut app = test_app(tree);
+        let shown = app.state.tree.as_ref().unwrap().full_path(ids[1]);
+        app.perform_delete(ids[0], &shown);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.contains("changed since"), "status: {msg}");
+        app.state.batch_error_msg = None;
+        app.perform_batch_delete(vec![(ids[0], shown.clone()), (ids[0], shown)]);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.starts_with("2 items not moved"), "status: {msg}");
+        assert!(app.state.tree.as_ref().unwrap().is_alive(ids[0]));
+    }
+
+    #[test]
+    fn confirmed_trash_of_a_dead_id_says_so() {
+        let (tree, ids) = tree_under(b"/System", &[b"a"]);
+        let mut app = test_app(tree);
+        let p = app.state.tree.as_ref().unwrap().full_path(ids[0]);
+        app.state.tree.as_mut().unwrap().remove_node(ids[0]);
+        app.perform_delete(ids[0], &p);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.contains("changed since"), "status: {msg}");
+    }
+
     #[test]
     fn gui_trash_refuses_protected_path() {
         let (tree, ids) = tree_under(b"/Users/Shared", &[b"f"]);
         let mut app = test_app(tree);
-        app.perform_delete(ids[0]);
+        let p = app.state.tree.as_ref().unwrap().full_path(ids[0]);
+        app.perform_delete(ids[0], &p);
         let msg = app.state.batch_error_msg.clone().unwrap_or_default();
         assert!(
             msg.contains("/Users/Shared belongs to every user"),
@@ -1246,7 +1303,8 @@ mod tests {
     fn gui_batch_trash_refuses_protected_paths() {
         let (tree, ids) = tree_under(b"/System", &[b"a", b"b"]);
         let mut app = test_app(tree);
-        app.perform_batch_delete(ids.clone());
+        let items = paired(&app, &ids);
+        app.perform_batch_delete(items);
         let msg = app.state.batch_error_msg.clone().unwrap_or_default();
         assert!(msg.contains("macOS system path"), "status: {msg}");
         assert!(msg.starts_with("2 items"), "status: {msg}");
@@ -1311,6 +1369,9 @@ mod tests {
             .unwrap();
         app.poll_scan();
         assert!(app.state.pending_action.is_none(), "stale dialog survived");
-        assert!(app.state.selected_node.is_none(), "stale selection survived");
+        assert!(
+            app.state.selected_node.is_none(),
+            "stale selection survived"
+        );
     }
 }

@@ -101,16 +101,16 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                             let enabled = selected_count > 0;
                             ui.add_enabled_ui(enabled, |ui| {
                                 if widgets::danger_button(ui, &label).clicked() {
-                                    let ids: Vec<crate::scanner::tree::NodeId> = state
+                                    let items: Vec<_> = state
                                         .cleanup_candidates
                                         .iter()
                                         .filter(|c| state.cleanup_selected.contains(&c.node_id))
-                                        .map(|c| c.node_id)
+                                        .map(|c| (c.node_id, c.path.clone()))
                                         .collect();
-                                    if !ids.is_empty() {
+                                    if !items.is_empty() {
                                         state.pending_action = Some(
                                             crate::app::PendingAction::ConfirmBatchTrash(
-                                                ids,
+                                                items,
                                                 selected_total,
                                             ),
                                         );
