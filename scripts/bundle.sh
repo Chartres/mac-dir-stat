@@ -28,9 +28,9 @@ sed "s/@VERSION@/$VERSION/g" "$ROOT/macos/Info.plist.in" > "$APP/Contents/Info.p
 # Without it the build is unsigned exactly as before — local dev stays friction-free.
 if [ -n "${CODESIGN_IDENTITY:-}" ]; then
     echo "Signing with identity: $CODESIGN_IDENTITY"
-    codesign --force --options runtime --timestamp \
+    codesign --force --options runtime --timestamp --entitlements "$ROOT/macos/entitlements.plist" \
         --sign "$CODESIGN_IDENTITY" "$APP/Contents/MacOS/$BIN_NAME"
-    codesign --force --options runtime --timestamp \
+    codesign --force --options runtime --timestamp --entitlements "$ROOT/macos/entitlements.plist" \
         --sign "$CODESIGN_IDENTITY" "$APP"
     codesign --verify --strict --verbose=2 "$APP"
 else

@@ -4,29 +4,68 @@ All notable changes to MacDirStat are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.6.0] — 2026-10-17
 
 ### Added
-- **Move to External Disk…** in the right-click menu: copy to another volume under
-  `MacDirStat Offload/<original path>`, verify file count and bytes, trash the original, and
-  optionally leave a symlink. Refuses system paths, same-disk moves, too little space, and
-  packages or symlinks on exFAT/FAT.
-- **`mac-dir-stat serve`**: a headless local server with a phone-friendly web UI, a versioned
-  REST API (`/api/v1`, OpenAPI 3.1) and an MCP endpoint (`/mcp`), all behind a bearer token.
-  Trash and move plans are reviewed and approved by you. AI clients can propose plans but cannot run them.
+- **Move to External Disk…** in the right-click menu. It copies the item with `ditto` to
+  `<volume>/MacDirStat Offload/<original absolute path>`, flushes the copy to disk, compares it
+  byte for byte, then moves the original to the Trash and, if you ask, leaves a symlink. A failed
+  move deletes only its temporary copy. One move runs at a time.
+- Moves refuse, with the reason shown: system folders, `/Users/Shared`, other users' home folders,
+  whole volumes, your home folder and `~/Library` themselves (checked case-insensitively); a
+  destination on the same disk, inside the item, already existing or without enough room; and
+  exFAT/FAT limits (app bundles and packages, symlinks, `._*` files, and on FAT32 files of 4 GiB
+  or more).
+- Moves and approved plans trash items through NSFileManager, so they work without a window.
+  Finder's Put Back does not work for those items.
+- **`mac-dir-stat serve [--bind IP] [--port 7878] [--root PATH]`** runs without a window and serves
+  a phone-friendly web page, a REST API under `/api/v1` (OpenAPI 3.1 at `/api/v1/openapi.json`) and
+  an MCP endpoint at `/mcp`. It listens on loopback unless you pass `--bind`.
+- **Plans.** Trash and move requests become a plan, and nothing runs until you approve it. Each
+  operation is checked again just before it runs, and a plan with errors cannot be approved. Plans
+  live in memory; the newest 200 finished ones are kept.
+- Two tokens in `~/Library/Application Support/MacDirStat/` (mode 0600): `server-token` can do
+  everything; `mcp-token` can read and propose plans, and gets 403 on approve, reject and the REST
+  rescan. Delete a file to rotate its token. The token is printed only when stdout is a terminal,
+  and the page refuses to be framed.
+- MCP tools: `list_volumes`, `scan`, `get_tree`, `top_items`, `find`, `cleanup_suggestions`,
+  `propose_plan`, `list_plans`, `get_plan`.
+- **Copy summary for any chat** and **Create plan from JSON** in the web page, for AI chats that
+  do not speak MCP.
+
+### Changed
+- The README and the website now say that release builds send anonymous usage counts unless you
+  turn them off.
 
 ### Fixed
-- Moves: case-folded paths (`/users/me/library`) no longer slip past the protected-path rules;
-  `/Users/Shared`, other users' homes and whole volumes are protected; the home folder comes from
-  the password database, not `$HOME`.
-- Moves copy into a temporary folder, flush it to disk, compare it byte for byte, and only then
-  rename it into place. A failed or racing move can no longer delete a verified copy. Only one move
-  or plan runs at a time.
-- exFAT/FAT refuses sources containing real `._*` files; FAT32 refuses files of 4 GiB or more.
-- The server has a separate AI token (`mcp-token`) that cannot approve or reject plans. Plans store
-  and run the normalized path, and items are trashed via NSFileManager (works headless).
-- The token is no longer printed when stdout is not a terminal, the page refuses framing, a crashed
-  request no longer wedges the server, and only the newest 200 finished plans are kept.
+- Move to Trash refuses protected paths such as `/System`, `/usr`, `/Users/Shared` and other users'
+  home folders, and the status bar says why.
+- Move to Trash is no longer offered for the scan root or for the Free Space and Hidden / Skipped
+  blocks, in the menu or through ⌘⌫.
+- A confirmed trash acts only on the path shown in the dialog. If a rescan moved or removed that
+  item, it refuses and says so. A rescan also clears Cleanup selections and open confirmations,
+  and a full scan drops a subtree refresh that was still running.
+- ⌘⌫ and ↩ are ignored while you type in a text field, and ⌘⌫ is ignored while a confirmation is
+  open. The confirmation shows the full path instead of a shortened name.
+- Folders whose metadata cannot be read, and entries whose parent is missing, are no longer
+  attached to the wrong folder. That could point Trash or Reveal at the wrong path.
+- A move that finishes after a rescan removes the moved item from the treemap, not whichever item
+  now has its old place.
+- Cleanup Suggestions: iCloud Drive is no longer suggested, because it can hold files that are not
+  uploaded yet. `target` counts only next to a `Cargo.toml`. Path rules match whole folder names,
+  so `MyLibrary/Caches` is not `Library/Caches`. The Trash and the scan root are never suggested.
+  Gradle, Maven and Docker entries warn about saved credentials and named volumes. Each category
+  header appears once.
+- Hard-linked files are counted once, so folder totals no longer exceed the space used.
+- Choosing "(none)" in the file-type list highlights files without an extension, and the
+  file-type filter resets on a new scan.
+- Trashing the folder you zoomed into resets the treemap instead of leaving it blank.
+- Fixed crashes on names with non-ASCII characters and when hovering after a rescan.
+- Trash, batch trash and Empty Trash errors show in the status bar and stay until the next scan.
+- The spinner stops if the scan thread crashes.
+- Usage-count uploads no longer leave zombie `curl` processes, and the status bar no longer walks
+  the whole tree every frame to count files.
+- `cargo test` no longer overwrites the saved scan folder in `~/Library/Application Support`.
 
 ## [0.5.1] — 2026-06-18
 

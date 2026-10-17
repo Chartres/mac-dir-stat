@@ -2,7 +2,7 @@
 
 Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/emilk/egui).
 
-**Website:** [chartres.github.io/mac-dir-stat](https://chartres.github.io/mac-dir-stat/) · **Changelog:** [CHANGELOG.md](CHANGELOG.md)
+**Website:** [mac-dir-stat.pages.dev](https://mac-dir-stat.pages.dev/) · **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
 ![MacDirStat — a treemap of an entire macOS disk, with directory tree and file-type breakdown](docs/screenshot.png)
 
@@ -30,7 +30,7 @@ Press `?` at any time for the keyboard shortcut list.
 
 ### Privacy
 
-MacDirStat can send **anonymous, cookieless** usage counts (app opens, scans run, space reclaimed — never file names or paths) to help prioritize features. It is **off by default** unless a release build is configured with an analytics endpoint, and you can always turn it off under **Help → Privacy**, with `MACDIRSTAT_NO_TELEMETRY=1`, or by leaving the build unconfigured.
+Release builds (the GitHub DMG and the Homebrew cask) send **anonymous, cookieless** usage counts: app opens, scans run and space reclaimed, never file names or paths. They are **on unless you turn them off**: press `?` and tick **Don't send anonymous usage data** under **Privacy**, or set `MACDIRSTAT_NO_TELEMETRY=1`. Builds from source send nothing, because they have no analytics endpoint.
 
 ## Compared to
 
@@ -105,9 +105,17 @@ On exFAT, Unix permissions and owners are not kept and extended attributes are s
 ## Server, API and your own AI
 
 ```sh
-mac-dir-stat serve [--bind 127.0.0.1] [--port 7878] [--root /]
-# from the app bundle: /Applications/MacDirStat.app/Contents/MacOS/mac-dir-stat serve
+/Applications/MacDirStat.app/Contents/MacOS/mac-dir-stat serve [--bind 127.0.0.1] [--port 7878] [--root /]
 ```
+
+The command-line tool is the app's own binary. The Homebrew cask from 0.6.0 on also links it as
+`mac-dir-stat`; with the DMG, or on an older cask, use the full path above. From a source checkout:
+`cargo run --release -- serve`.
+
+**Full Disk Access.** When `serve` runs from a shell, macOS checks Full Disk Access for the
+terminal app (Terminal, iTerm, …), not for MacDirStat. Over SSH, turn on **Allow full disk access
+for remote users** under System Settings → General → Sharing → Remote Login (ⓘ). Without it,
+protected folders show up as skipped.
 
 This runs without a window. It scans `--root` and prints the web UI address. In a terminal the
 address includes the token (`http://127.0.0.1:7878/#token=…`); otherwise it prints where the token
@@ -117,15 +125,18 @@ disks and free space, the largest folders and files, cleanup groups, and a find 
 **plan**. The plan lists every item with its size, destination, errors and warnings. Nothing runs
 until you press **Approve**.
 
-To reach it from another device, for example over Tailscale, bind explicitly: `--bind 0.0.0.0`
-or `--bind <tailscale-ip>`. The default is loopback only.
+It listens on `127.0.0.1` only, so a phone cannot reach it until you pass `--bind`. Over
+Tailscale, bind to the Mac's Tailscale IP (`--bind 100.x.y.z`; `tailscale ip -4` shows it) and
+open the printed `http://100.x.y.z:7878/#token=…` link on the phone. `--bind 0.0.0.0` exposes it
+to every network the Mac is on.
 
 **Auth.** Every `/api` and `/mcp` request needs `Authorization: Bearer <token>`. There are two
 tokens, generated on first run in `~/Library/Application Support/MacDirStat/` (mode 0600):
 
 - `server-token` (admin) can do everything, including approve and reject. It is for you and the web page.
-- `mcp-token` (AI) works on `/mcp`, on REST reads and on `POST /plans`. Approve, reject and rescan
-  return 403. Give this one to AI clients.
+- `mcp-token` (AI) can read everything, propose plans, and start a rescan through the MCP `scan`
+  tool. It cannot approve, reject or run a plan: those requests, and the REST rescan
+  (`POST /api/v1/scan`), return 403. Give this one to AI clients.
 
 Delete a file to rotate its token.
 
@@ -171,7 +182,7 @@ Build a universal `.app` + DMG:
 ./scripts/dmg.sh      # produces dist/MacDirStat-<version>.dmg
 ```
 
-Tag-driven release: pushing `vX.Y.Z` triggers `.github/workflows/release.yml`, which builds a universal DMG and publishes it to GitHub Releases.
+Tag-driven release: pushing `vX.Y.Z` (it must match the version in `Cargo.toml`) triggers `.github/workflows/release.yml`, which builds a signed, notarized universal DMG, publishes it to GitHub Releases and bumps the Homebrew cask.
 
 ## Architecture
 
@@ -183,4 +194,4 @@ Tag-driven release: pushing `vX.Y.Z` triggers `.github/workflows/release.yml`, w
 - `src/plan.rs` — plans of trash/move ops and their approval state machine.
 - `src/server/` — `serve`: HTTP routing and auth (`mod.rs`), REST handlers (`api.rs`), MCP (`mcp.rs`), the embedded web page and OpenAPI document.
 - `src/state.rs` — persisted UI state (scan root, color mode).
-- `src/flywheel.rs` — optional anonymous usage analytics (off by default; see [Privacy](#privacy)).
+- `src/flywheel.rs` — anonymous usage counts, on in release builds unless turned off (see [Privacy](#privacy)).

@@ -7,7 +7,7 @@
 <meta name="description" content="A free, native macOS disk-usage visualizer. Treemap of your whole drive, then one-click cleanup of regenerable build junk. Open source, signed, notarized.">
 <meta property="og:title" content="MacDirStat">
 <meta property="og:description" content="See what's eating your Mac's disk — then clear it. Free, native, open source.">
-<meta property="og:image" content="https://macdirstat.dravec.org/screenshot.png">
+<meta property="og:image" content="https://mac-dir-stat.pages.dev/screenshot.png">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -137,7 +137,9 @@
     <div><h3>Folder tree + file types</h3><p>A synced directory list and a per-extension breakdown with sizes, counts, and sort controls. Click the treemap to jump to any location.</p></div>
     <div><h3>Fast, native, Rust</h3><p>A parallel filesystem walk with live progress. No Electron, no web view — a real Mac app that opens straight into a scan.</p></div>
     <div><h3>One permission, once</h3><p>Grant Full Disk Access a single time and the per-folder prompts stop. Protected areas you skip just show as <code>Hidden / Skipped</code>.</p></div>
-    <div><h3>Private by default</h3><p>No account, no cloud. Optional usage counts are anonymous, off by default, and never include a file name or path.</p></div>
+    <div><h3>Move to another disk</h3><p>Right-click a folder and send it to an external drive. MacDirStat copies it, checks the copy byte for byte, then moves the original to the Trash. It can leave a symlink so old paths still work.</p></div>
+    <div><h3>Your own AI, your approval</h3><p><code>mac-dir-stat serve</code> gives you a page for your phone, a REST API and an MCP endpoint. Your AI looks around and proposes what to trash or move. Nothing runs until you approve it.</p></div>
+    <div><h3>No account</h3><p>Release builds send anonymous usage counts: app opens, scans and space freed, never a file name or path. One checkbox under Privacy (press <code>?</code>) turns them off.</p></div>
   </div>
 
   <p class="isnt">Not a cleaner that nags, not a subscription, not a menu-bar
@@ -151,7 +153,7 @@
     <a href="https://github.com/Chartres/mac-dir-stat/releases/latest">Releases</a>
     <a href="https://github.com/Chartres/mac-dir-stat/issues">Report an issue</a>
   </div>
-  <div>Free &amp; open-source under the MIT license. No telemetry by default, no account, no lock-in.</div>
+  <div>Free &amp; open-source under the MIT license. No account, no lock-in. Anonymous usage counts can be turned off in the app.</div>
 </footer>
 
 </body>

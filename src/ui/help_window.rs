@@ -146,8 +146,9 @@ fn feedback_section(ui: &mut egui::Ui, state: &mut AppState) {
     }
 }
 
-/// Telemetry disclosure + opt-out toggle. Honest, first-party, off-by-default
-/// unless a release build bakes in the analytics endpoint.
+/// Telemetry disclosure + opt-out toggle. Release builds bake in the analytics
+/// endpoint and send until the user ticks this box (or sets
+/// MACDIRSTAT_NO_TELEMETRY=1); source builds have no endpoint and send nothing.
 fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
     ui.label(
         RichText::new("Privacy")

@@ -39,16 +39,17 @@ notability or signing gate and works today.
 
 ---
 
-## Track A — unblock signing (prerequisite, do first)
+## Track A — unblock signing (done in v0.5.1)
 
-- [ ] Enroll / use an **Apple Developer ID** certificate; sign the `.app` in
-      `scripts/bundle.sh` (`codesign --deep --options runtime`).
-- [ ] **Notarize** the DMG (`notarytool submit … --wait`) and **staple** it.
-- [ ] Verify on an Apple-Silicon Mac with Gatekeeper on: download → open, **no**
+- [x] Use an **Apple Developer ID** certificate; `scripts/bundle.sh` signs the
+      binary and then the `.app` with the hardened runtime and
+      `macos/entitlements.plist`.
+- [x] **Notarize** the DMG (`notarytool submit … --wait`) and **staple** it.
+- [x] Verify on an Apple-Silicon Mac with Gatekeeper on: download → open, **no**
       `xattr` workaround needed.
-- [ ] Update the README install section: drop the "unsigned / strip quarantine"
+- [x] Update the README install section: drop the "unsigned / strip quarantine"
       caveat once notarized.
-- [ ] Wire signing secrets into `.github/workflows/release.yml` so every tagged
+- [x] Wire signing secrets into `.github/workflows/release.yml` so every tagged
       release ships notarized.
 
 This also *improves* the launch: "unsigned, run `xattr -dr`…" is a real
@@ -77,7 +78,20 @@ gh secret set FLYWHEEL_SUPABASE_KEY -R Chartres/mac-dir-stat -b "<publishable-ke
 ```
 
 After the secrets are set, the next `git tag vX.Y.Z && git push --tags` ships a
-notarized DMG and bumps the cask automatically.
+notarized DMG. The tag must equal `v` + the `Cargo.toml` version, or the workflow
+stops before building.
+
+The cask bump needs one more secret. Up to v0.5.1 `HOMEBREW_TAP_TOKEN` was never
+set, so the workflow skipped the bump and the cask was edited by hand. From
+v0.6.0 the workflow pushes to the tap with a write deploy key on
+`Chartres/homebrew-mac-dir-stat`, whose private half is the
+`HOMEBREW_TAP_DEPLOY_KEY` secret (set 2026-10-17). To rotate it:
+
+```sh
+ssh-keygen -t ed25519 -N '' -C mac-dir-stat-release -f tap_key
+gh repo deploy-key add tap_key.pub -R Chartres/homebrew-mac-dir-stat --allow-write -t mac-dir-stat-release
+gh secret set HOMEBREW_TAP_DEPLOY_KEY -R Chartres/mac-dir-stat < tap_key && rm tap_key tap_key.pub
+```
 
 ---
 
@@ -86,23 +100,23 @@ notarized DMG and bumps the cask automatically.
 Ordered by leverage. Homebrew's metrics reward sustained interest, so favor
 evergreen discovery over one-day spikes.
 
-1. **A real screenshot + demo GIF in the README.** Non-negotiable. A visual tool
+1. **A real screenshot + demo GIF in the README.** (Screenshot ✅, GIF not yet.) Non-negotiable. A visual tool
    with a placeholder image is invisible. This gates everything else.
 2. **AlternativeTo listing** as a WinDirStat / DaisyDisk / GrandPerspective
    alternative. Captures the exact search "WinDirStat for Mac" indefinitely.
 3. **Awesome-list PRs:** `awesome-macos`, `awesome-rust`, `awesome-egui`. Each is
    a durable referral and a small star drip.
-4. **GitHub repo topics** (`macos`, `treemap`, `disk-usage`, `windirstat`,
+4. ✅ **GitHub repo topics** (`macos`, `treemap`, `disk-usage`, `windirstat`,
    `rust`, `egui`) → surfaces in GitHub topic browsing and search.
 5. **The SHARING.md launch waves** — r/macapps, r/DataHoarder, r/rust, Show HN.
    One bespoke post per venue, Pavol signs each.
-6. **Comparison content:** a short "MacDirStat vs DaisyDisk vs GrandPerspective"
+6. ✅ **Comparison content:** a short "MacDirStat vs DaisyDisk vs GrandPerspective"
    table in the README (honest: DaisyDisk is more polished/paid; GrandPerspective
    is older/unmaintained-ish; MacDirStat is free + actively developed + does
    one-click cleanup). Comparison pages are what people link to.
-7. **Ship visibly:** a tight CHANGELOG and a steady release cadence signal an
+7. ✅ **Ship visibly:** a tight CHANGELOG and a steady release cadence signal an
    alive project (Homebrew and humans both weight "maintained").
-8. **A tiny product page** (GitHub Pages) — also unlocks Homebrew's
+8. ✅ **A tiny product page** (Cloudflare Pages at `mac-dir-stat.pages.dev`; the older GitHub Pages copy is still up) — also unlocks Homebrew's
    "has its own website" notability waiver.
 
 ### What NOT to do
@@ -124,7 +138,7 @@ reviewers anyway.
 
 Track stars/forks/watchers over time in the flywheel KPI pull; the in-app
 flywheel SDK (`src/flywheel.rs`) covers the *usage* side (opens, scans,
-space reclaimed) once the analytics endpoint is baked into the release.
+space reclaimed); release builds bake in the analytics endpoint.
 
 ---
 
