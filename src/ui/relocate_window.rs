@@ -2,14 +2,12 @@
 //! free space and any refusal reasons before anything is copied.
 
 use crate::relocate::{self, Measure, Volume};
-use crate::scanner::tree::NodeId;
 use crate::ui::{theme, widgets};
 use crossbeam_channel::Receiver;
 use egui::{Color32, RichText};
 use std::path::PathBuf;
 
 pub struct RelocateDialog {
-    pub node: NodeId,
     pub name: String,
     pub path: PathBuf,
     volumes: Vec<Volume>,
@@ -21,14 +19,13 @@ pub struct RelocateDialog {
 
 impl RelocateDialog {
     /// Lists destination volumes and measures the source off the UI thread.
-    pub fn new(node: NodeId, name: String, path: PathBuf) -> Self {
+    pub fn new(name: String, path: PathBuf) -> Self {
         let (tx, rx) = crossbeam_channel::bounded(1);
         let p = path.clone();
         std::thread::spawn(move || {
             let _ = tx.send(relocate::measure(&p, false));
         });
         RelocateDialog {
-            node,
             name,
             path,
             volumes: relocate::list_volumes()

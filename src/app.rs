@@ -97,8 +97,10 @@ pub struct AppState {
     // toolbar affordance. Rechecked on each scan (see start_scan).
     pub has_fda: bool,
 
-    // "Move to External Disk…": the running copy job and its last result.
-    pub relocate_job: Option<(NodeId, String, Receiver<Result<crate::relocate::Outcome, String>>)>,
+    // "Move to External Disk…": the running copy job (source path, display
+    // name, result) and its last result. Keyed by path, not NodeId: a rescan
+    // can finish before the copy does, and NodeIds don't survive a rescan.
+    pub relocate_job: Option<(PathBuf, String, Receiver<Result<crate::relocate::Outcome, String>>)>,
     pub relocate_message: Option<String>,
 }
 
@@ -495,23 +497,26 @@ impl App {
         }
     }
 
-    fn start_relocate(&mut self, node: NodeId, name: String, path: PathBuf, volume: PathBuf, link: bool) {
+    fn start_relocate(&mut self, name: String, path: PathBuf, volume: PathBuf, link: bool) {
         let (tx, rx) = crossbeam_channel::bounded(1);
+        let src = path.clone();
         std::thread::spawn(move || {
             let _running = crate::relocate::EXEC_LOCK
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            let _ = tx.send(crate::relocate::relocate(&path, &volume, link));
+            let _ = tx.send(crate::relocate::relocate(&src, &volume, link));
         });
         self.state.relocate_message = None;
-        self.state.relocate_job = Some((node, name, rx));
+        self.state.relocate_job = Some((path, name, rx));
     }
 
-    /// Applies a finished move: the node leaves the tree like a trash does.
+    /// Applies a finished move: whatever node the current tree has at the
+    /// source path leaves it like a trash does. Looked up by path, so a tree
+    /// rebuilt by a rescan mid-copy loses the right node or none.
     fn poll_relocate(&mut self) {
-        let Some((node, name, rx)) = &self.state.relocate_job else { return };
+        let Some((path, name, rx)) = &self.state.relocate_job else { return };
         let Ok(result) = rx.try_recv() else { return };
-        let (node, name) = (*node, name.clone());
+        let (path, name) = (path.clone(), name.clone());
         self.state.relocate_job = None;
         match result {
             Ok(o) => {
@@ -521,24 +526,14 @@ impl App {
                     ui::theme::format_size(o.bytes),
                     o.dest.display()
                 ));
-                if let Some(tree) = &mut self.state.tree {
-                    if tree.is_alive(node) {
-                        let size = tree.node(node).size;
-                        self.state.freed_this_session = self.state.freed_this_session.saturating_add(size);
-                        tree.remove_node(node);
-                        let root = tree.root();
-                        self.state.extension_stats = tree.collect_extensions(root);
-                        let tree_ref = &*tree;
-                        self.state.cleanup_candidates.retain(|c| tree_ref.is_alive(c.node_id));
-                    }
+                let moved = self.state.tree.as_ref().and_then(|t| {
+                    let id = t.find_path(&path)?;
+                    Some((id, t.node(id).size))
+                });
+                if let Some((id, size)) = moved {
+                    self.state.freed_this_session = self.state.freed_this_session.saturating_add(size);
+                    self.state.remove_trashed(&[id]);
                 }
-                if self.state.selected_node == Some(node) {
-                    self.state.selected_node = None;
-                }
-                if self.state.hovered_node == Some(node) {
-                    self.state.hovered_node = None;
-                }
-                self.state.treemap_dirty = true;
             }
             Err(e) => {
                 eprintln!("Move failed: {e}");
@@ -1037,7 +1032,7 @@ impl eframe::App for App {
         let mut relocate_choice = None;
         if let Some(PendingAction::ConfirmRelocate(d)) = &mut self.state.pending_action {
             relocate_choice = ui::relocate_window::show(ctx, d)
-                .map(|c| (c, d.node, d.name.clone(), d.path.clone()));
+                .map(|c| (c, d.name.clone(), d.path.clone()));
         }
         if let Some(action) = &self.state.pending_action {
             match action {
@@ -1083,10 +1078,10 @@ impl eframe::App for App {
                 }
             }
         }
-        if let Some((choice, node, name, path)) = relocate_choice {
+        if let Some((choice, name, path)) = relocate_choice {
             self.state.pending_action = None;
             if let ui::relocate_window::Choice::Move { volume, link } = choice {
-                self.start_relocate(node, name, path, volume, link);
+                self.start_relocate(name, path, volume, link);
             }
         }
         if let Some(confirmed) = decision {
@@ -1221,5 +1216,32 @@ mod tests {
         assert!(msg.starts_with("2 items"), "status: {msg}");
         let tree = app.state.tree.as_ref().unwrap();
         assert!(ids.iter().all(|&id| tree.is_alive(id)));
+    }
+
+    #[test]
+    fn finished_move_after_rescan_hits_the_moved_path_only() {
+        // Moving /r/…/a; meanwhile a rescan builds a tree where a's old
+        // NodeId belongs to x and a sits at another id.
+        let (old, old_ids) = tree_under(b"/r", &[b"a"]);
+        let mut app = test_app(old);
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        let src = app.state.tree.as_ref().unwrap().full_path(old_ids[0]);
+        app.state.relocate_job = Some((src, "a".into(), rx));
+        app.start_scan();
+        let (new, new_ids) = tree_under(b"/r", &[b"x", b"a"]);
+        assert_eq!(new_ids[0], old_ids[0]);
+        app.state.tree = Some(new);
+        tx.send(Ok(crate::relocate::Outcome {
+            dest: PathBuf::from("/Volumes/E/MacDirStat Offload/r/a"),
+            bytes: 10,
+            files: 1,
+            linked: false,
+        }))
+        .unwrap();
+        app.poll_relocate();
+        let tree = app.state.tree.as_ref().unwrap();
+        assert!(tree.is_alive(new_ids[0]), "x was removed in place of a");
+        assert!(!tree.is_alive(new_ids[1]), "a is still shown after its move");
+        assert!(app.state.relocate_job.is_none());
     }
 }

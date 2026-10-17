@@ -104,7 +104,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
             .clicked()
         {
             state.pending_action = Some(PendingAction::ConfirmRelocate(Box::new(
-                crate::ui::relocate_window::RelocateDialog::new(node, name.clone(), path.clone()),
+                crate::ui::relocate_window::RelocateDialog::new(name.clone(), path.clone()),
             )));
             ui.close_menu();
         }
