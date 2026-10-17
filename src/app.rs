@@ -195,55 +195,11 @@ impl App {
             crate::platform::fda::mark_prompted();
             !has_fda
         };
+        let mut state = AppState::new(scan_root, has_persisted_root, color_mode, flywheel);
+        state.has_fda = has_fda;
+        state.show_fda_prompt = show_fda_prompt;
         App {
-            state: AppState {
-                tree: None,
-                scan_root,
-                scan_receiver: None,
-                scan_progress: ScanProgressInfo::default(),
-                scan_start: None,
-                scan_duration_secs: 0.0,
-                partial_refresh_receiver: None,
-                extension_stats: vec![],
-                colored_rects: vec![],
-                dir_rects: vec![],
-                treemap_dirty: true,
-                color_mode,
-                view_root: None,
-                zoom_stack: vec![],
-                selected_node: None,
-                hovered_node: None,
-                hovered_dir: None,
-                selected_extension: None,
-                scroll_dir_tree_to: None,
-                context_menu_target: None,
-                cleanup_window_open: false,
-                cleanup_candidates: Vec::new(),
-                cleanup_selected: std::collections::HashSet::new(),
-                help_window_open: false,
-                search_active: false,
-                search_query: String::new(),
-                pending_action: None,
-                last_screen_size: egui::Vec2::ZERO,
-                last_canvas_size: egui::Vec2::ZERO,
-                has_persisted_root,
-                freed_this_session: 0,
-                batch_error_msg: None,
-                dir_sort: DirSortMode::Size,
-                ext_sort: ExtSortMode::Size,
-                flywheel,
-                feedback_choice: None,
-                feedback_text: String::new(),
-                feedback_sent: false,
-                show_fda_prompt,
-                has_fda,
-                relocate_job: None,
-                relocate_message: None,
-                // Auto-scan on launch (default target = whole disk via the `/`
-                // fallback above). The first update() frame starts the scan, so
-                // the app opens straight into a scan instead of a welcome screen.
-                request_rescan: true,
-            },
+            state,
             theme_applied: false,
         }
     }
@@ -614,6 +570,64 @@ impl App {
 }
 
 impl AppState {
+    /// Fresh state with no tree. Free of side effects (no disk, no
+    /// analytics), so tests can build one; `App::new` adds the FDA flags.
+    pub fn new(
+        scan_root: PathBuf,
+        has_persisted_root: bool,
+        color_mode: ColorMode,
+        flywheel: crate::flywheel::Flywheel,
+    ) -> Self {
+        AppState {
+            tree: None,
+            scan_root,
+            scan_receiver: None,
+            scan_progress: ScanProgressInfo::default(),
+            scan_start: None,
+            scan_duration_secs: 0.0,
+            partial_refresh_receiver: None,
+            extension_stats: vec![],
+            colored_rects: vec![],
+            dir_rects: vec![],
+            treemap_dirty: true,
+            color_mode,
+            view_root: None,
+            zoom_stack: vec![],
+            selected_node: None,
+            hovered_node: None,
+            hovered_dir: None,
+            selected_extension: None,
+            scroll_dir_tree_to: None,
+            context_menu_target: None,
+            cleanup_window_open: false,
+            cleanup_candidates: Vec::new(),
+            cleanup_selected: std::collections::HashSet::new(),
+            help_window_open: false,
+            search_active: false,
+            search_query: String::new(),
+            pending_action: None,
+            last_screen_size: egui::Vec2::ZERO,
+            last_canvas_size: egui::Vec2::ZERO,
+            has_persisted_root,
+            freed_this_session: 0,
+            batch_error_msg: None,
+            dir_sort: DirSortMode::Size,
+            ext_sort: ExtSortMode::Size,
+            flywheel,
+            feedback_choice: None,
+            feedback_text: String::new(),
+            feedback_sent: false,
+            show_fda_prompt: false,
+            has_fda: false,
+            relocate_job: None,
+            relocate_message: None,
+            // Auto-scan on launch (default target = whole disk via the `/`
+            // fallback in App::new). The first update() frame starts the scan, so
+            // the app opens straight into a scan instead of a welcome screen.
+            request_rescan: true,
+        }
+    }
+
     /// Drop nodes that were just moved to Trash from the tree and from every
     /// piece of state that might still reference them.
     fn remove_trashed(&mut self, ids: &[NodeId]) {
