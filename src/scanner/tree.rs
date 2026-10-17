@@ -28,7 +28,10 @@ impl StringArena {
     pub fn intern_bytes(&mut self, b: &[u8]) -> StrRef {
         let offset = self.buf.len() as u32;
         self.buf.extend_from_slice(b);
-        StrRef { offset, len: b.len() as u32 }
+        StrRef {
+            offset,
+            len: b.len() as u32,
+        }
     }
 
     pub fn intern_str(&mut self, s: &str) -> StrRef {
@@ -73,8 +76,13 @@ impl Node {
 
 #[derive(Debug)]
 pub enum NodeKind {
-    File { extension: Option<StrRef> },
-    Directory { children: Vec<NodeId>, expanded: bool },
+    File {
+        extension: Option<StrRef>,
+    },
+    Directory {
+        children: Vec<NodeId>,
+        expanded: bool,
+    },
 }
 
 impl Node {
@@ -137,9 +145,7 @@ impl FileTree {
 
     pub fn extension(&self, id: NodeId) -> Option<&str> {
         match &self.nodes[id].kind {
-            NodeKind::File { extension: Some(r) } => {
-                std::str::from_utf8(self.strings.get(*r)).ok()
-            }
+            NodeKind::File { extension: Some(r) } => std::str::from_utf8(self.strings.get(*r)).ok(),
             _ => None,
         }
     }
@@ -277,10 +283,8 @@ impl FileTree {
         let mut current = parent;
         while let Some(pid) = current {
             self.nodes[pid].size = self.nodes[pid].size.saturating_sub(size);
-            self.nodes[pid].file_count =
-                self.nodes[pid].file_count.saturating_sub(del_files);
-            self.nodes[pid].subdir_count =
-                self.nodes[pid].subdir_count.saturating_sub(del_dirs);
+            self.nodes[pid].file_count = self.nodes[pid].file_count.saturating_sub(del_files);
+            self.nodes[pid].subdir_count = self.nodes[pid].subdir_count.saturating_sub(del_dirs);
             current = self.nodes[pid].parent;
         }
 
@@ -455,9 +459,8 @@ impl FileTree {
             let name_bytes = source.strings.get(src_node.name).to_vec();
             match &src_node.kind {
                 NodeKind::File { extension } => {
-                    let ext_owned: Option<String> = extension.map(|r| {
-                        String::from_utf8_lossy(source.strings.get(r)).into_owned()
-                    });
+                    let ext_owned: Option<String> = extension
+                        .map(|r| String::from_utf8_lossy(source.strings.get(r)).into_owned());
                     self.add_file(
                         dst_parent,
                         &name_bytes,
@@ -468,13 +471,8 @@ impl FileTree {
                     );
                 }
                 NodeKind::Directory { children, .. } => {
-                    let new_id = self.add_dir(
-                        dst_parent,
-                        &name_bytes,
-                        depth < 2,
-                        src_node.modified,
-                        depth,
-                    );
+                    let new_id =
+                        self.add_dir(dst_parent, &name_bytes, depth < 2, src_node.modified, depth);
                     for &c in children {
                         stack.push((c, new_id, depth.saturating_add(1)));
                     }

@@ -47,7 +47,14 @@ fn find_candidates_excludes_trash_includes_node_modules() {
 
     // node_modules — should be found (2 MB)
     let nm = tree.add_dir(root, b"node_modules", false, SystemTime::UNIX_EPOCH, 1);
-    tree.add_file(nm, b"big.js", 2 * 1024 * 1024, Some("js"), SystemTime::UNIX_EPOCH, 2);
+    tree.add_file(
+        nm,
+        b"big.js",
+        2 * 1024 * 1024,
+        Some("js"),
+        SystemTime::UNIX_EPOCH,
+        2,
+    );
 
     // .Trash — must NOT be in candidates
     let trash = tree.add_dir(root, b".Trash", false, SystemTime::UNIX_EPOCH, 1);

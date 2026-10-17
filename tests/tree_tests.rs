@@ -8,14 +8,7 @@ fn test_add_file_and_directory() {
 
     let dir = tree.add_dir(root, b"Documents", false, SystemTime::now(), 1);
 
-    let file = tree.add_file(
-        dir,
-        b"readme.txt",
-        1024,
-        Some("txt"),
-        SystemTime::now(),
-        2,
-    );
+    let file = tree.add_file(dir, b"readme.txt", 1024, Some("txt"), SystemTime::now(), 2);
 
     assert_eq!(tree.node(root).children().len(), 1);
     assert_eq!(tree.node(dir).children().len(), 1);
@@ -140,12 +133,21 @@ fn test_find_path() {
     let root = tree.root();
     let dir = tree.add_dir(root, b"proj", false, SystemTime::now(), 1);
     let nm = tree.add_dir(dir, b"node_modules", false, SystemTime::now(), 2);
-    assert_eq!(tree.find_path(std::path::Path::new("/Users/me")), Some(root));
-    assert_eq!(tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")), Some(nm));
+    assert_eq!(
+        tree.find_path(std::path::Path::new("/Users/me")),
+        Some(root)
+    );
+    assert_eq!(
+        tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")),
+        Some(nm)
+    );
     assert_eq!(tree.find_path(std::path::Path::new("/Users/me/nope")), None);
     assert_eq!(tree.find_path(std::path::Path::new("/Users/other")), None);
     tree.remove_node(nm);
-    assert_eq!(tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")), None);
+    assert_eq!(
+        tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")),
+        None
+    );
 }
 
 #[test]

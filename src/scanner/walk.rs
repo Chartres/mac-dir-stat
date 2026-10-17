@@ -202,14 +202,10 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
                     let d = path
                         .components()
                         .count()
-                        .saturating_sub(root.components().count()) as u16;
-                    let stub_id = tree.add_dir(
-                        parent_id,
-                        file_name_bytes,
-                        d < 2,
-                        SystemTime::UNIX_EPOCH,
-                        d,
-                    );
+                        .saturating_sub(root.components().count())
+                        as u16;
+                    let stub_id =
+                        tree.add_dir(parent_id, file_name_bytes, d < 2, SystemTime::UNIX_EPOCH, d);
                     dir_map.insert(path.to_path_buf(), stub_id);
                     dir_count += 1;
                 }
@@ -218,16 +214,13 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
         };
 
         let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        let depth = path.components().count().saturating_sub(root.components().count()) as u16;
+        let depth = path
+            .components()
+            .count()
+            .saturating_sub(root.components().count()) as u16;
 
         if metadata.is_dir() {
-            let node_id = tree.add_dir(
-                parent_id,
-                file_name_bytes,
-                depth < 2,
-                modified,
-                depth,
-            );
+            let node_id = tree.add_dir(parent_id, file_name_bytes, depth < 2, modified, depth);
             dir_map.insert(path.to_path_buf(), node_id);
             dir_count += 1;
         } else {
@@ -248,13 +241,15 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             // is zero (FIFOs, sockets, device nodes).
             let size = if metadata.nlink() > 1 {
                 let key = (metadata.dev(), metadata.ino());
-                if seen_inodes.insert(key) { metadata.len() } else { 0 }
+                if seen_inodes.insert(key) {
+                    metadata.len()
+                } else {
+                    0
+                }
             } else {
                 metadata.len()
             };
-            let extension_owned = path
-                .extension()
-                .map(|e| e.to_string_lossy().to_lowercase());
+            let extension_owned = path.extension().map(|e| e.to_string_lossy().to_lowercase());
             tree.add_file(
                 parent_id,
                 file_name_bytes,

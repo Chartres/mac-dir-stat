@@ -104,7 +104,11 @@ pub struct AppState {
     pub relocate_message: Option<String>,
 }
 
-pub type RelocateJob = (PathBuf, String, Receiver<Result<crate::relocate::Outcome, String>>);
+pub type RelocateJob = (
+    PathBuf,
+    String,
+    Receiver<Result<crate::relocate::Outcome, String>>,
+);
 
 #[derive(Default)]
 pub struct ScanProgressInfo {
@@ -282,8 +286,7 @@ impl App {
                 tree.graft_under(target_id, new_subtree);
                 let root = tree.root();
                 self.state.extension_stats = tree.collect_extensions(root);
-                self.state.cleanup_candidates =
-                    crate::cleanup::find_candidates(tree, root);
+                self.state.cleanup_candidates = crate::cleanup::find_candidates(tree, root);
 
                 // Old node IDs under the target are now dead. Sanitize any
                 // state that referenced them.
@@ -354,10 +357,7 @@ impl App {
                             self.state.hovered_node = None;
                             self.state.hovered_dir = None;
                             self.state.context_menu_target = None;
-                            crate::state::save(
-                                &self.state.scan_root,
-                                self.state.color_mode,
-                            );
+                            crate::state::save(&self.state.scan_root, self.state.color_mode);
                         }
                         ScanProgress::Error(msg) => {
                             eprintln!("Scan error: {}", msg);
@@ -466,8 +466,12 @@ impl App {
     /// Right arrow expands the selected directory (or steps into its first
     /// child if already open); left arrow collapses it (or steps to its parent).
     fn nav_expand_selected(&mut self, expand: bool) {
-        let Some(sel) = self.state.selected_node else { return };
-        let Some(tree) = &mut self.state.tree else { return };
+        let Some(sel) = self.state.selected_node else {
+            return;
+        };
+        let Some(tree) = &mut self.state.tree else {
+            return;
+        };
         if !tree.is_alive(sel) {
             return;
         }
@@ -516,7 +520,9 @@ impl App {
     /// source path leaves it like a trash does. Looked up by path, so a tree
     /// rebuilt by a rescan mid-copy loses the right node or none.
     fn poll_relocate(&mut self) {
-        let Some((path, name, rx)) = &self.state.relocate_job else { return };
+        let Some((path, name, rx)) = &self.state.relocate_job else {
+            return;
+        };
         let Ok(result) = rx.try_recv() else { return };
         let (path, name) = (path.clone(), name.clone());
         self.state.relocate_job = None;
@@ -533,7 +539,8 @@ impl App {
                     Some((id, t.node(id).size))
                 });
                 if let Some((id, size)) = moved {
-                    self.state.freed_this_session = self.state.freed_this_session.saturating_add(size);
+                    self.state.freed_this_session =
+                        self.state.freed_this_session.saturating_add(size);
                     self.state.remove_trashed(&[id]);
                 }
             }
@@ -750,9 +757,7 @@ impl eframe::App for App {
         }
 
         // Keyboard shortcuts
-        if ctx.input(|i| {
-            i.key_pressed(egui::Key::R) && i.modifiers.command && i.modifiers.shift
-        }) {
+        if ctx.input(|i| i.key_pressed(egui::Key::R) && i.modifiers.command && i.modifiers.shift) {
             // Refresh just the selected directory (or its parent dir if a file is selected).
             if let Some(sel) = self.state.selected_node {
                 let target = self.state.tree.as_ref().and_then(|t| {
@@ -798,11 +803,13 @@ impl eframe::App for App {
                     if let Some(tree) = &self.state.tree {
                         let is_root = node_id == tree.root();
                         let ext = tree.extension(node_id);
-                        let is_synthetic = matches!(ext, Some("__free_space__") | Some("__skipped__"));
+                        let is_synthetic =
+                            matches!(ext, Some("__free_space__") | Some("__skipped__"));
                         if tree.is_alive(node_id) && !is_root && !is_synthetic {
                             let path = tree.full_path(node_id);
                             let size = tree.node(node_id).size;
-                            self.state.pending_action = Some(PendingAction::ConfirmTrash(node_id, path, size));
+                            self.state.pending_action =
+                                Some(PendingAction::ConfirmTrash(node_id, path, size));
                         }
                     }
                 }
@@ -836,9 +843,7 @@ impl eframe::App for App {
             }
         }
         // Don't fire `?` while a text input (search) is focused.
-        if !ctx.wants_keyboard_input()
-            && ctx.input(|i| i.key_pressed(egui::Key::Questionmark))
-        {
+        if !ctx.wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Questionmark)) {
             self.state.help_window_open = !self.state.help_window_open;
         }
 
@@ -881,112 +886,123 @@ impl eframe::App for App {
                     .inner_margin(egui::Margin::symmetric(14, 6)),
             )
             .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if let Some(tree) = &self.state.tree {
-                    let root = tree.root();
-                    let file_count = tree.node(root).file_count as usize;
-                    let freed_str = if self.state.freed_this_session > 0 {
-                        format!(
-                            "  •  freed {}",
-                            ui::theme::format_size(self.state.freed_this_session)
-                        )
-                    } else {
-                        String::new()
-                    };
-                    let errors_str = if self.state.scan_progress.errors > 0 {
-                        format!("  •  {} skipped", self.state.scan_progress.errors)
-                    } else {
-                        String::new()
-                    };
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} files  •  {} dirs  •  {:.1}s{}{}",
-                            file_count,
-                            self.state.scan_progress.dirs,
-                            self.state.scan_duration_secs,
-                            errors_str,
-                            freed_str,
-                        ))
-                        .color(ui::theme::TEXT_MUTED)
-                        .size(11.0),
-                    );
-                }
-                if let Some((_, name, _)) = &self.state.relocate_job {
-                    ui.spinner();
-                    ui.label(
-                        egui::RichText::new(format!("Moving {name}: copying and verifying…"))
+                ui.horizontal(|ui| {
+                    if let Some(tree) = &self.state.tree {
+                        let root = tree.root();
+                        let file_count = tree.node(root).file_count as usize;
+                        let freed_str = if self.state.freed_this_session > 0 {
+                            format!(
+                                "  •  freed {}",
+                                ui::theme::format_size(self.state.freed_this_session)
+                            )
+                        } else {
+                            String::new()
+                        };
+                        let errors_str = if self.state.scan_progress.errors > 0 {
+                            format!("  •  {} skipped", self.state.scan_progress.errors)
+                        } else {
+                            String::new()
+                        };
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{} files  •  {} dirs  •  {:.1}s{}{}",
+                                file_count,
+                                self.state.scan_progress.dirs,
+                                self.state.scan_duration_secs,
+                                errors_str,
+                                freed_str,
+                            ))
+                            .color(ui::theme::TEXT_MUTED)
+                            .size(11.0),
+                        );
+                    }
+                    if let Some((_, name, _)) = &self.state.relocate_job {
+                        ui.spinner();
+                        ui.label(
+                            egui::RichText::new(format!("Moving {name}: copying and verifying…"))
+                                .color(ui::theme::ACCENT_LIGHT)
+                                .size(11.0),
+                        );
+                        ui.ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(250));
+                    } else if let Some(msg) = &self.state.relocate_message {
+                        ui.label(
+                            egui::RichText::new(msg)
+                                .color(ui::theme::ACCENT_LIGHT)
+                                .size(11.0),
+                        );
+                    }
+                    if self.state.tree.is_none() && self.state.scan_progress.scanning {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Scanning... {} files  •  {} dirs  •  {}",
+                                self.state.scan_progress.files,
+                                self.state.scan_progress.dirs,
+                                ui::theme::format_size(self.state.scan_progress.bytes),
+                            ))
                             .color(ui::theme::ACCENT_LIGHT)
                             .size(11.0),
-                    );
-                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
-                } else if let Some(msg) = &self.state.relocate_message {
-                    ui.label(egui::RichText::new(msg).color(ui::theme::ACCENT_LIGHT).size(11.0));
-                }
-                if self.state.tree.is_none() && self.state.scan_progress.scanning {
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Scanning... {} files  •  {} dirs  •  {}",
-                            self.state.scan_progress.files,
-                            self.state.scan_progress.dirs,
-                            ui::theme::format_size(self.state.scan_progress.bytes),
-                        ))
-                        .color(ui::theme::ACCENT_LIGHT)
-                        .size(11.0),
-                    );
-                }
+                        );
+                    }
 
-                // Batch-trash error feedback: keep until the next scan or delete.
-                if let Some(msg) = &self.state.batch_error_msg {
-                    ui.label(
-                        egui::RichText::new(format!("⚠ {}", msg))
-                            .color(egui::Color32::from_rgb(248, 113, 113))
-                            .size(11.0),
-                    );
-                }
+                    // Batch-trash error feedback: keep until the next scan or delete.
+                    if let Some(msg) = &self.state.batch_error_msg {
+                        ui.label(
+                            egui::RichText::new(format!("⚠ {}", msg))
+                                .color(egui::Color32::from_rgb(248, 113, 113))
+                                .size(11.0),
+                        );
+                    }
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Partial-refresh indicator takes priority over the
-                    // hovered-file path so the user sees feedback during the
-                    // background re-scan.
-                    if let Some((target_id, _)) = &self.state.partial_refresh_receiver {
-                        if let Some(tree) = &self.state.tree {
-                            if tree.is_alive(*target_id) {
-                                let path = tree.full_path(*target_id);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Partial-refresh indicator takes priority over the
+                        // hovered-file path so the user sees feedback during the
+                        // background re-scan.
+                        if let Some((target_id, _)) = &self.state.partial_refresh_receiver {
+                            if let Some(tree) = &self.state.tree {
+                                if tree.is_alive(*target_id) {
+                                    let path = tree.full_path(*target_id);
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "Refreshing  {}  …",
+                                            path.display(),
+                                        ))
+                                        .color(ui::theme::ACCENT_LIGHT)
+                                        .size(11.0),
+                                    );
+                                    ui.ctx().request_repaint();
+                                }
+                            }
+                        } else if let Some(tree) = &self.state.tree {
+                            // Show hovered file if any, otherwise show hovered directory region
+                            let show_node = self
+                                .state
+                                .hovered_node
+                                .filter(|&id| tree.is_alive(id))
+                                .or(self.state.hovered_dir.filter(|&id| tree.is_alive(id)));
+                            if let Some(id) = show_node {
+                                let path = tree.full_path(id);
+                                let node = tree.node(id);
+                                let prefix = if self.state.hovered_node.is_some() {
+                                    ""
+                                } else {
+                                    "📁 "
+                                };
                                 ui.label(
                                     egui::RichText::new(format!(
-                                        "Refreshing  {}  …",
+                                        "{}{}  •  {}",
+                                        prefix,
                                         path.display(),
+                                        ui::theme::format_size(node.size),
                                     ))
                                     .color(ui::theme::ACCENT_LIGHT)
                                     .size(11.0),
                                 );
-                                ui.ctx().request_repaint();
                             }
                         }
-                    } else if let Some(tree) = &self.state.tree {
-                        // Show hovered file if any, otherwise show hovered directory region
-                        let show_node = self.state.hovered_node
-                            .filter(|&id| tree.is_alive(id))
-                            .or(self.state.hovered_dir.filter(|&id| tree.is_alive(id)));
-                        if let Some(id) = show_node {
-                            let path = tree.full_path(id);
-                            let node = tree.node(id);
-                            let prefix = if self.state.hovered_node.is_some() { "" } else { "📁 " };
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{}{}  •  {}",
-                                    prefix,
-                                    path.display(),
-                                    ui::theme::format_size(node.size),
-                                ))
-                                .color(ui::theme::ACCENT_LIGHT)
-                                .size(11.0),
-                            );
-                        }
-                    }
+                    });
                 });
             });
-        });
 
         let side_frame = egui::Frame::new()
             .fill(ui::theme::BG_PANEL)
@@ -1033,8 +1049,8 @@ impl eframe::App for App {
         let mut decision: Option<bool> = None;
         let mut relocate_choice = None;
         if let Some(PendingAction::ConfirmRelocate(d)) = &mut self.state.pending_action {
-            relocate_choice = ui::relocate_window::show(ctx, d)
-                .map(|c| (c, d.name.clone(), d.path.clone()));
+            relocate_choice =
+                ui::relocate_window::show(ctx, d).map(|c| (c, d.name.clone(), d.path.clone()));
         }
         if let Some(action) = &self.state.pending_action {
             match action {
@@ -1091,14 +1107,17 @@ impl eframe::App for App {
             if confirmed {
                 match action {
                     Some(PendingAction::ConfirmTrash(node_id, ..)) => self.perform_delete(node_id),
-                    Some(PendingAction::ConfirmBatchTrash(ids, _)) => self.perform_batch_delete(ids),
+                    Some(PendingAction::ConfirmBatchTrash(ids, _)) => {
+                        self.perform_batch_delete(ids)
+                    }
                     Some(PendingAction::ConfirmEmptyTrash) => {
                         if let Err(e) = crate::platform::trash::empty_trash() {
                             eprintln!("Empty trash failed: {}", e);
                             self.state.batch_error_msg = Some(format!("Empty Trash failed: {}", e));
                         }
                     }
-                    Some(PendingAction::RefreshSubtree(_) | PendingAction::ConfirmRelocate(_)) | None => {}
+                    Some(PendingAction::RefreshSubtree(_) | PendingAction::ConfirmRelocate(_))
+                    | None => {}
                 }
             }
         }
@@ -1110,7 +1129,9 @@ impl eframe::App for App {
 /// the same rules the server and Move to External Disk apply.
 fn trash_unless_protected(path: &std::path::Path) -> Result<(), String> {
     let path = crate::relocate::normalize(path).unwrap_or_else(|_| path.to_path_buf());
-    if let Some(reason) = crate::relocate::protected_reason(&path, crate::relocate::home().as_deref()) {
+    if let Some(reason) =
+        crate::relocate::protected_reason(&path, crate::relocate::home().as_deref())
+    {
         return Err(reason);
     }
     crate::platform::trash::move_to_trash(&path)
@@ -1189,7 +1210,13 @@ mod tests {
         let mut tree = FileTree::new();
         tree.rename_root(root);
         let r = tree.root();
-        let dir = tree.add_dir(r, b"mds-test-missing-parent", false, SystemTime::UNIX_EPOCH, 1);
+        let dir = tree.add_dir(
+            r,
+            b"mds-test-missing-parent",
+            false,
+            SystemTime::UNIX_EPOCH,
+            1,
+        );
         let ids = names
             .iter()
             .map(|n| tree.add_file(dir, n, 10, None, SystemTime::UNIX_EPOCH, 2))
@@ -1204,7 +1231,10 @@ mod tests {
         let mut app = test_app(tree);
         app.perform_delete(ids[0]);
         let msg = app.state.batch_error_msg.clone().unwrap_or_default();
-        assert!(msg.contains("/Users/Shared belongs to every user"), "status: {msg}");
+        assert!(
+            msg.contains("/Users/Shared belongs to every user"),
+            "status: {msg}"
+        );
         assert!(app.state.tree.as_ref().unwrap().is_alive(ids[0]));
     }
 
@@ -1243,7 +1273,10 @@ mod tests {
         app.poll_relocate();
         let tree = app.state.tree.as_ref().unwrap();
         assert!(tree.is_alive(new_ids[0]), "x was removed in place of a");
-        assert!(!tree.is_alive(new_ids[1]), "a is still shown after its move");
+        assert!(
+            !tree.is_alive(new_ids[1]),
+            "a is still shown after its move"
+        );
         assert!(app.state.relocate_job.is_none());
     }
 }
