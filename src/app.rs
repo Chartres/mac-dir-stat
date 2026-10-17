@@ -100,9 +100,11 @@ pub struct AppState {
     // "Move to External Disk…": the running copy job (source path, display
     // name, result) and its last result. Keyed by path, not NodeId: a rescan
     // can finish before the copy does, and NodeIds don't survive a rescan.
-    pub relocate_job: Option<(PathBuf, String, Receiver<Result<crate::relocate::Outcome, String>>)>,
+    pub relocate_job: Option<RelocateJob>,
     pub relocate_message: Option<String>,
 }
+
+pub type RelocateJob = (PathBuf, String, Receiver<Result<crate::relocate::Outcome, String>>);
 
 #[derive(Default)]
 pub struct ScanProgressInfo {
