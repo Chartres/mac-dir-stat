@@ -72,3 +72,16 @@ pub fn save(scan_root: &Path, color_mode: ColorMode) {
     );
     let _ = std::fs::write(path, content);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn save_writes_nothing_under_test() {
+        let read = || state_file().and_then(|p| std::fs::read(p).ok());
+        let before = read();
+        save(Path::new("/mds-test-save-sentinel"), ColorMode::Extension);
+        assert_eq!(read(), before, "unit test overwrote the real state.txt");
+    }
+}
