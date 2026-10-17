@@ -21,12 +21,11 @@ fn classify_rustup_toolchains() {
 }
 
 #[test]
-fn classify_icloud_cache() {
-    let path = Path::new(
-        "/Users/pavol/Library/Containers/com.apple.iCloud.iCloudDrive",
-    );
-    let (cat, _desc) = classify(path).expect("iCloud drive cache should be classified");
-    assert!(cat.to_lowercase().contains("icloud"));
+fn classify_icloud_drive_not_suggested() {
+    // iCloud Drive's container can hold files not yet uploaded; suggesting
+    // it for deletion risks data loss.
+    let path = Path::new("/Users/pavol/Library/Containers/com.apple.iCloud.iCloudDrive");
+    assert!(classify(path).is_none());
 }
 
 #[test]
