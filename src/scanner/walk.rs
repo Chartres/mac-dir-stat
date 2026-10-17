@@ -123,6 +123,13 @@ fn should_skip(path: &Path, scan_root: &Path, skip_paths: &[PathBuf]) -> bool {
     false
 }
 
+/// The tree node of `path`'s direct parent. An orphan (parent filtered or
+/// raced away) gets None and is dropped: attaching it to a more distant
+/// ancestor would give it a wrong full_path, and Trash would hit the wrong file.
+fn parent_node(dir_map: &HashMap<PathBuf, usize>, path: &Path) -> Option<usize> {
+    dir_map.get(path.parent()?).copied()
+}
+
 pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut tree = FileTree::new();
     tree.rename_root(root.as_os_str().as_bytes());
@@ -174,14 +181,8 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             continue;
         }
 
-        let parent_path = match path.parent() {
-            Some(p) => p.to_path_buf(),
-            None => continue,
-        };
-
-        let parent_id = match dir_map.get(&parent_path) {
-            Some(&id) => id,
-            None => continue, // orphan: parent was filtered or raced; drop it
+        let Some(parent_id) = parent_node(&dir_map, &path) else {
+            continue;
         };
 
         let file_name_os = match path.file_name() {
@@ -196,9 +197,7 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
                 error_count += 1;
                 // For a directory whose metadata is unreadable, still register a
                 // stub node so that any children walkdir yields for it are
-                // attached at the correct path rather than being reparented to
-                // find_closest_ancestor, which would give them a wrong full_path
-                // and break Trash/Reveal operations.
+                // attached at the correct path rather than dropped as orphans.
                 if entry.file_type().is_dir() {
                     let d = path
                         .components()
@@ -343,16 +342,15 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
 
 #[cfg(test)]
 mod tests {
+    use super::parent_node;
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
-    fn orphan_entry_missing_parent_produces_no_node() {
-        // Simulates the guard: if a parent is absent from dir_map the entry
-        // must be dropped, not re-parented to a distant ancestor.
-        let dir_map: HashMap<PathBuf, usize> = HashMap::new();
-        let parent_path = PathBuf::from("/some/dir");
-        // Missing parent → None, which triggers `continue` in the walk loop.
-        assert!(dir_map.get(&parent_path).is_none());
+    fn orphan_entry_is_not_reparented_to_ancestor() {
+        let dir_map = HashMap::from([(PathBuf::from("/a"), 1), (PathBuf::from("/a/b"), 2)]);
+        assert_eq!(parent_node(&dir_map, Path::new("/a/b/f")), Some(2));
+        // /a/b/c was never registered: its child must not land under /a.
+        assert_eq!(parent_node(&dir_map, Path::new("/a/b/c/f")), None);
     }
 }
