@@ -828,7 +828,11 @@ impl eframe::App for App {
             }
         }
         if !ctx.wants_keyboard_input() {
-            if ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command) {
+            // An open confirmation is not swapped for another one.
+            let dialog_open = self.state.pending_action.is_some();
+            if !dialog_open
+                && ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command)
+            {
                 if let Some(node_id) = self.state.selected_node {
                     if let Some(tree) = &self.state.tree {
                         if tree.is_trashable(node_id) {
@@ -1272,6 +1276,32 @@ mod tests {
         let msg = app.state.batch_error_msg.clone().unwrap_or_default();
         assert!(msg.starts_with("2 items not moved"), "status: {msg}");
         assert!(app.state.tree.as_ref().unwrap().is_alive(ids[0]));
+    }
+
+    #[test]
+    fn cmd_backspace_does_not_replace_an_open_confirmation() {
+        let (tree, ids) = tree_under(b"/System", &[b"a", b"b"]);
+        let mut app = test_app(tree);
+        app.state.selected_node = Some(ids[0]);
+        app.state.pending_action = Some(PendingAction::ConfirmBatchTrash(paired(&app, &ids), 20));
+        let ctx = egui::Context::default();
+        let mut frame = eframe::Frame::_new_kittest();
+        let input = egui::RawInput {
+            modifiers: egui::Modifiers::COMMAND,
+            events: vec![egui::Event::Key {
+                key: egui::Key::Backspace,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            }],
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| eframe::App::update(&mut app, ctx, &mut frame));
+        assert!(matches!(
+            app.state.pending_action,
+            Some(PendingAction::ConfirmBatchTrash(..))
+        ));
     }
 
     #[test]
