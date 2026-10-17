@@ -387,14 +387,18 @@ impl App {
     fn perform_batch_delete(&mut self, ids: Vec<NodeId>) {
         let mut succeeded: Vec<NodeId> = Vec::new();
         let mut failed: usize = 0;
+        let mut first_error = String::new();
         let mut freed: u64 = 0;
         for id in &ids {
             let (path, size) = match &self.state.tree {
                 Some(t) if t.is_alive(*id) => (t.full_path(*id), t.node(*id).size),
                 _ => continue,
             };
-            if let Err(e) = crate::platform::trash::move_to_trash(&path) {
+            if let Err(e) = trash_unless_protected(&path) {
                 eprintln!("Batch trash failed for {}: {}", path.display(), e);
+                if failed == 0 {
+                    first_error = e;
+                }
                 failed += 1;
                 continue;
             }
@@ -403,9 +407,10 @@ impl App {
         }
         if failed > 0 {
             self.state.batch_error_msg = Some(format!(
-                "{} item{} could not be moved to Trash",
+                "{} item{} could not be moved to Trash: {}",
                 failed,
                 if failed == 1 { "" } else { "s" },
+                first_error,
             ));
         }
         self.state.freed_this_session = self.state.freed_this_session.saturating_add(freed);
@@ -549,7 +554,7 @@ impl App {
             }
             let path = tree.full_path(node_id);
             let size = tree.node(node_id).size;
-            match crate::platform::trash::move_to_trash(&path) {
+            match trash_unless_protected(&path) {
                 Ok(()) => {
                     self.state.freed_this_session =
                         self.state.freed_this_session.saturating_add(size);
@@ -1103,6 +1108,17 @@ impl eframe::App for App {
     }
 }
 
+/// Every GUI trash goes through here. Protected paths (macOS system trees,
+/// other users' homes, whole volumes, ~ itself) are refused with the reason,
+/// the same rules the server and Move to External Disk apply.
+fn trash_unless_protected(path: &std::path::Path) -> Result<(), String> {
+    let path = crate::relocate::normalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if let Some(reason) = crate::relocate::protected_reason(&path, crate::relocate::home().as_deref()) {
+        return Err(reason);
+    }
+    crate::platform::trash::move_to_trash(&path)
+}
+
 /// Centered modal with a title, a detail line, and Cancel / danger-confirm
 /// buttons. Returns `Some(true)` on confirm, `Some(false)` on cancel.
 fn confirm_dialog(
@@ -1148,4 +1164,62 @@ fn confirm_dialog(
             });
         });
     decision
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::SystemTime;
+
+    fn test_app(tree: FileTree) -> App {
+        let mut state = AppState::new(
+            PathBuf::from("/nonexistent-mds-test-root"),
+            false,
+            ColorMode::Extension,
+            crate::flywheel::disabled().clone(),
+        );
+        state.request_rescan = false;
+        state.tree = Some(tree);
+        App {
+            state,
+            theme_applied: false,
+        }
+    }
+
+    /// `root/missing/<names>`: `missing` does not exist on disk, so even
+    /// without the guard the trash call fails before touching anything.
+    fn tree_under(root: &[u8], names: &[&[u8]]) -> (FileTree, Vec<NodeId>) {
+        let mut tree = FileTree::new();
+        tree.rename_root(root);
+        let r = tree.root();
+        let dir = tree.add_dir(r, b"mds-test-missing-parent", false, SystemTime::UNIX_EPOCH, 1);
+        let ids = names
+            .iter()
+            .map(|n| tree.add_file(dir, n, 10, None, SystemTime::UNIX_EPOCH, 2))
+            .collect();
+        tree.compute_sizes();
+        (tree, ids)
+    }
+
+    #[test]
+    fn gui_trash_refuses_protected_path() {
+        let (tree, ids) = tree_under(b"/Users/Shared", &[b"f"]);
+        let mut app = test_app(tree);
+        app.perform_delete(ids[0]);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.contains("/Users/Shared belongs to every user"), "status: {msg}");
+        assert!(app.state.tree.as_ref().unwrap().is_alive(ids[0]));
+    }
+
+    #[test]
+    fn gui_batch_trash_refuses_protected_paths() {
+        let (tree, ids) = tree_under(b"/System", &[b"a", b"b"]);
+        let mut app = test_app(tree);
+        app.perform_batch_delete(ids.clone());
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.contains("macOS system path"), "status: {msg}");
+        assert!(msg.starts_with("2 items"), "status: {msg}");
+        let tree = app.state.tree.as_ref().unwrap();
+        assert!(ids.iter().all(|&id| tree.is_alive(id)));
+    }
 }
