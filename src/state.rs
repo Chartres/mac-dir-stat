@@ -51,6 +51,10 @@ pub fn load() -> PersistedState {
 }
 
 pub fn save(scan_root: &Path, color_mode: ColorMode) {
+    // Unit tests drive poll_scan; never overwrite the user's real last scan.
+    if cfg!(test) {
+        return;
+    }
     let Some(dir) = state_dir() else { return };
     if std::fs::create_dir_all(&dir).is_err() {
         return;

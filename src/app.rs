@@ -241,6 +241,10 @@ impl App {
         self.state.hovered_dir = None;
         self.state.view_root = None;
         self.state.zoom_stack.clear();
+        // The Cleanup window stays open during a scan; its NodeIds belong to
+        // the old tree and must not reach a Trash confirmation for the new one.
+        self.state.cleanup_candidates.clear();
+        self.state.cleanup_selected.clear();
         crate::scanner::scan(self.state.scan_root.clone(), tx);
     }
 
@@ -354,6 +358,10 @@ impl App {
                             // hovered_dir must be cleared here — is_alive(old_id) on
                             // a shorter new tree panics with an out-of-bounds index.
                             self.state.cleanup_selected.clear();
+                            // A dialog or Locate from the old tree would now
+                            // resolve its ids against unrelated new nodes.
+                            self.state.pending_action = None;
+                            self.state.selected_node = None;
                             self.state.hovered_node = None;
                             self.state.hovered_dir = None;
                             self.state.context_menu_target = None;
@@ -1274,5 +1282,35 @@ mod tests {
             "a is still shown after its move"
         );
         assert!(app.state.relocate_job.is_none());
+    }
+
+    #[test]
+    fn rescan_drops_old_tree_ids_from_cleanup_and_dialogs() {
+        let (old, old_ids) = tree_under(b"/System", &[b"a"]);
+        let mut app = test_app(old);
+        let p = app.state.tree.as_ref().unwrap().full_path(old_ids[0]);
+        app.state.cleanup_candidates = vec![crate::cleanup::CleanupCandidate {
+            node_id: old_ids[0],
+            path: p.clone(),
+            category: "c",
+            description: "d",
+            size: 10,
+        }];
+        app.state.cleanup_selected.insert(old_ids[0]);
+        app.start_scan();
+        // The Cleanup window stays open during the scan: it must not offer
+        // old-tree ids to Trash, Select all or Locate.
+        assert!(app.state.cleanup_candidates.is_empty());
+        assert!(app.state.cleanup_selected.is_empty());
+        // A dialog and a Locate made from a stale row before the fix.
+        app.state.pending_action = Some(PendingAction::ConfirmTrash(old_ids[0], p, 10));
+        app.state.selected_node = Some(99);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        app.state.scan_receiver = Some(rx);
+        tx.send(ScanProgress::Done(tree_under(b"/System", &[b"x", b"a"]).0))
+            .unwrap();
+        app.poll_scan();
+        assert!(app.state.pending_action.is_none(), "stale dialog survived");
+        assert!(app.state.selected_node.is_none(), "stale selection survived");
     }
 }
