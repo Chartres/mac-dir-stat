@@ -179,8 +179,9 @@ fn role(req: &Request, sh: &Shared) -> Option<Role> {
     }
 }
 
-/// What the AI token may do: MCP, reads, and proposing plans. Never approve,
-/// reject, rescan, or read the token itself.
+/// What the AI token may do: everything on /mcp (including the `scan` tool,
+/// which starts a rescan), REST reads, and proposing plans. Not approve or
+/// reject, not the REST rescan (POST /api/v1/scan), and not GET /api/v1/mcp-token.
 fn mcp_allowed(method: &str, path: &str) -> bool {
     path == "/mcp"
         || (method == "GET" && path != "/api/v1/mcp-token")

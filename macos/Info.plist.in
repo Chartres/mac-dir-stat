@@ -13,5 +13,8 @@
     <key>LSMinimumSystemVersion</key><string>11.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+    <key>NSAppleEventsUsageDescription</key><string>MacDirStat asks Finder to show Get Info windows and to empty the Trash.</string>
+    <key>NSRemovableVolumesUsageDescription</key><string>MacDirStat reads removable disks to show what uses their space and to move items onto them.</string>
+    <key>NSNetworkVolumesUsageDescription</key><string>MacDirStat reads network disks to show what uses their space and to move items onto them.</string>
 </dict>
 </plist>

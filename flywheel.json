@@ -22,7 +22,9 @@
   "natural_frequency": "episodic",
   "north_star": "GitHub stars — adoption proxy; ≥75 unlocks homebrew/cask notability. Guard metric: weekly scan-completers from telemetry.",
   "links": {
-    "repo": "https://github.com/Chartres/mac-dir-stat"
+    "repo": "https://github.com/Chartres/mac-dir-stat",
+    "site": "https://mac-dir-stat.pages.dev",
+    "homebrew_tap": "https://github.com/Chartres/homebrew-mac-dir-stat"
   },
   "decisions": [
     {
@@ -40,5 +42,13 @@
     "rust",
     "egui"
   ],
-  "notes": "Desktop GUI (egui/eframe), not a CLI — record corrected 2026-06-18. Distributed via Homebrew cask + DMG. Flywheel SDK (Rust port of flywheel-client) wired in 2026-06-18: app_open + scan_completed key_action + conversion=freed-bytes (the aha) + error events post to the shared flywheel-core events table; ships dark until FLYWHEEL_SUPABASE_URL/ANON_KEY are baked at release. kpi_source=supabase, activation_event=conversion. Stage still 'maintain' on record but under active feature work (WinDirStat parity) + growth push per 2026-06-18 goal — maintain→growing revival is a pending human gate decision."
+  "notes": "Adoption (2026-10-17): 61 downloads of v0.5.1 (GitHub releases), 1 star, 0 forks. Whether release builds produce telemetry events is still unverified (see next_gate). 0.6.0 adds Move to External Disk and `mac-dir-stat serve` (web page, REST, MCP with approve-only plans); from 0.6.0 the release workflow bumps the cask itself via the HOMEBREW_TAP_DEPLOY_KEY deploy key.",
+  "last_swept": "2026-10-12",
+  "evidence_tier": "T1",
+  "reach": 3,
+  "effort": 2,
+  "next_gate": {
+    "set": "2026-07-10",
+    "statement": "Resolve telemetry discrepancy (one self-run must produce an event), then star-push post (plan: docs/distribution/mac-dir-stat.md) toward 75 stars for homebrew cask."
+  }
 }

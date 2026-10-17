@@ -14,6 +14,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # A tag that disagrees with Cargo.toml would ship a DMG whose name, Info.plist
+      # and cask version all say something else. Fail before building.
+      - name: Tag matches Cargo.toml version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          want="v$(awk -F\" '/^version[[:space:]]*=/{print $2; exit}' Cargo.toml)"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version ($want). Bump Cargo.toml or retag."
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME matches Cargo.toml."
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
@@ -91,16 +103,15 @@ jobs:
       - name: Update Homebrew tap
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Write deploy key on Chartres/homebrew-mac-dir-stat; private half in this secret.
+          TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
-          if [ -z "$TAP_TOKEN" ]; then
-            echo "::warning::HOMEBREW_TAP_TOKEN secret not set — skipping cask update."
+          if [ -z "$TAP_DEPLOY_KEY" ]; then
+            echo "::warning::HOMEBREW_TAP_DEPLOY_KEY secret not set — skipping cask update."
             echo "One-time setup:"
-            echo "  1. Create a fine-grained PAT at https://github.com/settings/personal-access-tokens/new"
-            echo "     - Resource owner: Chartres"
-            echo "     - Repository access: Only select repositories → homebrew-mac-dir-stat"
-            echo "     - Permissions: Contents → Read and write"
-            echo "  2. gh secret set HOMEBREW_TAP_TOKEN -R Chartres/mac-dir-stat -b \"<token>\""
+            echo "  ssh-keygen -t ed25519 -N '' -C mac-dir-stat-release -f tap_key"
+            echo "  gh repo deploy-key add tap_key.pub -R Chartres/homebrew-mac-dir-stat --allow-write -t mac-dir-stat-release"
+            echo "  gh secret set HOMEBREW_TAP_DEPLOY_KEY -R Chartres/mac-dir-stat < tap_key && rm tap_key tap_key.pub"
             exit 0
           fi
           VERSION="${GITHUB_REF_NAME#v}"
@@ -108,17 +119,35 @@ jobs:
           SHA256=$(shasum -a 256 "$DMG" | awk '{print $1}')
           echo "Bumping cask to $VERSION ($SHA256)"
 
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/Chartres/homebrew-mac-dir-stat.git" tap
+          KEY="$RUNNER_TEMP/tap_key"
+          printf '%s\n' "$TAP_DEPLOY_KEY" > "$KEY"
+          chmod 600 "$KEY"
+          # GitHub's published ed25519 host key (gh api meta), pinned instead of ssh-keyscan.
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$RUNNER_TEMP/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts"
+
+          git clone git@github.com:Chartres/homebrew-mac-dir-stat.git tap
           cd tap
-          sed -i.bak -E "s/^([[:space:]]*version )\"[^\"]+\"/\\1\"${VERSION}\"/" Casks/mac-dir-stat.rb
-          sed -i.bak -E "s/^([[:space:]]*sha256 )\"[^\"]+\"/\\1\"${SHA256}\"/" Casks/mac-dir-stat.rb
-          rm Casks/mac-dir-stat.rb.bak
+          CASK=Casks/mac-dir-stat.rb
+          sed -i.bak -E "s/^([[:space:]]*version )\"[^\"]+\"/\\1\"${VERSION}\"/" "$CASK"
+          sed -i.bak -E "s/^([[:space:]]*sha256 )\"[^\"]+\"/\\1\"${SHA256}\"/" "$CASK"
+          rm "$CASK.bak"
+          # Put the CLI (`mac-dir-stat serve`) on PATH, and zap the server's token folder.
+          grep -q '^  binary ' "$CASK" ||
+            perl -0pi -e 's|(\n  app "MacDirStat.app"\n)|$1  binary "#{appdir}/MacDirStat.app/Contents/MacOS/mac-dir-stat"\n|' "$CASK"
+          grep -q 'Application Support/MacDirStat"' "$CASK" ||
+            perl -0pi -e 's|(\n    "~/Library/Application Support/mac-dir-stat",\n)|$1    "~/Library/Application Support/MacDirStat",\n|' "$CASK"
+          if ! grep -q '^  binary ' "$CASK" || ! grep -q 'Application Support/MacDirStat"' "$CASK"; then
+            echo "::error::Cask layout changed; binary/zap lines not added."
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/mac-dir-stat.rb
+          git add "$CASK"
           if git diff --staged --quiet; then
             echo "Cask already up to date."
           else
             git commit -m "mac-dir-stat ${VERSION}"
             git push
           fi
+          rm -f "$KEY"

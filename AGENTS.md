@@ -39,21 +39,28 @@ Homebrew cask. Tag-driven:
 ```bash
 git tag vX.Y.Z && git push origin vX.Y.Z   # triggers .github/workflows/release.yml
 ```
+The tag must be `v` + the `version` in `Cargo.toml`; the workflow fails before building otherwise.
 The workflow builds the universal `.app` (`scripts/bundle.sh`), makes the DMG (`scripts/dmg.sh`),
 signs + notarizes (`scripts/notarize.sh`), publishes the release, and bumps the Homebrew cask at
 `Chartres/homebrew-mac-dir-stat` (tap clone at `~/my-git/homebrew-mac-dir-stat`, `Casks/mac-dir-stat.rb`).
-Needed repo secrets: `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `MACOS_NOTARY_APPLE_ID`,
-`MACOS_NOTARY_PASSWORD`, `MACOS_NOTARY_TEAM_ID`, `HOMEBREW_TAP_TOKEN`, and — to bake analytics —
-`FLYWHEEL_SUPABASE_URL`, `FLYWHEEL_SUPABASE_KEY`. Missing signing/tap secrets degrade gracefully
-(unsigned build, skipped cask). Adoption is read from GitHub release **download counts** + GitHub
+Repo secrets the workflow reads (all set as of 2026-10-17):
+- signing: `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`
+- notarization: `MACOS_NOTARY_APPLE_ID`, `MACOS_NOTARY_PASSWORD`, `MACOS_NOTARY_TEAM_ID`
+- cask bump: `HOMEBREW_TAP_DEPLOY_KEY`, the private half of a write deploy key on
+  `Chartres/homebrew-mac-dir-stat` (rotation steps in `docs/GROWTH.md`)
+- analytics bake: `FLYWHEEL_SUPABASE_URL`, `FLYWHEEL_SUPABASE_KEY`
+
+The `APPLE_*` secrets in the repo are not read by any workflow. Missing signing/tap secrets degrade
+gracefully (unsigned build, skipped cask). Adoption is read from GitHub release **download counts** + GitHub
 stars (north star) — no extra telemetry needed for KPIs.
 
 ## Analytics (Common Platform)
 Vendored client: `src/flywheel.rs` (Rust port of `flywheel-client.ts`). Fires the shared taxonomy
 (`page_view`, `signup_*`, `conversion`, `key_action`, `feedback_given`, `error`) to the shared
-flywheel-core Supabase `events` table via a detached `curl`. Cookieless, off by default: ships dark
-unless `FLYWHEEL_SUPABASE_URL`/`FLYWHEEL_SUPABASE_KEY` are baked at release (`option_env!`), and the
-user can opt out (`MACDIRSTAT_NO_TELEMETRY=1` or Help → Privacy). The aha moment (bytes freed) fires
+flywheel-core Supabase `events` table via a detached `curl`. Cookieless. Release builds bake in
+`FLYWHEEL_SUPABASE_URL`/`FLYWHEEL_SUPABASE_KEY` (`option_env!`) and send unless the user opts out
+(`MACDIRSTAT_NO_TELEMETRY=1`, or "Don't send anonymous usage data" under Privacy in the `?` window).
+Source builds have no endpoint and send nothing. The aha moment (bytes freed) fires
 `conversion`; `activation_event: "conversion"` is set in the portfolio record.
 
 ## Done means
