@@ -2,8 +2,9 @@ use super::ScanProgress;
 use crate::scanner::tree::FileTree;
 use crossbeam_channel::Sender;
 use jwalk::WalkDir;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -122,6 +123,13 @@ fn should_skip(path: &Path, scan_root: &Path, skip_paths: &[PathBuf]) -> bool {
     false
 }
 
+/// The tree node of `path`'s direct parent. An orphan (parent filtered or
+/// raced away) gets None and is dropped: attaching it to a more distant
+/// ancestor would give it a wrong full_path, and Trash would hit the wrong file.
+fn parent_node(dir_map: &HashMap<PathBuf, usize>, path: &Path) -> Option<usize> {
+    dir_map.get(path.parent()?).copied()
+}
+
 pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut tree = FileTree::new();
     tree.rename_root(root.as_os_str().as_bytes());
@@ -134,6 +142,9 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let mut byte_count: u64 = 0;
     let mut error_count: usize = 0;
     let mut progress_counter: usize = 0;
+    // Track (dev, ino) to skip hard-linked duplicates; avoids double-counting
+    // files whose nlink > 1 that appear under multiple directories.
+    let mut seen_inodes: HashSet<(u64, u64)> = HashSet::new();
 
     let skip_paths = Arc::new(build_skip_paths());
     let walker_skip_paths = Arc::clone(&skip_paths);
@@ -170,17 +181,8 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             continue;
         }
 
-        let parent_path = match path.parent() {
-            Some(p) => p.to_path_buf(),
-            None => continue,
-        };
-
-        let parent_id = match dir_map.get(&parent_path) {
-            Some(&id) => id,
-            None => match find_closest_ancestor(&dir_map, &parent_path) {
-                Some(id) => id,
-                None => continue,
-            },
+        let Some(parent_id) = parent_node(&dir_map, &path) else {
+            continue;
         };
 
         let file_name_os = match path.file_name() {
@@ -193,28 +195,61 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
             Ok(m) => m,
             Err(_) => {
                 error_count += 1;
+                // For a directory whose metadata is unreadable, still register a
+                // stub node so that any children walkdir yields for it are
+                // attached at the correct path rather than dropped as orphans.
+                if entry.file_type().is_dir() {
+                    let d = path
+                        .components()
+                        .count()
+                        .saturating_sub(root.components().count())
+                        as u16;
+                    let stub_id =
+                        tree.add_dir(parent_id, file_name_bytes, d < 2, SystemTime::UNIX_EPOCH, d);
+                    dir_map.insert(path.to_path_buf(), stub_id);
+                    dir_count += 1;
+                }
                 continue;
             }
         };
 
         let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        let depth = path.components().count().saturating_sub(root.components().count()) as u16;
+        let depth = path
+            .components()
+            .count()
+            .saturating_sub(root.components().count()) as u16;
 
         if metadata.is_dir() {
-            let node_id = tree.add_dir(
-                parent_id,
-                file_name_bytes,
-                depth < 2,
-                modified,
-                depth,
-            );
+            let node_id = tree.add_dir(parent_id, file_name_bytes, depth < 2, modified, depth);
             dir_map.insert(path.to_path_buf(), node_id);
             dir_count += 1;
         } else {
-            let size = metadata.len();
-            let extension_owned = path
-                .extension()
-                .map(|e| e.to_string_lossy().to_lowercase());
+            // De-duplicate hard links: only count size for the first path we
+            // see for a given (dev, ino) pair. The file still appears in the
+            // tree at its canonical position; it just contributes 0 bytes for
+            // subsequent hard links so totals don't overcount.
+            //
+            // NOTE: We use metadata.len() (logical EOF size), not
+            // stat.st_blocks * 512 (allocated disk blocks). This means:
+            //   • Sparse files (e.g. Docker.raw) are OVERCOUNTED — they appear
+            //     larger than the disk space they actually consume.
+            //   • APFS clones and transparently-compressed files may also be
+            //     overcounted because their physical footprint is smaller.
+            // Upgrade path: replace `metadata.len()` with
+            // `(metadata.blocks() * 512).max(metadata.len())` guarded by
+            // `metadata.blocks() > 0` to handle special files where st_blocks
+            // is zero (FIFOs, sockets, device nodes).
+            let size = if metadata.nlink() > 1 {
+                let key = (metadata.dev(), metadata.ino());
+                if seen_inodes.insert(key) {
+                    metadata.len()
+                } else {
+                    0
+                }
+            } else {
+                metadata.len()
+            };
+            let extension_owned = path.extension().map(|e| e.to_string_lossy().to_lowercase());
             tree.add_file(
                 parent_id,
                 file_name_bytes,
@@ -300,13 +335,17 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
     let _ = tx.send(ScanProgress::Done(tree));
 }
 
-fn find_closest_ancestor(dir_map: &HashMap<PathBuf, usize>, path: &Path) -> Option<usize> {
-    let mut current = path.parent();
-    while let Some(p) = current {
-        if let Some(&id) = dir_map.get(p) {
-            return Some(id);
-        }
-        current = p.parent();
+#[cfg(test)]
+mod tests {
+    use super::parent_node;
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn orphan_entry_is_not_reparented_to_ancestor() {
+        let dir_map = HashMap::from([(PathBuf::from("/a"), 1), (PathBuf::from("/a/b"), 2)]);
+        assert_eq!(parent_node(&dir_map, Path::new("/a/b/f")), Some(2));
+        // /a/b/c was never registered: its child must not land under /a.
+        assert_eq!(parent_node(&dir_map, Path::new("/a/b/c/f")), None);
     }
-    None
 }

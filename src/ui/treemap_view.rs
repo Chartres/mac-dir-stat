@@ -222,7 +222,13 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         // Compute alpha for filtering
         let dimmed = if let Some(ref sel_ext) = state.selected_extension {
             if let Some(tree) = &state.tree {
-                tree.extension(cr.node_id) != Some(sel_ext.as_str())
+                // "(none)" is stored as "" but extension-less files return None,
+                // so treat empty sel_ext as matching None (no extension).
+                if sel_ext.is_empty() {
+                    tree.extension(cr.node_id).is_some()
+                } else {
+                    tree.extension(cr.node_id) != Some(sel_ext.as_str())
+                }
             } else {
                 false
             }
@@ -432,11 +438,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 let node = tree.node(cr.node_id);
                 let name = tree.name(cr.node_id);
                 let max_chars = (w / 7.0) as usize;
-                let display_name = if name.len() > max_chars && max_chars > 3 {
-                    format!(
-                        "{}...",
-                        &name[..max_chars.min(name.len()).saturating_sub(3)]
-                    )
+                let display_name = if name.chars().count() > max_chars && max_chars > 3 {
+                    let s: String = name.chars().take(max_chars.saturating_sub(3)).collect();
+                    format!("{}...", s)
                 } else {
                     name.to_string()
                 };

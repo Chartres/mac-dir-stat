@@ -76,6 +76,10 @@ pub struct AppState {
     // completed. Resets on each scan start. Shown in the status bar.
     pub freed_this_session: u64,
 
+    // Non-None when the last batch-trash had at least one failure. Shown in
+    // the status bar for one render cycle then cleared by the toolbar render.
+    pub batch_error_msg: Option<String>,
+
     // Sort modes for the directory tree and file-type list.
     pub dir_sort: DirSortMode,
     pub ext_sort: ExtSortMode,
@@ -93,11 +97,20 @@ pub struct AppState {
     // toolbar affordance. Rechecked on each scan (see start_scan).
     pub has_fda: bool,
 
-    // "Move to External Disk…": the running copy job and its last result.
-    pub relocate_job: Option<(NodeId, String, Receiver<Result<crate::relocate::Outcome, String>>)>,
+    // "Move to External Disk…": the running copy job (source path, display
+    // name, result) and its last result. Keyed by path, not NodeId: a rescan
+    // can finish before the copy does, and NodeIds don't survive a rescan.
+    pub relocate_job: Option<RelocateJob>,
     pub relocate_message: Option<String>,
 }
 
+pub type RelocateJob = (
+    PathBuf,
+    String,
+    Receiver<Result<crate::relocate::Outcome, String>>,
+);
+
+#[derive(Default)]
 pub struct ScanProgressInfo {
     pub files: usize,
     pub dirs: usize,
@@ -161,10 +174,8 @@ impl ExtSortMode {
 }
 
 pub enum PendingAction {
-    RevealInFinder(PathBuf),
-    MoveToTrash(NodeId),
-    ConfirmTrash(NodeId, String, u64),
-    ConfirmBatchTrash(Vec<NodeId>, u64),
+    ConfirmTrash(NodeId, PathBuf, u64),
+    ConfirmBatchTrash(Vec<(NodeId, PathBuf)>, u64),
     ConfirmEmptyTrash,
     RefreshSubtree(NodeId),
     ConfirmRelocate(Box<ui::relocate_window::RelocateDialog>),
@@ -192,61 +203,11 @@ impl App {
             crate::platform::fda::mark_prompted();
             !has_fda
         };
+        let mut state = AppState::new(scan_root, has_persisted_root, color_mode, flywheel);
+        state.has_fda = has_fda;
+        state.show_fda_prompt = show_fda_prompt;
         App {
-            state: AppState {
-                tree: None,
-                scan_root,
-                scan_receiver: None,
-                scan_progress: ScanProgressInfo {
-                    files: 0,
-                    dirs: 0,
-                    bytes: 0,
-                    errors: 0,
-                    scanning: false,
-                    current_path: None,
-                },
-                scan_start: None,
-                scan_duration_secs: 0.0,
-                partial_refresh_receiver: None,
-                extension_stats: vec![],
-                colored_rects: vec![],
-                dir_rects: vec![],
-                treemap_dirty: true,
-                color_mode,
-                view_root: None,
-                zoom_stack: vec![],
-                selected_node: None,
-                hovered_node: None,
-                hovered_dir: None,
-                selected_extension: None,
-                scroll_dir_tree_to: None,
-                context_menu_target: None,
-                cleanup_window_open: false,
-                cleanup_candidates: Vec::new(),
-                cleanup_selected: std::collections::HashSet::new(),
-                help_window_open: false,
-                search_active: false,
-                search_query: String::new(),
-                pending_action: None,
-                last_screen_size: egui::Vec2::ZERO,
-                last_canvas_size: egui::Vec2::ZERO,
-                has_persisted_root,
-                freed_this_session: 0,
-                dir_sort: DirSortMode::Size,
-                ext_sort: ExtSortMode::Size,
-                flywheel,
-                feedback_choice: None,
-                feedback_text: String::new(),
-                feedback_sent: false,
-                show_fda_prompt,
-                has_fda,
-                relocate_job: None,
-                relocate_message: None,
-                // Auto-scan on launch (default target = whole disk via the `/`
-                // fallback above). The first update() frame starts the scan, so
-                // the app opens straight into a scan instead of a welcome screen.
-                request_rescan: true,
-            },
+            state,
             theme_applied: false,
         }
     }
@@ -255,26 +216,35 @@ impl App {
         // Cheap once-per-scan recheck so the FDA affordance clears after the
         // user grants access and re-scans.
         self.state.has_fda = crate::platform::fda::has_full_disk_access();
+        // A Confirm Trash dialog (or any other pending action) stores NodeIds
+        // from the old tree. Clear it before starting a new scan so a
+        // confirmation that arrives after the new tree loads doesn't act on a
+        // recycled id.
+        self.state.pending_action = None;
         let (tx, rx) = crossbeam_channel::unbounded();
         self.state.scan_receiver = Some(rx);
         self.state.scan_progress = ScanProgressInfo {
-            files: 0,
-            dirs: 0,
-            bytes: 0,
-            errors: 0,
             scanning: true,
-            current_path: None,
+            ..Default::default()
         };
         self.state.scan_start = Some(Instant::now());
         self.state.freed_this_session = 0;
+        self.state.batch_error_msg = None;
+        self.state.partial_refresh_receiver = None;
         self.state.tree = None;
         self.state.colored_rects.clear();
         self.state.dir_rects.clear();
         self.state.extension_stats.clear();
         self.state.selected_node = None;
+        self.state.selected_extension = None;
         self.state.hovered_node = None;
+        self.state.hovered_dir = None;
         self.state.view_root = None;
         self.state.zoom_stack.clear();
+        // The Cleanup window stays open during a scan; its NodeIds belong to
+        // the old tree and must not reach a Trash confirmation for the new one.
+        self.state.cleanup_candidates.clear();
+        self.state.cleanup_selected.clear();
         crate::scanner::scan(self.state.scan_root.clone(), tx);
     }
 
@@ -320,21 +290,10 @@ impl App {
                 tree.graft_under(target_id, new_subtree);
                 let root = tree.root();
                 self.state.extension_stats = tree.collect_extensions(root);
-                self.state.cleanup_candidates =
-                    crate::cleanup::find_candidates(tree, root);
+                self.state.cleanup_candidates = crate::cleanup::find_candidates(tree, root);
 
                 // Old node IDs under the target are now dead. Sanitize any
                 // state that referenced them.
-                if let Some(vr) = self.state.view_root {
-                    if !tree.is_alive(vr) {
-                        self.state.view_root = Some(target_id);
-                        self.state.zoom_stack
-                            .retain(|id| tree.is_alive(*id));
-                        if self.state.zoom_stack.is_empty() {
-                            self.state.zoom_stack.push(root);
-                        }
-                    }
-                }
                 if let Some(sel) = self.state.selected_node {
                     if !tree.is_alive(sel) {
                         self.state.selected_node = Some(target_id);
@@ -345,17 +304,8 @@ impl App {
                 self.state.context_menu_target = None;
                 self.state.scroll_dir_tree_to = Some(target_id);
                 // Drop any cleanup selections that became dead during graft.
-                let live_check: Vec<NodeId> = self
-                    .state
-                    .cleanup_selected
-                    .iter()
-                    .copied()
-                    .collect();
-                for id in live_check {
-                    if !tree.is_alive(id) {
-                        self.state.cleanup_selected.remove(&id);
-                    }
-                }
+                self.state.cleanup_selected.retain(|id| tree.is_alive(*id));
+                self.state.reset_dead_view_root(target_id);
             }
             self.state.partial_refresh_receiver = None;
             self.state.treemap_dirty = true;
@@ -363,83 +313,130 @@ impl App {
     }
 
     fn poll_scan(&mut self) {
+        let mut disconnected = false;
         if let Some(rx) = &self.state.scan_receiver {
-            while let Ok(msg) = rx.try_recv() {
-                match msg {
-                    ScanProgress::Counting {
-                        files,
-                        dirs,
-                        bytes,
-                        errors,
-                        current_path,
-                    } => {
-                        self.state.scan_progress.files = files;
-                        self.state.scan_progress.dirs = dirs;
-                        self.state.scan_progress.bytes = bytes;
-                        self.state.scan_progress.errors = errors;
-                        self.state.scan_progress.current_path = current_path;
-                    }
-                    ScanProgress::Done(tree) => {
-                        if let Some(start) = self.state.scan_start {
-                            self.state.scan_duration_secs = start.elapsed().as_secs_f32();
+            loop {
+                match rx.try_recv() {
+                    Ok(msg) => match msg {
+                        ScanProgress::Counting {
+                            files,
+                            dirs,
+                            bytes,
+                            errors,
+                            current_path,
+                        } => {
+                            self.state.scan_progress.files = files;
+                            self.state.scan_progress.dirs = dirs;
+                            self.state.scan_progress.bytes = bytes;
+                            self.state.scan_progress.errors = errors;
+                            self.state.scan_progress.current_path = current_path;
                         }
-                        self.state.flywheel.track(
-                            "scan_completed",
-                            serde_json::json!({
-                                "files": self.state.scan_progress.files,
-                                "dirs": self.state.scan_progress.dirs,
-                                "bytes": self.state.scan_progress.bytes,
-                                "errors": self.state.scan_progress.errors,
-                                "duration_secs": self.state.scan_duration_secs,
-                            }),
-                        );
-                        let root = tree.root();
-                        self.state.extension_stats = tree.collect_extensions(root);
-                        self.state.cleanup_candidates =
-                            crate::cleanup::find_candidates(&tree, root);
-                        self.state.view_root = Some(root);
-                        self.state.zoom_stack = vec![root];
-                        self.state.tree = Some(tree);
+                        ScanProgress::Done(tree) => {
+                            if let Some(start) = self.state.scan_start {
+                                self.state.scan_duration_secs = start.elapsed().as_secs_f32();
+                            }
+                            self.state.flywheel.track(
+                                "scan_completed",
+                                serde_json::json!({
+                                    "files": self.state.scan_progress.files,
+                                    "dirs": self.state.scan_progress.dirs,
+                                    "bytes": self.state.scan_progress.bytes,
+                                    "errors": self.state.scan_progress.errors,
+                                    "duration_secs": self.state.scan_duration_secs,
+                                }),
+                            );
+                            let root = tree.root();
+                            self.state.extension_stats = tree.collect_extensions(root);
+                            self.state.cleanup_candidates =
+                                crate::cleanup::find_candidates(&tree, root);
+                            self.state.view_root = Some(root);
+                            self.state.zoom_stack = vec![root];
+                            self.state.tree = Some(tree);
+                            self.state.scan_progress.scanning = false;
+                            self.state.treemap_dirty = true;
+                            // Old NodeIds are gone; reset all hover/selection state.
+                            // hovered_dir must be cleared here — is_alive(old_id) on
+                            // a shorter new tree panics with an out-of-bounds index.
+                            self.state.cleanup_selected.clear();
+                            // A dialog or Locate from the old tree would now
+                            // resolve its ids against unrelated new nodes.
+                            self.state.pending_action = None;
+                            self.state.selected_node = None;
+                            self.state.hovered_node = None;
+                            self.state.hovered_dir = None;
+                            self.state.context_menu_target = None;
+                            crate::state::save(&self.state.scan_root, self.state.color_mode);
+                        }
+                        ScanProgress::Error(msg) => {
+                            eprintln!("Scan error: {}", msg);
+                            self.state
+                                .flywheel
+                                .log_error(&msg, serde_json::json!({ "where": "scan" }));
+                            self.state.scan_progress.scanning = false;
+                        }
+                    },
+                    Err(crossbeam_channel::TryRecvError::Empty) => break,
+                    Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                        // Walker thread panicked or dropped without sending Done —
+                        // end the spinner so it doesn't spin forever.
+                        eprintln!("Scan channel disconnected unexpectedly");
                         self.state.scan_progress.scanning = false;
-                        self.state.treemap_dirty = true;
-                        // Old NodeIds are gone; reset selection state.
-                        self.state.cleanup_selected.clear();
-                        self.state.context_menu_target = None;
-                        crate::state::save(
-                            &self.state.scan_root,
-                            self.state.color_mode,
-                        );
-                    }
-                    ScanProgress::Error(msg) => {
-                        eprintln!("Scan error: {}", msg);
-                        self.state
-                            .flywheel
-                            .log_error(&msg, serde_json::json!({ "where": "scan" }));
-                        self.state.scan_progress.scanning = false;
+                        disconnected = true;
+                        break;
                     }
                 }
             }
         }
+        if disconnected {
+            self.state.scan_receiver = None;
+        }
     }
 
-    /// Trash a batch of nodes from a single confirmation. Failed individual
-    /// items are logged and skipped; successful ones are removed from the
-    /// tree. After all items are processed, recompute extension stats and
-    /// cleanup candidates once.
-    fn perform_batch_delete(&mut self, ids: Vec<NodeId>) {
+    /// Trash a batch of nodes from a single confirmation. Each item carries
+    /// the path the user picked; an id that no longer sits at that path is
+    /// skipped. Failed items are logged and skipped; successful ones are
+    /// removed from the tree, then stats and candidates are recomputed once.
+    fn perform_batch_delete(&mut self, items: Vec<(NodeId, PathBuf)>) {
         let mut succeeded: Vec<NodeId> = Vec::new();
+        let mut failed: usize = 0;
+        let mut stale: usize = 0;
+        let mut first_error = String::new();
         let mut freed: u64 = 0;
-        for id in &ids {
-            let (path, size) = match &self.state.tree {
-                Some(t) if t.is_alive(*id) => (t.full_path(*id), t.node(*id).size),
-                _ => continue,
+        for (id, path) in &items {
+            let Some(size) = self.state.size_if_at(*id, path) else {
+                stale += 1;
+                continue;
             };
-            if let Err(e) = crate::platform::trash::move_to_trash(&path) {
+            if let Err(e) = trash_unless_protected(path) {
                 eprintln!("Batch trash failed for {}: {}", path.display(), e);
+                if failed == 0 {
+                    first_error = e;
+                }
+                failed += 1;
                 continue;
             }
             succeeded.push(*id);
             freed += size;
+        }
+        let plural = |n: usize| if n == 1 { "" } else { "s" };
+        let mut msgs = Vec::new();
+        if failed > 0 {
+            msgs.push(format!(
+                "{} item{} could not be moved to Trash: {}",
+                failed,
+                plural(failed),
+                first_error,
+            ));
+        }
+        if stale > 0 {
+            msgs.push(format!(
+                "{} item{} not moved: changed since you picked them; try again",
+                stale,
+                plural(stale),
+            ));
+        }
+        if !msgs.is_empty() {
+            self.state.batch_error_msg = Some(msgs.join("; "));
         }
         self.state.freed_this_session = self.state.freed_this_session.saturating_add(freed);
         if !succeeded.is_empty() {
@@ -449,29 +446,7 @@ impl App {
                 "kind": "batch",
             }));
         }
-        if let Some(tree) = &mut self.state.tree {
-            for id in &succeeded {
-                tree.remove_node(*id);
-            }
-            let root = tree.root();
-            self.state.extension_stats = tree.collect_extensions(root);
-            // Cheap: dead candidates can only disappear (not appear),
-            // since find_candidates doesn't recurse into matched dirs.
-            let tree_ref = &*tree;
-            self.state
-                .cleanup_candidates
-                .retain(|c| tree_ref.is_alive(c.node_id));
-        }
-        for id in &succeeded {
-            if self.state.selected_node == Some(*id) {
-                self.state.selected_node = None;
-            }
-            if self.state.hovered_node == Some(*id) {
-                self.state.hovered_node = None;
-            }
-            self.state.cleanup_selected.remove(id);
-        }
-        self.state.treemap_dirty = true;
+        self.state.remove_trashed(&succeeded);
     }
 
     /// Move the directory-list selection up or down through the visible rows.
@@ -512,8 +487,12 @@ impl App {
     /// Right arrow expands the selected directory (or steps into its first
     /// child if already open); left arrow collapses it (or steps to its parent).
     fn nav_expand_selected(&mut self, expand: bool) {
-        let Some(sel) = self.state.selected_node else { return };
-        let Some(tree) = &mut self.state.tree else { return };
+        let Some(sel) = self.state.selected_node else {
+            return;
+        };
+        let Some(tree) = &mut self.state.tree else {
+            return;
+        };
         if !tree.is_alive(sel) {
             return;
         }
@@ -545,23 +524,28 @@ impl App {
         }
     }
 
-    fn start_relocate(&mut self, node: NodeId, name: String, path: PathBuf, volume: PathBuf, link: bool) {
+    fn start_relocate(&mut self, name: String, path: PathBuf, volume: PathBuf, link: bool) {
         let (tx, rx) = crossbeam_channel::bounded(1);
+        let src = path.clone();
         std::thread::spawn(move || {
             let _running = crate::relocate::EXEC_LOCK
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            let _ = tx.send(crate::relocate::relocate(&path, &volume, link));
+            let _ = tx.send(crate::relocate::relocate(&src, &volume, link));
         });
         self.state.relocate_message = None;
-        self.state.relocate_job = Some((node, name, rx));
+        self.state.relocate_job = Some((path, name, rx));
     }
 
-    /// Applies a finished move: the node leaves the tree like a trash does.
+    /// Applies a finished move: whatever node the current tree has at the
+    /// source path leaves it like a trash does. Looked up by path, so a tree
+    /// rebuilt by a rescan mid-copy loses the right node or none.
     fn poll_relocate(&mut self) {
-        let Some((node, name, rx)) = &self.state.relocate_job else { return };
+        let Some((path, name, rx)) = &self.state.relocate_job else {
+            return;
+        };
         let Ok(result) = rx.try_recv() else { return };
-        let (node, name) = (*node, name.clone());
+        let (path, name) = (path.clone(), name.clone());
         self.state.relocate_job = None;
         match result {
             Ok(o) => {
@@ -571,24 +555,15 @@ impl App {
                     ui::theme::format_size(o.bytes),
                     o.dest.display()
                 ));
-                if let Some(tree) = &mut self.state.tree {
-                    if tree.is_alive(node) {
-                        let size = tree.node(node).size;
-                        self.state.freed_this_session = self.state.freed_this_session.saturating_add(size);
-                        tree.remove_node(node);
-                        let root = tree.root();
-                        self.state.extension_stats = tree.collect_extensions(root);
-                        let tree_ref = &*tree;
-                        self.state.cleanup_candidates.retain(|c| tree_ref.is_alive(c.node_id));
-                    }
+                let moved = self.state.tree.as_ref().and_then(|t| {
+                    let id = t.find_path(&path)?;
+                    Some((id, t.node(id).size))
+                });
+                if let Some((id, size)) = moved {
+                    self.state.freed_this_session =
+                        self.state.freed_this_session.saturating_add(size);
+                    self.state.remove_trashed(&[id]);
                 }
-                if self.state.selected_node == Some(node) {
-                    self.state.selected_node = None;
-                }
-                if self.state.hovered_node == Some(node) {
-                    self.state.hovered_node = None;
-                }
-                self.state.treemap_dirty = true;
             }
             Err(e) => {
                 eprintln!("Move failed: {e}");
@@ -597,45 +572,147 @@ impl App {
         }
     }
 
-    fn perform_delete(&mut self, node_id: NodeId) {
-        if let Some(tree) = &self.state.tree {
-            let path = tree.full_path(node_id);
-            let size = tree.node(node_id).size;
-            match crate::platform::trash::move_to_trash(&path) {
-                Ok(()) => {
-                    self.state.freed_this_session =
-                        self.state.freed_this_session.saturating_add(size);
-                    self.state.flywheel.conversion(serde_json::json!({
-                        "freed_bytes": size,
-                        "items": 1,
-                        "kind": "single",
-                    }));
-                    if let Some(tree) = &mut self.state.tree {
-                        tree.remove_node(node_id);
-                        let root = tree.root();
-                        self.state.extension_stats = tree.collect_extensions(root);
-                        let tree_ref = &*tree;
-                        self.state
-                            .cleanup_candidates
-                            .retain(|c| tree_ref.is_alive(c.node_id));
-                    }
-                    if self.state.selected_node == Some(node_id) {
-                        self.state.selected_node = None;
-                    }
-                    if self.state.hovered_node == Some(node_id) {
-                        self.state.hovered_node = None;
-                    }
-                    self.state.treemap_dirty = true;
-                }
-                Err(e) => {
-                    eprintln!("Delete failed: {}", e);
-                }
+    /// Trash the node the confirmation showed, refusing when `node_id` no
+    /// longer sits at `path` (a refresh or rescan changed the tree since).
+    fn perform_delete(&mut self, node_id: NodeId, path: &std::path::Path) {
+        let Some(size) = self.state.size_if_at(node_id, path) else {
+            self.state.batch_error_msg = Some(format!(
+                "Not moved to Trash: {} changed since you picked it; try again",
+                path.display()
+            ));
+            return;
+        };
+        match trash_unless_protected(path) {
+            Ok(()) => {
+                self.state.freed_this_session = self.state.freed_this_session.saturating_add(size);
+                self.state.flywheel.conversion(serde_json::json!({
+                    "freed_bytes": size,
+                    "items": 1,
+                    "kind": "single",
+                }));
+                self.state.remove_trashed(&[node_id]);
+            }
+            Err(e) => {
+                eprintln!("Delete failed: {}", e);
+                self.state.batch_error_msg = Some(format!("Could not move to Trash: {}", e));
             }
         }
     }
 }
 
 impl AppState {
+    /// Fresh state with no tree. Free of side effects (no disk, no
+    /// analytics), so tests can build one; `App::new` adds the FDA flags.
+    pub fn new(
+        scan_root: PathBuf,
+        has_persisted_root: bool,
+        color_mode: ColorMode,
+        flywheel: crate::flywheel::Flywheel,
+    ) -> Self {
+        AppState {
+            tree: None,
+            scan_root,
+            scan_receiver: None,
+            scan_progress: ScanProgressInfo::default(),
+            scan_start: None,
+            scan_duration_secs: 0.0,
+            partial_refresh_receiver: None,
+            extension_stats: vec![],
+            colored_rects: vec![],
+            dir_rects: vec![],
+            treemap_dirty: true,
+            color_mode,
+            view_root: None,
+            zoom_stack: vec![],
+            selected_node: None,
+            hovered_node: None,
+            hovered_dir: None,
+            selected_extension: None,
+            scroll_dir_tree_to: None,
+            context_menu_target: None,
+            cleanup_window_open: false,
+            cleanup_candidates: Vec::new(),
+            cleanup_selected: std::collections::HashSet::new(),
+            help_window_open: false,
+            search_active: false,
+            search_query: String::new(),
+            pending_action: None,
+            last_screen_size: egui::Vec2::ZERO,
+            last_canvas_size: egui::Vec2::ZERO,
+            has_persisted_root,
+            freed_this_session: 0,
+            batch_error_msg: None,
+            dir_sort: DirSortMode::Size,
+            ext_sort: ExtSortMode::Size,
+            flywheel,
+            feedback_choice: None,
+            feedback_text: String::new(),
+            feedback_sent: false,
+            show_fda_prompt: false,
+            has_fda: false,
+            relocate_job: None,
+            relocate_message: None,
+            // Auto-scan on launch (default target = whole disk via the `/`
+            // fallback in App::new). The first update() frame starts the scan, so
+            // the app opens straight into a scan instead of a welcome screen.
+            request_rescan: true,
+        }
+    }
+
+    /// The node's size if `id` is alive and still at `path` in the current
+    /// tree. Trash confirmations go through this so an id never reaches a
+    /// path other than the one the user picked.
+    fn size_if_at(&self, id: NodeId, path: &std::path::Path) -> Option<u64> {
+        let t = self.tree.as_ref()?;
+        (t.is_alive(id) && t.full_path(id) == path).then(|| t.node(id).size)
+    }
+
+    /// Drop nodes that were just moved to Trash from the tree and from every
+    /// piece of state that might still reference them.
+    fn remove_trashed(&mut self, ids: &[NodeId]) {
+        if let Some(tree) = &mut self.tree {
+            for &id in ids {
+                tree.remove_node(id);
+            }
+            let root = tree.root();
+            self.extension_stats = tree.collect_extensions(root);
+            // Cheap: dead candidates can only disappear (not appear),
+            // since find_candidates doesn't recurse into matched dirs.
+            let tree_ref = &*tree;
+            self.cleanup_candidates
+                .retain(|c| tree_ref.is_alive(c.node_id));
+            // If the user trashed the currently-zoomed directory, reset the
+            // treemap view to the root so it doesn't go blank.
+            self.reset_dead_view_root(root);
+        }
+        for id in ids {
+            if self.selected_node == Some(*id) {
+                self.selected_node = None;
+            }
+            if self.hovered_node == Some(*id) {
+                self.hovered_node = None;
+            }
+            self.cleanup_selected.remove(id);
+        }
+        self.treemap_dirty = true;
+    }
+
+    /// If the zoomed-into directory died (trashed or replaced by a graft),
+    /// jump the treemap to `fallback` and drop dead entries from the zoom
+    /// stack, keeping at least the tree root.
+    fn reset_dead_view_root(&mut self, fallback: NodeId) {
+        let Some(tree) = &self.tree else { return };
+        let Some(vr) = self.view_root else { return };
+        if tree.is_alive(vr) {
+            return;
+        }
+        self.view_root = Some(fallback);
+        self.zoom_stack.retain(|id| tree.is_alive(*id));
+        if self.zoom_stack.is_empty() {
+            self.zoom_stack.push(tree.root());
+        }
+    }
+
     pub fn expand_to_node(&mut self, node_id: NodeId) {
         if let Some(tree) = &mut self.tree {
             let mut current = tree.node(node_id).parent;
@@ -710,9 +787,7 @@ impl eframe::App for App {
         }
 
         // Keyboard shortcuts
-        if ctx.input(|i| {
-            i.key_pressed(egui::Key::R) && i.modifiers.command && i.modifiers.shift
-        }) {
+        if ctx.input(|i| i.key_pressed(egui::Key::R) && i.modifiers.command && i.modifiers.shift) {
             // Refresh just the selected directory (or its parent dir if a file is selected).
             if let Some(sel) = self.state.selected_node {
                 let target = self.state.tree.as_ref().and_then(|t| {
@@ -729,20 +804,16 @@ impl eframe::App for App {
         } else if ctx.input(|i| i.key_pressed(egui::Key::R) && i.modifiers.command) {
             self.state.request_rescan = true;
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::Num1) && i.modifiers.command) {
-            self.state.color_mode = ColorMode::Extension;
-            self.state.treemap_dirty = true;
-            crate::state::save(&self.state.scan_root, self.state.color_mode);
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Num2) && i.modifiers.command) {
-            self.state.color_mode = ColorMode::Depth;
-            self.state.treemap_dirty = true;
-            crate::state::save(&self.state.scan_root, self.state.color_mode);
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Num3) && i.modifiers.command) {
-            self.state.color_mode = ColorMode::Age;
-            self.state.treemap_dirty = true;
-            crate::state::save(&self.state.scan_root, self.state.color_mode);
+        for (key, mode) in [
+            (egui::Key::Num1, ColorMode::Extension),
+            (egui::Key::Num2, ColorMode::Depth),
+            (egui::Key::Num3, ColorMode::Age),
+        ] {
+            if ctx.input(|i| i.key_pressed(key) && i.modifiers.command) {
+                self.state.color_mode = mode;
+                self.state.treemap_dirty = true;
+                crate::state::save(&self.state.scan_root, mode);
+            }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::O) && i.modifiers.command) {
             if let Some(path) = crate::platform::dialogs::pick_folder(&self.state.scan_root) {
@@ -756,20 +827,31 @@ impl eframe::App for App {
                 self.state.search_query.clear();
             }
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command) {
-            if let Some(node_id) = self.state.selected_node {
-                if let Some(tree) = &self.state.tree {
-                    let name = tree.name(node_id).to_string();
-                    let size = tree.node(node_id).size;
-                    self.state.pending_action = Some(PendingAction::ConfirmTrash(node_id, name, size));
+        if !ctx.wants_keyboard_input() {
+            // An open confirmation is not swapped for another one.
+            let dialog_open = self.state.pending_action.is_some();
+            if !dialog_open
+                && ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command)
+            {
+                if let Some(node_id) = self.state.selected_node {
+                    if let Some(tree) = &self.state.tree {
+                        if tree.is_trashable(node_id) {
+                            let path = tree.full_path(node_id);
+                            let size = tree.node(node_id).size;
+                            self.state.pending_action =
+                                Some(PendingAction::ConfirmTrash(node_id, path, size));
+                        }
+                    }
                 }
             }
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-            if let Some(node_id) = self.state.selected_node {
-                if let Some(tree) = &self.state.tree {
-                    let path = tree.full_path(node_id);
-                    crate::platform::finder::reveal_in_finder(&path);
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                if let Some(node_id) = self.state.selected_node {
+                    if let Some(tree) = &self.state.tree {
+                        if tree.is_alive(node_id) {
+                            let path = tree.full_path(node_id);
+                            crate::platform::finder::reveal_in_finder(&path);
+                        }
+                    }
                 }
             }
         }
@@ -791,9 +873,7 @@ impl eframe::App for App {
             }
         }
         // Don't fire `?` while a text input (search) is focused.
-        if !ctx.wants_keyboard_input()
-            && ctx.input(|i| i.key_pressed(egui::Key::Questionmark))
-        {
+        if !ctx.wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Questionmark)) {
             self.state.help_window_open = !self.state.help_window_open;
         }
 
@@ -836,103 +916,123 @@ impl eframe::App for App {
                     .inner_margin(egui::Margin::symmetric(14, 6)),
             )
             .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if let Some(tree) = &self.state.tree {
-                    let root = tree.root();
-                    let file_count = tree.collect_files(root).len();
-                    let freed_str = if self.state.freed_this_session > 0 {
-                        format!(
-                            "  •  freed {}",
-                            ui::theme::format_size(self.state.freed_this_session)
-                        )
-                    } else {
-                        String::new()
-                    };
-                    let errors_str = if self.state.scan_progress.errors > 0 {
-                        format!("  •  {} skipped", self.state.scan_progress.errors)
-                    } else {
-                        String::new()
-                    };
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} files  •  {} dirs  •  {:.1}s{}{}",
-                            file_count,
-                            self.state.scan_progress.dirs,
-                            self.state.scan_duration_secs,
-                            errors_str,
-                            freed_str,
-                        ))
-                        .color(ui::theme::TEXT_MUTED)
-                        .size(11.0),
-                    );
-                }
-                if let Some((_, name, _)) = &self.state.relocate_job {
-                    ui.spinner();
-                    ui.label(
-                        egui::RichText::new(format!("Moving {name}: copying and verifying…"))
+                ui.horizontal(|ui| {
+                    if let Some(tree) = &self.state.tree {
+                        let root = tree.root();
+                        let file_count = tree.node(root).file_count as usize;
+                        let freed_str = if self.state.freed_this_session > 0 {
+                            format!(
+                                "  •  freed {}",
+                                ui::theme::format_size(self.state.freed_this_session)
+                            )
+                        } else {
+                            String::new()
+                        };
+                        let errors_str = if self.state.scan_progress.errors > 0 {
+                            format!("  •  {} skipped", self.state.scan_progress.errors)
+                        } else {
+                            String::new()
+                        };
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{} files  •  {} dirs  •  {:.1}s{}{}",
+                                file_count,
+                                self.state.scan_progress.dirs,
+                                self.state.scan_duration_secs,
+                                errors_str,
+                                freed_str,
+                            ))
+                            .color(ui::theme::TEXT_MUTED)
+                            .size(11.0),
+                        );
+                    }
+                    if let Some((_, name, _)) = &self.state.relocate_job {
+                        ui.spinner();
+                        ui.label(
+                            egui::RichText::new(format!("Moving {name}: copying and verifying…"))
+                                .color(ui::theme::ACCENT_LIGHT)
+                                .size(11.0),
+                        );
+                        ui.ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(250));
+                    } else if let Some(msg) = &self.state.relocate_message {
+                        ui.label(
+                            egui::RichText::new(msg)
+                                .color(ui::theme::ACCENT_LIGHT)
+                                .size(11.0),
+                        );
+                    }
+                    if self.state.tree.is_none() && self.state.scan_progress.scanning {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Scanning... {} files  •  {} dirs  •  {}",
+                                self.state.scan_progress.files,
+                                self.state.scan_progress.dirs,
+                                ui::theme::format_size(self.state.scan_progress.bytes),
+                            ))
                             .color(ui::theme::ACCENT_LIGHT)
                             .size(11.0),
-                    );
-                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
-                } else if let Some(msg) = &self.state.relocate_message {
-                    ui.label(egui::RichText::new(msg).color(ui::theme::ACCENT_LIGHT).size(11.0));
-                }
-                if self.state.tree.is_none() && self.state.scan_progress.scanning {
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Scanning... {} files  •  {} dirs  •  {}",
-                            self.state.scan_progress.files,
-                            self.state.scan_progress.dirs,
-                            ui::theme::format_size(self.state.scan_progress.bytes),
-                        ))
-                        .color(ui::theme::ACCENT_LIGHT)
-                        .size(11.0),
-                    );
-                }
+                        );
+                    }
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Partial-refresh indicator takes priority over the
-                    // hovered-file path so the user sees feedback during the
-                    // background re-scan.
-                    if let Some((target_id, _)) = &self.state.partial_refresh_receiver {
-                        if let Some(tree) = &self.state.tree {
-                            if tree.is_alive(*target_id) {
-                                let path = tree.full_path(*target_id);
+                    // Batch-trash error feedback: keep until the next scan or delete.
+                    if let Some(msg) = &self.state.batch_error_msg {
+                        ui.label(
+                            egui::RichText::new(format!("⚠ {}", msg))
+                                .color(egui::Color32::from_rgb(248, 113, 113))
+                                .size(11.0),
+                        );
+                    }
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Partial-refresh indicator takes priority over the
+                        // hovered-file path so the user sees feedback during the
+                        // background re-scan.
+                        if let Some((target_id, _)) = &self.state.partial_refresh_receiver {
+                            if let Some(tree) = &self.state.tree {
+                                if tree.is_alive(*target_id) {
+                                    let path = tree.full_path(*target_id);
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "Refreshing  {}  …",
+                                            path.display(),
+                                        ))
+                                        .color(ui::theme::ACCENT_LIGHT)
+                                        .size(11.0),
+                                    );
+                                    ui.ctx().request_repaint();
+                                }
+                            }
+                        } else if let Some(tree) = &self.state.tree {
+                            // Show hovered file if any, otherwise show hovered directory region
+                            let show_node = self
+                                .state
+                                .hovered_node
+                                .filter(|&id| tree.is_alive(id))
+                                .or(self.state.hovered_dir.filter(|&id| tree.is_alive(id)));
+                            if let Some(id) = show_node {
+                                let path = tree.full_path(id);
+                                let node = tree.node(id);
+                                let prefix = if self.state.hovered_node.is_some() {
+                                    ""
+                                } else {
+                                    "📁 "
+                                };
                                 ui.label(
                                     egui::RichText::new(format!(
-                                        "Refreshing  {}  …",
+                                        "{}{}  •  {}",
+                                        prefix,
                                         path.display(),
+                                        ui::theme::format_size(node.size),
                                     ))
                                     .color(ui::theme::ACCENT_LIGHT)
                                     .size(11.0),
                                 );
-                                ui.ctx().request_repaint();
                             }
                         }
-                    } else if let Some(tree) = &self.state.tree {
-                        // Show hovered file if any, otherwise show hovered directory region
-                        let show_node = self.state.hovered_node
-                            .filter(|&id| tree.is_alive(id))
-                            .or(self.state.hovered_dir.filter(|&id| tree.is_alive(id)));
-                        if let Some(id) = show_node {
-                            let path = tree.full_path(id);
-                            let node = tree.node(id);
-                            let prefix = if self.state.hovered_node.is_some() { "" } else { "📁 " };
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{}{}  •  {}",
-                                    prefix,
-                                    path.display(),
-                                    ui::theme::format_size(node.size),
-                                ))
-                                .color(ui::theme::ACCENT_LIGHT)
-                                .size(11.0),
-                            );
-                        }
-                    }
+                    });
                 });
             });
-        });
 
         let side_frame = egui::Frame::new()
             .fill(ui::theme::BG_PANEL)
@@ -976,69 +1076,25 @@ impl eframe::App for App {
         ui::fda_window::show(ctx, &mut self.state);
 
         // Handle pending actions
-        let mut action_to_process: Option<Option<NodeId>> = None;
-        let mut batch_to_process: Option<Option<Vec<NodeId>>> = None;
-        let mut empty_trash_confirmed: Option<bool> = None;
+        let mut decision: Option<bool> = None;
         let mut relocate_choice = None;
         if let Some(PendingAction::ConfirmRelocate(d)) = &mut self.state.pending_action {
-            relocate_choice = ui::relocate_window::show(ctx, d)
-                .map(|c| (c, d.node, d.name.clone(), d.path.clone()));
+            relocate_choice =
+                ui::relocate_window::show(ctx, d).map(|c| (c, d.name.clone(), d.path.clone()));
         }
         if let Some(action) = &self.state.pending_action {
             match action {
-                PendingAction::ConfirmTrash(node_id, name, size) => {
-                    let node_id = *node_id;
-                    let name = name.clone();
-                    let size = *size;
-                    let display_name = if name.chars().count() > 36 {
-                        let mut iter = name.chars();
-                        let head: String = iter.by_ref().take(34).collect();
-                        format!("{}…", head)
-                    } else {
-                        name.clone()
-                    };
-                    egui::Window::new("Confirm Delete")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(300.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(320.0);
-                            ui.label(
-                                egui::RichText::new("Move to Trash?")
-                                    .color(ui::theme::TEXT_PRIMARY)
-                                    .size(13.0)
-                                    .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{}  ·  {}",
-                                    display_name,
-                                    ui::theme::format_size(size),
-                                ))
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(ui, "Move to Trash")
-                                            .clicked()
-                                        {
-                                            action_to_process = Some(Some(node_id));
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            action_to_process = Some(None);
-                                        }
-                                    },
-                                );
-                            });
-                        });
+                PendingAction::ConfirmTrash(_, path, size) => {
+                    let detail =
+                        format!("{}  ·  {}", path.display(), ui::theme::format_size(*size));
+                    decision = confirm_dialog(
+                        ctx,
+                        "Confirm Delete",
+                        (300.0, 380.0),
+                        "Move to Trash?",
+                        &detail,
+                        "Move to Trash",
+                    );
                 }
                 PendingAction::ConfirmRelocate(_) => {}
                 PendingAction::RefreshSubtree(node_id) => {
@@ -1047,132 +1103,305 @@ impl eframe::App for App {
                     self.start_partial_refresh(node_id);
                 }
                 PendingAction::ConfirmEmptyTrash => {
-                    egui::Window::new("Confirm Empty Trash")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(320.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(360.0);
-                            ui.label(
-                                egui::RichText::new("Empty Trash?")
-                                    .color(ui::theme::TEXT_PRIMARY)
-                                    .size(13.0)
-                                    .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(
-                                    "Permanently deletes everything currently in your Trash. \
-                                     Cannot be undone.",
-                                )
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(ui, "Empty Trash")
-                                            .clicked()
-                                        {
-                                            empty_trash_confirmed = Some(true);
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            empty_trash_confirmed = Some(false);
-                                        }
-                                    },
-                                );
-                            });
-                        });
+                    decision = confirm_dialog(
+                        ctx,
+                        "Confirm Empty Trash",
+                        (320.0, 360.0),
+                        "Empty Trash?",
+                        "Permanently deletes everything currently in your Trash. \
+                         Cannot be undone.",
+                        "Empty Trash",
+                    );
                 }
-                PendingAction::ConfirmBatchTrash(ids, total_size) => {
-                    let ids = ids.clone();
-                    let total_size = *total_size;
-                    egui::Window::new("Confirm Batch Delete")
-                        .title_bar(false)
-                        .collapsible(false)
-                        .resizable(false)
-                        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                        .default_width(320.0)
-                        .show(ctx, |ui| {
-                            ui.set_max_width(360.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "Move {} item{} to Trash?",
-                                    ids.len(),
-                                    if ids.len() == 1 { "" } else { "s" },
-                                ))
-                                .color(ui::theme::TEXT_PRIMARY)
-                                .size(13.0)
-                                .strong(),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "Total {}",
-                                    ui::theme::format_size(total_size),
-                                ))
-                                .color(ui::theme::TEXT_SECONDARY)
-                                .size(11.0),
-                            );
-                            ui.add_space(12.0);
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 6.0;
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui::widgets::danger_button(
-                                            ui,
-                                            &format!("Move {} to Trash", ids.len()),
-                                        )
-                                        .clicked()
-                                        {
-                                            batch_to_process = Some(Some(ids.clone()));
-                                        }
-                                        if ui::widgets::ghost_button(ui, "Cancel").clicked() {
-                                            batch_to_process = Some(None);
-                                        }
-                                    },
-                                );
-                            });
-                        });
-                }
-                _ => {
-                    // RevealInFinder / MoveToTrash variants are unused —
-                    // context menu performs those actions inline.
-                    self.state.pending_action = None;
+                PendingAction::ConfirmBatchTrash(items, total_size) => {
+                    let n = items.len();
+                    decision = confirm_dialog(
+                        ctx,
+                        "Confirm Batch Delete",
+                        (320.0, 360.0),
+                        &format!("Move {} item{} to Trash?", n, if n == 1 { "" } else { "s" }),
+                        &format!("Total {}", ui::theme::format_size(*total_size)),
+                        &format!("Move {} to Trash", n),
+                    );
                 }
             }
         }
-        if let Some(result) = action_to_process {
-            self.state.pending_action = None;
-            if let Some(node_id) = result {
-                self.perform_delete(node_id);
-            }
-        }
-        if let Some(result) = batch_to_process {
-            self.state.pending_action = None;
-            if let Some(ids) = result {
-                self.perform_batch_delete(ids);
-            }
-        }
-        if let Some((choice, node, name, path)) = relocate_choice {
+        if let Some((choice, name, path)) = relocate_choice {
             self.state.pending_action = None;
             if let ui::relocate_window::Choice::Move { volume, link } = choice {
-                self.start_relocate(node, name, path, volume, link);
+                self.start_relocate(name, path, volume, link);
             }
         }
-        if let Some(confirmed) = empty_trash_confirmed {
-            self.state.pending_action = None;
+        if let Some(confirmed) = decision {
+            let action = self.state.pending_action.take();
             if confirmed {
-                if let Err(e) = crate::platform::trash::empty_trash() {
-                    eprintln!("Empty trash failed: {}", e);
+                match action {
+                    Some(PendingAction::ConfirmTrash(node_id, path, _)) => {
+                        self.perform_delete(node_id, &path)
+                    }
+                    Some(PendingAction::ConfirmBatchTrash(items, _)) => {
+                        self.perform_batch_delete(items)
+                    }
+                    Some(PendingAction::ConfirmEmptyTrash) => {
+                        if let Err(e) = crate::platform::trash::empty_trash() {
+                            eprintln!("Empty trash failed: {}", e);
+                            self.state.batch_error_msg = Some(format!("Empty Trash failed: {}", e));
+                        }
+                    }
+                    Some(PendingAction::RefreshSubtree(_) | PendingAction::ConfirmRelocate(_))
+                    | None => {}
                 }
             }
         }
+    }
+}
+
+/// Every GUI trash goes through here. Protected paths (macOS system trees,
+/// other users' homes, whole volumes, ~ itself) are refused with the reason,
+/// the same rules the server and Move to External Disk apply.
+fn trash_unless_protected(path: &std::path::Path) -> Result<(), String> {
+    let path = crate::relocate::normalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if let Some(reason) =
+        crate::relocate::protected_reason(&path, crate::relocate::home().as_deref())
+    {
+        return Err(reason);
+    }
+    crate::platform::trash::move_to_trash(&path)
+}
+
+/// Centered modal with a title, a detail line, and Cancel / danger-confirm
+/// buttons. Returns `Some(true)` on confirm, `Some(false)` on cancel.
+fn confirm_dialog(
+    ctx: &egui::Context,
+    id: &str,
+    (default_width, max_width): (f32, f32),
+    title: &str,
+    detail: &str,
+    confirm_label: &str,
+) -> Option<bool> {
+    let mut decision = None;
+    egui::Window::new(id)
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .default_width(default_width)
+        .show(ctx, |ui| {
+            ui.set_max_width(max_width);
+            ui.label(
+                egui::RichText::new(title)
+                    .color(ui::theme::TEXT_PRIMARY)
+                    .size(13.0)
+                    .strong(),
+            );
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new(detail)
+                    .color(ui::theme::TEXT_SECONDARY)
+                    .size(11.0),
+            );
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui::widgets::danger_button(ui, confirm_label).clicked() {
+                        decision = Some(true);
+                    }
+                    if ui::widgets::ghost_button(ui, "Cancel").clicked() {
+                        decision = Some(false);
+                    }
+                });
+            });
+        });
+    decision
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::SystemTime;
+
+    fn test_app(tree: FileTree) -> App {
+        let mut state = AppState::new(
+            PathBuf::from("/nonexistent-mds-test-root"),
+            false,
+            ColorMode::Extension,
+            crate::flywheel::disabled().clone(),
+        );
+        state.request_rescan = false;
+        state.tree = Some(tree);
+        App {
+            state,
+            theme_applied: false,
+        }
+    }
+
+    /// `root/missing/<names>`: `missing` does not exist on disk, so even
+    /// without the guard the trash call fails before touching anything.
+    fn tree_under(root: &[u8], names: &[&[u8]]) -> (FileTree, Vec<NodeId>) {
+        let mut tree = FileTree::new();
+        tree.rename_root(root);
+        let r = tree.root();
+        let dir = tree.add_dir(
+            r,
+            b"mds-test-missing-parent",
+            false,
+            SystemTime::UNIX_EPOCH,
+            1,
+        );
+        let ids = names
+            .iter()
+            .map(|n| tree.add_file(dir, n, 10, None, SystemTime::UNIX_EPOCH, 2))
+            .collect();
+        tree.compute_sizes();
+        (tree, ids)
+    }
+
+    fn paired(app: &App, ids: &[NodeId]) -> Vec<(NodeId, PathBuf)> {
+        let tree = app.state.tree.as_ref().unwrap();
+        ids.iter().map(|&id| (id, tree.full_path(id))).collect()
+    }
+
+    #[test]
+    fn confirmed_trash_refuses_an_id_that_moved_to_another_path() {
+        // The dialog was built for a; the id now resolves to x.
+        let (tree, ids) = tree_under(b"/System", &[b"x", b"a"]);
+        let mut app = test_app(tree);
+        let shown = app.state.tree.as_ref().unwrap().full_path(ids[1]);
+        app.perform_delete(ids[0], &shown);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.contains("changed since"), "status: {msg}");
+        app.state.batch_error_msg = None;
+        app.perform_batch_delete(vec![(ids[0], shown.clone()), (ids[0], shown)]);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.starts_with("2 items not moved"), "status: {msg}");
+        assert!(app.state.tree.as_ref().unwrap().is_alive(ids[0]));
+    }
+
+    #[test]
+    fn cmd_backspace_does_not_replace_an_open_confirmation() {
+        let (tree, ids) = tree_under(b"/System", &[b"a", b"b"]);
+        let mut app = test_app(tree);
+        app.state.selected_node = Some(ids[0]);
+        app.state.pending_action = Some(PendingAction::ConfirmBatchTrash(paired(&app, &ids), 20));
+        let ctx = egui::Context::default();
+        let mut frame = eframe::Frame::_new_kittest();
+        let input = egui::RawInput {
+            modifiers: egui::Modifiers::COMMAND,
+            events: vec![egui::Event::Key {
+                key: egui::Key::Backspace,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            }],
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| eframe::App::update(&mut app, ctx, &mut frame));
+        assert!(matches!(
+            app.state.pending_action,
+            Some(PendingAction::ConfirmBatchTrash(..))
+        ));
+    }
+
+    #[test]
+    fn confirmed_trash_of_a_dead_id_says_so() {
+        let (tree, ids) = tree_under(b"/System", &[b"a"]);
+        let mut app = test_app(tree);
+        let p = app.state.tree.as_ref().unwrap().full_path(ids[0]);
+        app.state.tree.as_mut().unwrap().remove_node(ids[0]);
+        app.perform_delete(ids[0], &p);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.contains("changed since"), "status: {msg}");
+    }
+
+    #[test]
+    fn gui_trash_refuses_protected_path() {
+        let (tree, ids) = tree_under(b"/Users/Shared", &[b"f"]);
+        let mut app = test_app(tree);
+        let p = app.state.tree.as_ref().unwrap().full_path(ids[0]);
+        app.perform_delete(ids[0], &p);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(
+            msg.contains("/Users/Shared belongs to every user"),
+            "status: {msg}"
+        );
+        assert!(app.state.tree.as_ref().unwrap().is_alive(ids[0]));
+    }
+
+    #[test]
+    fn gui_batch_trash_refuses_protected_paths() {
+        let (tree, ids) = tree_under(b"/System", &[b"a", b"b"]);
+        let mut app = test_app(tree);
+        let items = paired(&app, &ids);
+        app.perform_batch_delete(items);
+        let msg = app.state.batch_error_msg.clone().unwrap_or_default();
+        assert!(msg.contains("macOS system path"), "status: {msg}");
+        assert!(msg.starts_with("2 items"), "status: {msg}");
+        let tree = app.state.tree.as_ref().unwrap();
+        assert!(ids.iter().all(|&id| tree.is_alive(id)));
+    }
+
+    #[test]
+    fn finished_move_after_rescan_hits_the_moved_path_only() {
+        // Moving /r/…/a; meanwhile a rescan builds a tree where a's old
+        // NodeId belongs to x and a sits at another id.
+        let (old, old_ids) = tree_under(b"/r", &[b"a"]);
+        let mut app = test_app(old);
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        let src = app.state.tree.as_ref().unwrap().full_path(old_ids[0]);
+        app.state.relocate_job = Some((src, "a".into(), rx));
+        app.start_scan();
+        let (new, new_ids) = tree_under(b"/r", &[b"x", b"a"]);
+        assert_eq!(new_ids[0], old_ids[0]);
+        app.state.tree = Some(new);
+        tx.send(Ok(crate::relocate::Outcome {
+            dest: PathBuf::from("/Volumes/E/MacDirStat Offload/r/a"),
+            bytes: 10,
+            files: 1,
+            linked: false,
+        }))
+        .unwrap();
+        app.poll_relocate();
+        let tree = app.state.tree.as_ref().unwrap();
+        assert!(tree.is_alive(new_ids[0]), "x was removed in place of a");
+        assert!(
+            !tree.is_alive(new_ids[1]),
+            "a is still shown after its move"
+        );
+        assert!(app.state.relocate_job.is_none());
+    }
+
+    #[test]
+    fn rescan_drops_old_tree_ids_from_cleanup_and_dialogs() {
+        let (old, old_ids) = tree_under(b"/System", &[b"a"]);
+        let mut app = test_app(old);
+        let p = app.state.tree.as_ref().unwrap().full_path(old_ids[0]);
+        app.state.cleanup_candidates = vec![crate::cleanup::CleanupCandidate {
+            node_id: old_ids[0],
+            path: p.clone(),
+            category: "c",
+            description: "d",
+            size: 10,
+        }];
+        app.state.cleanup_selected.insert(old_ids[0]);
+        app.start_scan();
+        // The Cleanup window stays open during the scan: it must not offer
+        // old-tree ids to Trash, Select all or Locate.
+        assert!(app.state.cleanup_candidates.is_empty());
+        assert!(app.state.cleanup_selected.is_empty());
+        // A dialog and a Locate made from a stale row before the fix.
+        app.state.pending_action = Some(PendingAction::ConfirmTrash(old_ids[0], p, 10));
+        app.state.selected_node = Some(99);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        app.state.scan_receiver = Some(rx);
+        tx.send(ScanProgress::Done(tree_under(b"/System", &[b"x", b"a"]).0))
+            .unwrap();
+        app.poll_scan();
+        assert!(app.state.pending_action.is_none(), "stale dialog survived");
+        assert!(
+            app.state.selected_node.is_none(),
+            "stale selection survived"
+        );
     }
 }

@@ -6,11 +6,7 @@ use egui::Color32;
 pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     let (name, size, path) = if let Some(tree) = &state.tree {
         let n = tree.node(node);
-        (
-            tree.name(node).to_string(),
-            n.size,
-            tree.full_path(node),
-        )
+        (tree.name(node).to_string(), n.size, tree.full_path(node))
     } else {
         return;
     };
@@ -41,18 +37,20 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     );
     ui.separator();
 
-    let is_dir = state
+    let (is_dir, trashable) = state
         .tree
         .as_ref()
-        .map(|t| t.node(node).is_dir())
-        .unwrap_or(false);
+        .map(|t| (t.node(node).is_dir(), t.is_trashable(node)))
+        .unwrap_or((false, false));
 
     // The folder to act on for "Open Terminal Here": the node itself if a
     // directory, otherwise its containing folder.
     let dir_for_terminal = if is_dir {
         path.clone()
     } else {
-        path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| path.clone())
+        path.parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| path.clone())
     };
 
     if ui.button("Open").clicked() {
@@ -87,21 +85,27 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
             ui.close_menu();
         }
     }
-    ui.separator();
-    if ui
-        .add_enabled(state.relocate_job.is_none(), egui::Button::new("Move to External Disk…"))
-        .clicked()
-    {
-        state.pending_action = Some(PendingAction::ConfirmRelocate(Box::new(
-            crate::ui::relocate_window::RelocateDialog::new(node, name.clone(), path.clone()),
-        )));
-        ui.close_menu();
-    }
-    if ui
-        .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
-        .clicked()
-    {
-        state.pending_action = Some(PendingAction::ConfirmTrash(node, name.clone(), size));
-        ui.close_menu();
+    // No Trash or Move for the scan root or synthetic nodes (see is_trashable).
+    if trashable {
+        ui.separator();
+        if ui
+            .add_enabled(
+                state.relocate_job.is_none(),
+                egui::Button::new("Move to External Disk…"),
+            )
+            .clicked()
+        {
+            state.pending_action = Some(PendingAction::ConfirmRelocate(Box::new(
+                crate::ui::relocate_window::RelocateDialog::new(name.clone(), path.clone()),
+            )));
+            ui.close_menu();
+        }
+        if ui
+            .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
+            .clicked()
+        {
+            state.pending_action = Some(PendingAction::ConfirmTrash(node, path.clone(), size));
+            ui.close_menu();
+        }
     }
 }

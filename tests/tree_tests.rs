@@ -8,14 +8,7 @@ fn test_add_file_and_directory() {
 
     let dir = tree.add_dir(root, b"Documents", false, SystemTime::now(), 1);
 
-    let file = tree.add_file(
-        dir,
-        b"readme.txt",
-        1024,
-        Some("txt"),
-        SystemTime::now(),
-        2,
-    );
+    let file = tree.add_file(dir, b"readme.txt", 1024, Some("txt"), SystemTime::now(), 2);
 
     assert_eq!(tree.node(root).children().len(), 1);
     assert_eq!(tree.node(dir).children().len(), 1);
@@ -140,10 +133,74 @@ fn test_find_path() {
     let root = tree.root();
     let dir = tree.add_dir(root, b"proj", false, SystemTime::now(), 1);
     let nm = tree.add_dir(dir, b"node_modules", false, SystemTime::now(), 2);
-    assert_eq!(tree.find_path(std::path::Path::new("/Users/me")), Some(root));
-    assert_eq!(tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")), Some(nm));
+    assert_eq!(
+        tree.find_path(std::path::Path::new("/Users/me")),
+        Some(root)
+    );
+    assert_eq!(
+        tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")),
+        Some(nm)
+    );
     assert_eq!(tree.find_path(std::path::Path::new("/Users/me/nope")), None);
     assert_eq!(tree.find_path(std::path::Path::new("/Users/other")), None);
     tree.remove_node(nm);
-    assert_eq!(tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")), None);
+    assert_eq!(
+        tree.find_path(std::path::Path::new("/Users/me/proj/node_modules")),
+        None
+    );
+}
+
+#[test]
+fn test_remove_node_double_dead_is_noop() {
+    // Calling remove_node twice on the same node must not double-subtract
+    // sizes or panic. The second call is silently ignored.
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let dir = tree.add_dir(root, b"cache", false, SystemTime::now(), 1);
+    tree.add_file(dir, b"big.bin", 4096, Some("bin"), SystemTime::now(), 2);
+    tree.compute_sizes();
+
+    assert_eq!(tree.node(root).size, 4096);
+
+    tree.remove_node(dir);
+    assert_eq!(tree.node(root).size, 0);
+
+    // Second remove — must not underflow or panic.
+    tree.remove_node(dir);
+    assert_eq!(tree.node(root).size, 0, "double remove must not underflow");
+    assert!(!tree.is_alive(dir));
+}
+
+#[test]
+fn test_is_trashable_excludes_scan_root_and_synthetic_nodes() {
+    // The context menu (Move to Trash, Move to External Disk) and Cmd+Backspace
+    // offer actions only for trashable nodes.
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let dir = tree.add_dir(root, b"proj", false, SystemTime::now(), 1);
+    let file = tree.add_file(dir, b"a.txt", 10, Some("txt"), SystemTime::now(), 2);
+    let free = tree.add_file(
+        root,
+        b"<Free Space>",
+        100,
+        Some("__free_space__"),
+        SystemTime::now(),
+        1,
+    );
+    let hidden = tree.add_file(
+        root,
+        b"<Hidden / Skipped>",
+        100,
+        Some("__skipped__"),
+        SystemTime::now(),
+        1,
+    );
+    tree.compute_sizes();
+    assert!(!tree.is_trashable(root));
+    assert!(!tree.is_trashable(free));
+    assert!(!tree.is_trashable(hidden));
+    assert!(tree.is_trashable(dir));
+    assert!(tree.is_trashable(file));
+    tree.remove_node(file);
+    assert!(!tree.is_trashable(file));
 }

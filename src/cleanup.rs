@@ -70,12 +70,7 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
         (
             "Library/Containers/com.docker.docker",
             "Docker Desktop Data",
-            "Docker images, volumes, build cache. Prefer `docker system prune -a` for finer-grained cleanup.",
-        ),
-        (
-            "Library/Containers/com.apple.iCloud.iCloudDrive",
-            "iCloud Drive evictable cache",
-            "Local cache of iCloud-stored files. Files reload from iCloud on next access.",
+            "Docker images, build cache, and named volumes. Named volumes may contain database data that cannot be regenerated. Prefer `docker system prune` for finer-grained cleanup.",
         ),
         (
             ".cargo/registry",
@@ -90,7 +85,13 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
     ];
     for &(suffix, label, desc) in SUFFIX_RULES {
         if s.ends_with(suffix) {
-            return Some((label, desc));
+            // Require a component boundary: the char before the suffix must be
+            // '/' (or the suffix covers the whole string). Without this check,
+            // "/x/MyLibrary/Caches" would match the "Library/Caches" rule.
+            let pos = s.len() - suffix.len();
+            if pos == 0 || s.as_bytes()[pos - 1] == b'/' {
+                return Some((label, desc));
+            }
         }
     }
 
@@ -111,20 +112,22 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
             )),
             ".gradle" => Some((
                 "Gradle caches",
-                "Gradle redownloads dependencies on next build.",
+                "Gradle build cache and local dependency store. May contain gradle.properties with credentials — review before deleting.",
             )),
             ".m2" => Some((
                 "Maven local repo",
-                "Maven local artifacts cache; rebuilt on next dependency resolve.",
+                "Maven local artifact cache. May contain settings.xml with credentials — review before deleting.",
             )),
             "DerivedData" => Some((
                 "DerivedData (loose)",
                 "Xcode build artifacts found outside the standard location.",
             )),
-            "target" => Some((
-                "Rust target/",
-                "`cargo build` recreates these. Often the largest single dir on a Rust dev machine.",
-            )),
+            "target" if path.parent().map(|p| p.join("Cargo.toml").exists()).unwrap_or(false) => {
+                Some((
+                    "Rust target/",
+                    "`cargo build` recreates these. Often the largest single dir on a Rust dev machine.",
+                ))
+            }
             ".next" => Some((
                 ".next/",
                 "Next.js build output. Regenerated on `next build`.",
@@ -137,10 +140,9 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
                 ".cache directories",
                 "App- and tool-specific caches. Generally regenerable.",
             )),
-            ".Trash" | ".Trashes" => Some((
-                "Trash",
-                "Files in the macOS Trash. Empty when you're sure you don't need them.",
-            )),
+            // .Trash / .Trashes are intentionally excluded: moving them to the
+            // Trash via the cleanup button would incorrectly nest the system
+            // Trash inside itself. Use the dedicated "Empty Trash…" button.
             _ => None,
         };
     }
@@ -150,9 +152,17 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
 
 /// Walks the tree once and returns all directories matching cleanup rules,
 /// sorted by size descending. Doesn't recurse into matched directories.
+/// The root node itself is never a candidate — classifying the scan root
+/// (e.g. ~/Library) would be catastrophic.
 pub fn find_candidates(tree: &FileTree, root: NodeId) -> Vec<CleanupCandidate> {
     let mut candidates = Vec::new();
-    walk(tree, root, &mut candidates);
+    if tree.is_alive(root) {
+        // Skip root itself; walk children directly.
+        let children: Vec<NodeId> = tree.node(root).children().to_vec();
+        for child in children {
+            walk(tree, child, &mut candidates);
+        }
+    }
     candidates.sort_by(|a, b| b.size.cmp(&a.size));
     candidates
 }
