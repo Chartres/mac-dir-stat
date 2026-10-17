@@ -37,18 +37,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     );
     ui.separator();
 
-    let (is_dir, is_scan_root, is_synthetic) = state
+    let (is_dir, trashable) = state
         .tree
         .as_ref()
-        .map(|t| {
-            let ext = t.extension(node);
-            (
-                t.node(node).is_dir(),
-                node == t.root(),
-                matches!(ext, Some("__free_space__") | Some("__skipped__")),
-            )
-        })
-        .unwrap_or((false, false, false));
+        .map(|t| (t.node(node).is_dir(), t.is_trashable(node)))
+        .unwrap_or((false, false));
 
     // The folder to act on for "Open Terminal Here": the node itself if a
     // directory, otherwise its containing folder.
@@ -92,10 +85,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
             ui.close_menu();
         }
     }
-    // Don't offer Trash or Move for the scan root (catastrophic), volume root
-    // (same id as scan root), or synthetic Free Space / Hidden / Skipped nodes
-    // (not real paths on disk).
-    if !is_scan_root && !is_synthetic {
+    // No Trash or Move for the scan root or synthetic nodes (see is_trashable).
+    if trashable {
         ui.separator();
         if ui
             .add_enabled(

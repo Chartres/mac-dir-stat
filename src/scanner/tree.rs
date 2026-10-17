@@ -407,6 +407,15 @@ impl FileTree {
         self.nodes[id].alive
     }
 
+    /// A real, live item the GUI may offer to trash or move: not the scan
+    /// root (trashing it is catastrophic; a volume root has the same id) and
+    /// not a synthetic Free Space / Hidden node (no path on disk).
+    pub fn is_trashable(&self, id: NodeId) -> bool {
+        self.is_alive(id)
+            && id != self.root
+            && !matches!(self.extension(id), Some("__free_space__" | "__skipped__"))
+    }
+
     /// Marks all descendants of `target` as dead and empties its children
     /// list. The node itself stays. Used as the first step of grafting a
     /// freshly-scanned subtree onto an existing tree.

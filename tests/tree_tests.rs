@@ -170,3 +170,37 @@ fn test_remove_node_double_dead_is_noop() {
     assert_eq!(tree.node(root).size, 0, "double remove must not underflow");
     assert!(!tree.is_alive(dir));
 }
+
+#[test]
+fn test_is_trashable_excludes_scan_root_and_synthetic_nodes() {
+    // The context menu (Move to Trash, Move to External Disk) and Cmd+Backspace
+    // offer actions only for trashable nodes.
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    let dir = tree.add_dir(root, b"proj", false, SystemTime::now(), 1);
+    let file = tree.add_file(dir, b"a.txt", 10, Some("txt"), SystemTime::now(), 2);
+    let free = tree.add_file(
+        root,
+        b"<Free Space>",
+        100,
+        Some("__free_space__"),
+        SystemTime::now(),
+        1,
+    );
+    let hidden = tree.add_file(
+        root,
+        b"<Hidden / Skipped>",
+        100,
+        Some("__skipped__"),
+        SystemTime::now(),
+        1,
+    );
+    tree.compute_sizes();
+    assert!(!tree.is_trashable(root));
+    assert!(!tree.is_trashable(free));
+    assert!(!tree.is_trashable(hidden));
+    assert!(tree.is_trashable(dir));
+    assert!(tree.is_trashable(file));
+    tree.remove_node(file);
+    assert!(!tree.is_trashable(file));
+}

@@ -801,11 +801,7 @@ impl eframe::App for App {
             if ctx.input(|i| i.key_pressed(egui::Key::Backspace) && i.modifiers.command) {
                 if let Some(node_id) = self.state.selected_node {
                     if let Some(tree) = &self.state.tree {
-                        let is_root = node_id == tree.root();
-                        let ext = tree.extension(node_id);
-                        let is_synthetic =
-                            matches!(ext, Some("__free_space__") | Some("__skipped__"));
-                        if tree.is_alive(node_id) && !is_root && !is_synthetic {
+                        if tree.is_trashable(node_id) {
                             let path = tree.full_path(node_id);
                             let size = tree.node(node_id).size;
                             self.state.pending_action =
