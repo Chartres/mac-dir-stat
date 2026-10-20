@@ -26,10 +26,19 @@ impl StringArena {
     }
 
     pub fn intern_bytes(&mut self, b: &[u8]) -> StrRef {
-        let offset = self.buf.len() as u32;
+        let offset = self.buf.len();
+        // ponytail: assert instead of silent truncate; upgrade to usize fields if >4 GiB arenas ever appear
+        assert!(
+            offset <= u32::MAX as usize,
+            "StringArena overflow: arena exceeds 4 GiB"
+        );
+        assert!(
+            b.len() <= u32::MAX as usize,
+            "StringArena: name/extension longer than 4 GiB"
+        );
         self.buf.extend_from_slice(b);
         StrRef {
-            offset,
+            offset: offset as u32,
             len: b.len() as u32,
         }
     }
