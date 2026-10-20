@@ -2,3 +2,7 @@
 /dist
 .superpowers/
 .DS_Store
+
+# agent tool state and caches
+.omc/
+.wrangler/
