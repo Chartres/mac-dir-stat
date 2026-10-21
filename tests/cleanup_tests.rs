@@ -35,6 +35,15 @@ fn classify_node_modules() {
     assert_eq!(cat, "node_modules");
 }
 
+#[test]
+fn classify_suffix_rule_needs_component_boundary() {
+    // "MyLibrary/Caches" must not match the "Library/Caches" rule.
+    assert!(classify(Path::new("/Users/pavol/MyLibrary/Caches")).is_none());
+    let (cat, _) = classify(Path::new("/Users/pavol/Library/Caches"))
+        .expect("Library/Caches should be classified");
+    assert_eq!(cat, "Application Caches");
+}
+
 // find_candidates ──────────────────────────────────────────────────────────
 
 /// Build a small tree that contains a .Trash dir and a node_modules dir

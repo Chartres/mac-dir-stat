@@ -509,3 +509,16 @@ impl FileTree {
         self.recompute_sizes_upward(target);
     }
 }
+
+#[cfg(test)]
+mod arena_tests {
+    use super::StringArena;
+
+    #[test]
+    #[should_panic(expected = "StringArena overflow")]
+    fn intern_past_4gib_panics_instead_of_truncating() {
+        // vec![0; n] is calloc'd: 4 GiB of untouched zero pages, no real RAM.
+        let mut arena = StringArena { buf: vec![0u8; u32::MAX as usize + 1] };
+        arena.intern_bytes(b"");
+    }
+}
