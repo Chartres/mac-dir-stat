@@ -18,8 +18,6 @@ pub struct CleanupCandidate {
 /// pattern. Skipping into matched directories is intentional — we report
 /// the top-level match, not its internals.
 pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
-    let s = path.to_string_lossy();
-
     // Path-suffix matches (location-specific signals — high confidence)
     const SUFFIX_RULES: &[(&str, &str, &str)] = &[
         (
@@ -84,14 +82,10 @@ pub fn classify(path: &Path) -> Option<(&'static str, &'static str)> {
         ),
     ];
     for &(suffix, label, desc) in SUFFIX_RULES {
-        if s.ends_with(suffix) {
-            // Require a component boundary: the char before the suffix must be
-            // '/' (or the suffix covers the whole string). Without this check,
-            // "/x/MyLibrary/Caches" would match the "Library/Caches" rule.
-            let pos = s.len() - suffix.len();
-            if pos == 0 || s.as_bytes()[pos - 1] == b'/' {
-                return Some((label, desc));
-            }
+        // Path::ends_with checks component boundaries, so "MyLibrary/Caches"
+        // does not match the "Library/Caches" rule.
+        if path.ends_with(suffix) {
+            return Some((label, desc));
         }
     }
 

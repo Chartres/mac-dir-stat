@@ -204,3 +204,40 @@ fn test_is_trashable_excludes_scan_root_and_synthetic_nodes() {
     tree.remove_node(file);
     assert!(!tree.is_trashable(file));
 }
+
+#[test]
+fn test_graft_under_sizes_counts_depths() {
+    // Live tree: root / target_dir / old_file (1 000 bytes)
+    let mut live = FileTree::new();
+    let root = live.root();
+    let target = live.add_dir(root, b"target", false, SystemTime::now(), 1);
+    live.add_file(target, b"old_file.bin", 1_000, Some("bin"), SystemTime::now(), 2);
+    live.compute_sizes();
+    assert_eq!(live.node(root).size, 1_000);
+
+    // Fresh subtree: root / a.rs (500 bytes) / sub / b.rs (300 bytes)
+    let mut fresh = FileTree::new();
+    let fr = fresh.root();
+    fresh.add_file(fr, b"a.rs", 500, Some("rs"), SystemTime::now(), 1);
+    let sub = fresh.add_dir(fr, b"sub", false, SystemTime::now(), 1);
+    fresh.add_file(sub, b"b.rs", 300, Some("rs"), SystemTime::now(), 2);
+    fresh.compute_sizes();
+
+    live.graft_under(target, fresh);
+
+    // old_file must be gone; sizes/counts must reflect the fresh subtree.
+    assert_eq!(live.node(target).size, 800, "graft size");
+    assert_eq!(live.node(target).file_count, 2, "graft file_count");
+    assert_eq!(live.node(target).subdir_count, 1, "graft subdir_count");
+    assert_eq!(live.node(root).size, 800, "root propagated");
+
+    // Depths of grafted nodes must be relative to the live tree, not fresh.
+    let grafted_a = live
+        .node(target)
+        .children()
+        .iter()
+        .copied()
+        .find(|&id| !live.node(id).is_dir())
+        .expect("a.rs");
+    assert_eq!(live.node(grafted_a).depth, 2, "depth of a.rs under target (depth 1)");
+}
