@@ -27,12 +27,11 @@ pub fn layout(items: &[LayoutItem], bounds: &Rect) -> Vec<PlacedRect> {
         return vec![];
     }
     // Callers (treemap/mod.rs) pre-sort by size descending; no re-sort needed.
-    let sorted: Vec<LayoutItem> = items.to_vec();
-    let mut result = Vec::with_capacity(sorted.len());
+    let mut result = Vec::with_capacity(items.len());
     let mut remaining = *bounds;
     let area = bounds.w * bounds.h;
     let scale = area / total_size;
-    let scaled: Vec<LayoutItem> = sorted
+    let scaled: Vec<LayoutItem> = items
         .iter()
         .map(|item| LayoutItem { id: item.id, size: item.size * scale })
         .collect();

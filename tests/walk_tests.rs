@@ -68,3 +68,54 @@ fn walk_counts_files_and_subdirs() {
 
     fs::remove_dir_all(&base).ok();
 }
+
+#[test]
+fn walk_deduplicates_hard_links() {
+    // Build: <tmp>/base/original.bin  (4 000 bytes, nlink == 2)
+    //        <tmp>/base/sub/hardlink  (same inode — hard link of original.bin)
+    // The scanner must count the 4 000 bytes only once.
+    let base = std::env::temp_dir().join(format!(
+        "mac_dir_stat_hardlink_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
+    fs::create_dir_all(base.join("sub")).unwrap();
+    fs::write(base.join("original.bin"), vec![0u8; 4_000]).unwrap();
+    fs::hard_link(base.join("original.bin"), base.join("sub").join("hardlink")).unwrap();
+
+    let tree = scan_temp(base.clone());
+    let root = tree.root();
+
+    // Total bytes must be 4 000, not 8 000.
+    assert_eq!(
+        tree.node(root).size,
+        4_000,
+        "hard-linked file should be counted once"
+    );
+
+    fs::remove_dir_all(&base).ok();
+}
+
+#[test]
+fn walk_records_depth_relative_to_root() {
+    // Build: <tmp>/base/sub/inner.bin — sub is depth 1, inner.bin depth 2.
+    let base = std::env::temp_dir().join(format!(
+        "mac_dir_stat_depth_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
+    fs::create_dir_all(base.join("sub")).unwrap();
+    fs::write(base.join("sub").join("inner.bin"), vec![0u8; 10]).unwrap();
+
+    let tree = scan_temp(base.clone());
+    let sub = tree.node(tree.root()).children()[0];
+    let inner = tree.node(sub).children()[0];
+    assert_eq!(tree.node(sub).depth, 1, "direct child of root");
+    assert_eq!(tree.node(inner).depth, 2, "grandchild of root");
+
+    fs::remove_dir_all(&base).ok();
+}

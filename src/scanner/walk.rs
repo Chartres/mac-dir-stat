@@ -98,7 +98,7 @@ fn build_skip_paths() -> Vec<PathBuf> {
 
 fn is_photos_library(path: &Path) -> bool {
     path.extension()
-        .map_or(false, |e| e == "photoslibrary" || e == "photolibrary")
+        .is_some_and(|e| e == "photoslibrary" || e == "photolibrary")
 }
 
 fn should_skip(path: &Path, scan_root: &Path, skip_paths: &[PathBuf]) -> bool {
@@ -191,6 +191,9 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
         };
         let file_name_bytes = file_name_os.as_bytes();
 
+        // jwalk reports depth relative to the walk root (1 = direct child).
+        let depth = entry.depth() as u16;
+
         let metadata = match entry.metadata() {
             Ok(m) => m,
             Err(_) => {
@@ -199,13 +202,13 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
                 // stub node so that any children walkdir yields for it are
                 // attached at the correct path rather than dropped as orphans.
                 if entry.file_type().is_dir() {
-                    let d = path
-                        .components()
-                        .count()
-                        .saturating_sub(root.components().count())
-                        as u16;
-                    let stub_id =
-                        tree.add_dir(parent_id, file_name_bytes, d < 2, SystemTime::UNIX_EPOCH, d);
+                    let stub_id = tree.add_dir(
+                        parent_id,
+                        file_name_bytes,
+                        depth < 2,
+                        SystemTime::UNIX_EPOCH,
+                        depth,
+                    );
                     dir_map.insert(path.to_path_buf(), stub_id);
                     dir_count += 1;
                 }
@@ -214,10 +217,6 @@ pub fn walk_directory(root: PathBuf, tx: Sender<ScanProgress>) {
         };
 
         let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        let depth = path
-            .components()
-            .count()
-            .saturating_sub(root.components().count()) as u16;
 
         if metadata.is_dir() {
             let node_id = tree.add_dir(parent_id, file_name_bytes, depth < 2, modified, depth);
