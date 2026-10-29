@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" font-family="Georgia, 'Iowan Old Style', 'Times New Roman', serif" fill="#1f1d1a">
+<title>Inventory with rebuild cost</title>
+<rect width="900" height="520" fill="#f6f2ea"/>
+<text x="32" y="44" font-size="20" fill="#1f1d1a" text-anchor="start" font-weight="normal">Cleanup — with the cost of getting it back</text>
+<text x="32" y="66" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal" font-style="italic">Move 1, option B · Thoreau, Walden, ‘Economy’: the cost of a thing is the life exchanged for it</text>
+<line x1="32" y1="80" x2="868" y2="80" stroke="#1f1d1a" stroke-width="1"/>
+<text x="32" y="116" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal">Item</text>
+<text x="420" y="116" font-size="12" fill="#6b655c" text-anchor="end" font-weight="normal">Size</text>
+<text x="560" y="116" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal">To get it back</text>
+<text x="760" y="116" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal">Last modified</text>
+<line x1="32" y1="126" x2="868" y2="126" stroke="#1f1d1a" stroke-width="1"/>
+<rect x="32" y="145" width="12" height="12" fill="none" stroke="#1f1d1a"/>
+<text x="54" y="156" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal">Xcode DerivedData</text>
+<text x="420" y="156" font-size="13" fill="#1f1d1a" text-anchor="end" font-weight="normal">38.2 GB</text>
+<text x="560" y="156" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal" font-style="italic">next build, ~10 min</text>
+<text x="760" y="156" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">3 days ago</text>
+<line x1="32" y1="168" x2="868" y2="168" stroke="#b9b2a5" stroke-width="1"/>
+<rect x="32" y="183" width="12" height="12" fill="none" stroke="#1f1d1a"/>
+<text x="54" y="194" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal">node_modules (14 projects)</text>
+<text x="420" y="194" font-size="13" fill="#1f1d1a" text-anchor="end" font-weight="normal">21.7 GB</text>
+<text x="560" y="194" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal" font-style="italic">npm install, ~1 min each</text>
+<text x="760" y="194" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">2–200 days</text>
+<line x1="32" y1="206" x2="868" y2="206" stroke="#b9b2a5" stroke-width="1"/>
+<rect x="32" y="221" width="12" height="12" fill="none" stroke="#1f1d1a"/>
+<text x="54" y="232" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal">Rust target/ (6 crates)</text>
+<text x="420" y="232" font-size="13" fill="#1f1d1a" text-anchor="end" font-weight="normal">17.9 GB</text>
+<text x="560" y="232" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal" font-style="italic">cargo build, ~4 min each</text>
+<text x="760" y="232" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">11 days ago</text>
+<line x1="32" y1="244" x2="868" y2="244" stroke="#b9b2a5" stroke-width="1"/>
+<rect x="32" y="259" width="12" height="12" fill="none" stroke="#1f1d1a"/>
+<text x="54" y="270" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal">Docker images</text>
+<text x="420" y="270" font-size="13" fill="#1f1d1a" text-anchor="end" font-weight="normal">12.4 GB</text>
+<text x="560" y="270" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal" font-style="italic">docker pull, network</text>
+<text x="760" y="270" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">41 days ago</text>
+<line x1="32" y1="282" x2="868" y2="282" stroke="#b9b2a5" stroke-width="1"/>
+<rect x="32" y="297" width="12" height="12" fill="none" stroke="#1f1d1a"/>
+<text x="54" y="308" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal">Simulators (iOS 16)</text>
+<text x="420" y="308" font-size="13" fill="#1f1d1a" text-anchor="end" font-weight="normal">6.6 GB</text>
+<text x="560" y="308" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal" font-style="italic">Xcode download, ~6 GB</text>
+<text x="760" y="308" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">1 year ago</text>
+<line x1="32" y1="320" x2="868" y2="320" stroke="#b9b2a5" stroke-width="1"/>
+<rect x="32" y="335" width="12" height="12" fill="none" stroke="#1f1d1a"/>
+<text x="54" y="346" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal">Application caches</text>
+<text x="420" y="346" font-size="13" fill="#1f1d1a" text-anchor="end" font-weight="normal">8.1 GB</text>
+<text x="560" y="346" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal" font-style="italic">apps refill on use</text>
+<text x="760" y="346" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">today</text>
+<line x1="32" y1="358" x2="868" y2="358" stroke="#b9b2a5" stroke-width="1"/>
+<text x="32" y="410" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal" font-style="italic">Estimates come from fixed rules in the app, shown with the rule when you hover.</text>
+<text x="32" y="502" font-size="11" fill="#6b655c" text-anchor="start" font-weight="normal" font-style="italic">Sketch. ‘To get it back’ is a plain estimate, never a promise of speed.</text>
+</svg>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300" font-family="Georgia, 'Iowan Old Style', 'Times New Roman', serif" fill="#1f1d1a">
+<title>Since last scan</title>
+<rect width="900" height="300" fill="#f6f2ea"/>
+<text x="32" y="44" font-size="20" fill="#1f1d1a" text-anchor="start" font-weight="normal">Since the last scan</text>
+<text x="32" y="66" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal" font-style="italic">Move 3, option A · Tufte’s ‘compared to what?’; the ship’s log</text>
+<line x1="32" y1="80" x2="868" y2="80" stroke="#1f1d1a" stroke-width="1"/>
+<text x="32" y="124" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal" font-style="italic">Macintosh HD, 12 October → today</text>
+<text x="32" y="160" font-size="14" fill="#1f1d1a" text-anchor="start" font-weight="normal">Grew</text>
+<text x="200" y="160" font-size="14" fill="#1f1d1a" text-anchor="end" font-weight="normal">+18.4 GB</text>
+<text x="232" y="160" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">~/Library/Developer/Xcode/DerivedData  +11.2 GB</text>
+<line x1="32" y1="170" x2="868" y2="170" stroke="#b9b2a5" stroke-width="1"/>
+<text x="32" y="194" font-size="14" fill="#1f1d1a" text-anchor="start" font-weight="normal"></text>
+<text x="200" y="194" font-size="14" fill="#1f1d1a" text-anchor="end" font-weight="normal"></text>
+<text x="232" y="194" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">~/Downloads  +5.9 GB</text>
+<line x1="32" y1="204" x2="868" y2="204" stroke="#b9b2a5" stroke-width="1"/>
+<text x="32" y="228" font-size="14" fill="#1f1d1a" text-anchor="start" font-weight="normal">Shrank</text>
+<text x="200" y="228" font-size="14" fill="#1f1d1a" text-anchor="end" font-weight="normal">−3.1 GB</text>
+<text x="232" y="228" font-size="13" fill="#6b655c" text-anchor="start" font-weight="normal">~/Movies/Exports  −3.1 GB</text>
+<line x1="32" y1="238" x2="868" y2="238" stroke="#b9b2a5" stroke-width="1"/>
+<text x="32" y="282" font-size="11" fill="#6b655c" text-anchor="start" font-weight="normal" font-style="italic">Sketch. One block of text above the map after a rescan of the same root; nothing more.</text>
+</svg>
