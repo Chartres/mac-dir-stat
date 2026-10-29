@@ -2,32 +2,131 @@
   "headline": "Signature proposed for mac-dir-stat: a calm inventory that separates what can be rebuilt from what only you have, with honest scale beside the treemap. Awaiting Pavol's pick; nothing built.",
   "signature": {
     "lineage": [
-      {"source": "Shneiderman, Tree visualization with tree-maps (ACM ToG); cushion (1999) and squarified (2000) treemaps", "year": 1992, "changes": "Keep the squarified layout; add a scale key and a plain, cushion-free map mode."},
-      {"source": "Cleveland & McGill, Graphical Perception (JASA); replicated by Heer & Bostock (CHI 2010)", "year": 1984, "changes": "Ranked length ledger beside the treemap, synced on hover, so comparisons use length, not area."},
-      {"source": "Tufte, The Visual Display of Quantitative Information / Envisioning Information", "year": 1983, "changes": "'Since the last scan' summary and small multiples of past scans; data-ink-only map mode."},
-      {"source": "Epictetus, Enchiridion ch. 1", "year": 125, "changes": "Cleanup becomes a two-column inventory: rebuildable (selectable) vs only-yours (shown, never offered for deletion)."},
-      {"source": "Thoreau, Walden, 'Economy'", "year": 1854, "changes": "Each cleanup row shows the command and plain time estimate to get it back."},
-      {"source": "Seneca, Letters to Lucilius 2 and 5", "year": 65, "changes": "A short closing account after a trash action: what left, what is still recoverable, free space now."}
+      {
+        "source": "Shneiderman, Tree visualization with tree-maps (ACM ToG); cushion (1999) and squarified (2000) treemaps",
+        "year": 1992,
+        "changes": "Keep the squarified layout; add a scale key and a plain, cushion-free map mode."
+      },
+      {
+        "source": "Cleveland & McGill, Graphical Perception (JASA); replicated by Heer & Bostock (CHI 2010)",
+        "year": 1984,
+        "changes": "Ranked length ledger beside the treemap, synced on hover, so comparisons use length, not area."
+      },
+      {
+        "source": "Tufte, The Visual Display of Quantitative Information / Envisioning Information",
+        "year": 1983,
+        "changes": "'Since the last scan' summary and small multiples of past scans; data-ink-only map mode."
+      },
+      {
+        "source": "Epictetus, Enchiridion ch. 1",
+        "year": 125,
+        "changes": "Cleanup becomes a two-column inventory: rebuildable (selectable) vs only-yours (shown, never offered for deletion)."
+      },
+      {
+        "source": "Thoreau, Walden, 'Economy'",
+        "year": 1854,
+        "changes": "Each cleanup row shows the command and plain time estimate to get it back, next to its last-modified date."
+      },
+      {
+        "source": "Seneca, Letters to Lucilius 2 and 5",
+        "year": 65,
+        "changes": "A short closing account after a trash action: what left, what is still recoverable, free space now."
+      }
     ],
     "mechanics": [
-      {"name": "Move 1 — The inventory (1A two columns, recommended; 1B cost to get it back; 1C closing account)", "from": "Epictetus, Thoreau, Seneca", "status": "proposed", "metric": "Conversion rate among scan-completers and median bytes freed; guard: no data-loss reports"},
-      {"name": "Move 2 — Honest scale (2A ledger beside the map, recommended; 2B scale key; 2C plain map)", "from": "Shneiderman 1992; Cleveland & McGill 1984; Tufte 1983", "status": "proposed", "metric": "Time from scan done to first trash/move (key_action) falls; zoom-ins per session fall"},
-      {"name": "Move 3 — The disk over time (3A since the last scan, recommended; 3B small multiples; 3C nothing)", "from": "Tufte 1983/1990", "status": "proposed", "metric": "90-day return scans per install (weekly scan-completers guard)"}
+      {
+        "name": "Move 1 — The inventory (1A two columns, recommended; 1B cost to get it back; 1C closing account)",
+        "from": "Epictetus, Thoreau, Seneca",
+        "status": "proposed",
+        "metric": "Conversion rate among scan-completers and median bytes freed; guard: no data-loss reports"
+      },
+      {
+        "name": "Move 2 — Honest scale (2A ledger beside the map, recommended; 2B scale key; 2C plain map)",
+        "from": "Shneiderman 1992; Cleveland & McGill 1984; Tufte 1983",
+        "status": "proposed",
+        "metric": "Time from scan done to first trash (conversion event) falls; zoom-ins per session would need a new key_action"
+      },
+      {
+        "name": "Move 3 — The disk over time (3A since the last scan, recommended; 3B small multiples; 3C nothing)",
+        "from": "Tufte 1983/1990",
+        "status": "proposed",
+        "metric": "90-day return scans per install (guard metric: weekly scan-completers)"
+      }
     ]
   },
   "decisions": [
-    {"question": "Move 1: which inventory option?", "options": ["1A two columns", "1B cost to get it back", "1C closing account"], "default_taken": "none (recommend 1A with 1B's line under each row)", "why": "1A carries the whole idea in one look and no competitor does it; nothing is built before Pavol picks."},
-    {"question": "Move 2: which scale option?", "options": ["2A ledger beside the map", "2B scale key", "2C plain map"], "default_taken": "none (recommend 2A)", "why": "Fixes the known weakness of treemaps (area is read poorly); 2C folds into the visual signature."},
-    {"question": "Move 3: keep scan history?", "options": ["3A since the last scan", "3B small multiples", "3C nothing"], "default_taken": "none (recommend 3A)", "why": "Answers 'what grew?' with one stored summary and no new window."},
-    {"question": "Visual signature: replace the violet accent and dark-first theme with book typography on paper?", "options": ["Survey register (serif, paper, oxblood accent)", "Keep current theme"], "default_taken": "none (recommend survey register)", "why": "Matches Pavol's stated taste and moves away from the generic AI-app look."}
+    {
+      "question": "Move 1: which inventory option?",
+      "options": [
+        "1A two columns",
+        "1B cost to get it back",
+        "1C closing account"
+      ],
+      "default_taken": "none (recommend 1A with 1B's line under each row)",
+      "why": "1A carries the whole idea in one look and no competitor does it; nothing is built before Pavol picks."
+    },
+    {
+      "question": "Move 2: which scale option?",
+      "options": [
+        "2A ledger beside the map",
+        "2B scale key",
+        "2C plain map"
+      ],
+      "default_taken": "none (recommend 2A)",
+      "why": "Fixes the known weakness of treemaps (area is read poorly); 2C folds into the visual signature."
+    },
+    {
+      "question": "Move 3: keep scan history?",
+      "options": [
+        "3A since the last scan",
+        "3B small multiples",
+        "3C nothing"
+      ],
+      "default_taken": "none (recommend 3A)",
+      "why": "Answers 'what grew?' with one stored summary and no new window."
+    },
+    {
+      "question": "Visual signature: replace the violet accent and dark-first theme with book typography on paper?",
+      "options": [
+        "Survey register (serif, paper, oxblood accent)",
+        "Keep current theme"
+      ],
+      "default_taken": "none (recommend survey register)",
+      "why": "Matches the book-typography taste in the signature brief and moves away from the generic AI-app look."
+    }
   ],
   "competition": {
     "competitors": [
-      {"name": "DaisyDisk", "url": "https://daisydiskapp.com", "price": "$9.99 one-time (up to 5 Macs)", "note": "Sunburst, collector for one-go deletion, shows purgeable/hidden space; closed source."},
-      {"name": "GrandPerspective", "url": "https://grandperspectiv.sourceforge.net", "price": "Free (GPL); ~$2.99 / €3 supporter price on Mac App Store", "note": "Treemap with colour by folder/type/age; updated in 2026; no cleanup guidance."},
-      {"name": "OmniDiskSweeper", "url": "https://www.omnigroup.com/more", "price": "Free", "note": "Size-sorted column browser with delete; no visualisation; rare updates."},
-      {"name": "Disk Inventory X", "url": "https://www.derlien.com", "price": "Free (GPL)", "note": "Treemap plus file-type list; largely dormant."},
-      {"name": "macOS Storage settings", "url": "https://support.apple.com/guide/mac-help/optimize-storage-space-sh41b01e8d0c/mac", "price": "Built in", "note": "Category bar and recommendations; opaque 'System Data'."}
+      {
+        "name": "DaisyDisk",
+        "url": "https://daisydiskapp.com",
+        "price": "$9.99 one-time (up to 5 Macs) (checked 2026-10-29)",
+        "note": "Sunburst, collector for one-go deletion, shows purgeable/hidden space; closed source."
+      },
+      {
+        "name": "GrandPerspective",
+        "url": "https://grandperspectiv.sourceforge.net",
+        "price": "Free (GPL); ~$2.99 / €3 supporter price on Mac App Store (checked 2026-10-29)",
+        "note": "Treemap with colour by folder/type/age; updated in 2026; no cleanup guidance."
+      },
+      {
+        "name": "OmniDiskSweeper",
+        "url": "https://www.omnigroup.com/more",
+        "price": "Free (checked 2026-10-29)",
+        "note": "Size-sorted column browser with delete; no visualisation; rare updates."
+      },
+      {
+        "name": "Disk Inventory X",
+        "url": "https://www.derlien.com",
+        "price": "Free (GPL) (checked 2026-10-29)",
+        "note": "Treemap plus file-type list; largely dormant."
+      },
+      {
+        "name": "macOS Storage settings",
+        "url": "https://support.apple.com/guide/mac-help/optimize-storage-space-sh41b01e8d0c/mac",
+        "price": "Built in",
+        "note": "Category bar and recommendations; opaque 'System Data'."
+      }
     ],
     "gap": "No tool separates what can be rebuilt from what only you have, or says what deleting costs to get back. A free, open-source treemap with an honest inventory, plain claims, and AI that proposes but never approves is unoccupied."
   },

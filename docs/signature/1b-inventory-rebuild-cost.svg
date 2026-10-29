@@ -7,7 +7,7 @@
 <text x="32" y="116" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal">Item</text>
 <text x="420" y="116" font-size="12" fill="#6b655c" text-anchor="end" font-weight="normal">Size</text>
 <text x="560" y="116" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal">To get it back</text>
-<text x="760" y="116" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal">Last used</text>
+<text x="760" y="116" font-size="12" fill="#6b655c" text-anchor="start" font-weight="normal">Last modified</text>
 <line x1="32" y1="126" x2="868" y2="126" stroke="#1f1d1a" stroke-width="1"/>
 <rect x="32" y="145" width="12" height="12" fill="none" stroke="#1f1d1a"/>
 <text x="54" y="156" font-size="13" fill="#1f1d1a" text-anchor="start" font-weight="normal">Xcode DerivedData</text>

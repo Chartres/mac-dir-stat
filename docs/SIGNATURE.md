@@ -39,7 +39,7 @@ What this app will not do, whatever it would do for a metric:
 |---|---|
 | Scare-ware: "Your Mac is full!", red badges, alarming gauges, fake "junk found" totals | Article VIII. The disk is what it is; the app reports it. Warnings appear only when an action is risky (credentials in Gradle/Maven, Docker volumes), which the app already does. |
 | Claims that cleaning makes a Mac faster | We can't back it. Freeing space rarely changes speed unless the disk is nearly full. |
-| Pre-ticked checkboxes, "Clean all" one-tap, countdowns, nagging re-prompts | Dark patterns that push deletion. Today nothing in Cleanup is pre-ticked (`cleanup_selected` starts empty); keep it that way. |
+| Pre-ticked checkboxes, deletion as the default, countdowns, nagging re-prompts | Dark patterns that push deletion. Today nothing in Cleanup is pre-ticked (`cleanup_selected` starts empty) and every trash asks once; keep it that way. The existing "Select all" button stays, but is never pressed for you. |
 | Offering irreplaceable data (Photos, Documents, Mail, iCloud Drive) for deletion | The app can't know it is safe. Shown for awareness only. iCloud Drive is already excluded (founder case 5). |
 | Subscription, trial-to-paid, "Pro unlock" bait | The product is free and MIT. Support goes through `FUNDING.yml`, stated plainly. |
 | Streaks, scores, confetti, "you saved X this week!" pushes | Article II: the tool is episodic. It should be opened when needed and then closed, not compete for attention. |
@@ -61,7 +61,7 @@ change what the person is asked to decide.
 | Option | What the user sees | Sketch | Source | Metric that shows it works |
 |---|---|---|---|---|
 | **1A. Two columns** | Left: "Can be rebuilt", with checkboxes. Right: "Only you have these" (Photos, Movies, Documents, Mail), sizes only, no checkboxes. | ![1A](signature/1a-inventory-two-columns.svg) | Epictetus, *Enchiridion* 1 | Conversion rate (scan-completers who free any bytes) rises; median bytes freed per conversion holds or rises. Guard: no data-loss reports in issues. |
-| **1B. Cost to get it back** | One list, with a column "To get it back" (`npm install, ~1 min each`) and "Last used". | ![1B](signature/1b-inventory-rebuild-cost.svg) | Thoreau, *Walden*, "Economy" | Share of selected bytes from items last used > 30 days ago rises (people trash the right things); conversion rate holds. |
+| **1B. Cost to get it back** | One list, with a column "To get it back" (`npm install, ~1 min each`) and "Last modified". | ![1B](signature/1b-inventory-rebuild-cost.svg) | Thoreau, *Walden*, "Economy" | Share of selected bytes from items last modified > 30 days ago rises (people trash the right things); conversion rate holds. |
 | **1C. Closing account** | After a trash, a short panel: moved to Trash, how much was rebuildable vs only yours, free space now, and that the Trash is not emptied. | ![1C](signature/1c-inventory-closing-account.svg) | Seneca, *Letters* 2 and 5 | Return scans within 90 days (episodic reuse) rise; no rise in "I deleted the wrong thing" issues. |
 
 **Recommendation: 1A, with 1B's "to get it back" as one line under each left-column row.** 1A
@@ -74,7 +74,7 @@ From L1, L2, L3. The treemap stays; these options make its sizes readable.
 
 | Option | What the user sees | Sketch | Source | Metric that shows it works |
 |---|---|---|---|---|
-| **2A. Ledger beside the map** | A ranked list of the current level's largest children, each with a length bar and exact size, synced with the map on hover and click. | ![2A](signature/2a-ledger-beside-map.svg) | Shneiderman 1992; Cleveland & McGill 1984 | Time from scan done to first trash/move (`key_action`) falls; zoom-ins per session fall (people find the target without drilling). |
+| **2A. Ledger beside the map** | A ranked list of the current level's largest children, each with a length bar and exact size, synced with the map on hover and click. | ![2A](signature/2a-ledger-beside-map.svg) | Shneiderman 1992; Cleveland & McGill 1984 | Time from scan done to first trash (`conversion` event) falls. Zoom-ins per session would also fall, but zooms are not counted today and would need a new `key_action`. |
 | **2B. Scale key** | A small key: "this square = 10 GB", redrawn on zoom, plus used/free totals. | ![2B](signature/2b-scale-key.svg) | Survey-map scale bar; Heer & Bostock 2010 | Same as 2A; cheaper to build, likely smaller effect. |
 | **2C. Plain map** | A colour mode with no cushion gradients: flat muted fills, hairline borders, names and sizes set inside the blocks. | ![2C](signature/2c-plain-map.svg) | Tufte 1983, data-ink | Share of sessions that choose plain mode once offered; screenshots shared (stars and site referrals after posts). |
 
@@ -88,7 +88,7 @@ From L3. Today each scan stands alone.
 
 | Option | What the user sees | Sketch | Source | Metric that shows it works |
 |---|---|---|---|---|
-| **3A. Since the last scan** | After a rescan of the same root, one block: grew by X, the two or three folders that grew most, what shrank. | ![3A](signature/3a-since-last-scan.svg) | Tufte, "compared to what?"; the ship's log | 90-day return scans per install rise (the north-star guard, weekly scan-completers). |
+| **3A. Since the last scan** | After a rescan of the same root, one block: grew by X, the two or three folders that grew most, what shrank. | ![3A](signature/3a-since-last-scan.svg) | Tufte, "compared to what?"; the ship's log | 90-day return scans per install rise (the guard metric in `flywheel.json`: weekly scan-completers). |
 | **3B. Small multiples** | Six small treemaps of past scans of the same root, same layout order, height proportional to used space. | ![3B](signature/3b-small-multiples.svg) | Tufte, *Envisioning Information* | Same as 3A, plus opens of the history view. Needs scan summaries stored locally. |
 | **3C. Nothing** | No history. Each scan stands alone, as today. | — | — | Baseline. Choose this if storing scan summaries on disk feels like more than the app should keep. |
 
@@ -111,7 +111,7 @@ scale bar, names set in the parcel.
   the app, e.g. Source Serif 4); italics for notes and explanations, not bold.
 - **Colour:** paper `#f6f2ea`, ink `#1f1d1a`, notes `#6b655c`, rules `#b9b2a5`. One accent,
   oxblood `#7a2a20`, used for at most one action per window. This replaces the violet accent in
-  `src/ui/theme.rs`, which reads as the generic AI-app look Pavol has said he is tired of.
+  `src/ui/theme.rs`, which reads as the generic AI-app look the signature brief asks to move away from.
 - **File-type fills:** muted earth and slate, like tinted plates; no neon, no rainbow.
 - **Dark mode:** kept, as the same ink-on-paper contrast inverted, not a separate neon scheme.
 - **Words:** sizes and facts, plain verbs ("Move to Trash", "Reveal"), no exclamation marks.
@@ -123,10 +123,10 @@ scale bar, names set in the parcel.
 - **Article II.** The app is episodic: open, find, clear, close. No streaks, notifications or
   background monitors (see Refused). For Pavol it is low upkeep: all moves are local UI, no
   servers, no accounts.
-- **Article VI.** The moat here is *frozen judgment* (the rules for what is safe to rebuild,
-  written once and tested as founder cases), *reputation* (an honest tool in a scare-ware
-  category) and *distribution* (Homebrew cask, GitHub). The inventory in Move 1 puts that
-  judgment on screen.
+- **Article VI.** What others can't copy here is the set of rules for what is safe to rebuild,
+  written down once and tested as founder cases; the trust an honest tool earns in a category
+  full of scare-ware; and the Homebrew cask and GitHub as the way people find it. The inventory
+  in Move 1 puts those rules on screen.
 - **Article VIII.** Every claim on screen must be backed: no "faster Mac", no fake junk totals, no
   pre-ticks. Time estimates in 1B are labelled as estimates and show their rule. The README's
   comparison table should be rechecked against the note below before the next release.
