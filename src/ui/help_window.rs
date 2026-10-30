@@ -13,13 +13,13 @@ pub fn show(ctx: &Context, state: &mut AppState) {
         .show(ctx, |ui| {
             ui.label(
                 RichText::new(format!("MacDirStat v{}", env!("CARGO_PKG_VERSION")))
-                    .color(theme::TEXT_PRIMARY)
+                    .color(theme::ink())
                     .strong()
                     .size(15.0),
             );
             ui.label(
                 RichText::new("Treemap directory-size visualizer for macOS")
-                    .color(theme::TEXT_SECONDARY)
+                    .color(theme::ink_soft())
                     .size(11.0),
             );
             ui.add_space(10.0);
@@ -28,7 +28,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
 
             ui.label(
                 RichText::new("Keyboard shortcuts")
-                    .color(theme::TEXT_PRIMARY)
+                    .color(theme::ink())
                     .strong()
                     .size(12.0),
             );
@@ -53,7 +53,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
 
             ui.label(
                 RichText::new("Tips")
-                    .color(theme::TEXT_PRIMARY)
+                    .color(theme::ink())
                     .strong()
                     .size(12.0),
             );
@@ -82,7 +82,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
 
             ui.label(
                 RichText::new("github.com/Chartres/mac-dir-stat")
-                    .color(theme::ACCENT_LIGHT)
+                    .color(theme::highlight())
                     .size(10.0),
             );
         });
@@ -94,7 +94,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
 fn feedback_section(ui: &mut egui::Ui, state: &mut AppState) {
     ui.label(
         RichText::new("How would you feel if MacDirStat went away?")
-            .color(theme::TEXT_PRIMARY)
+            .color(theme::ink())
             .strong()
             .size(12.0),
     );
@@ -102,7 +102,7 @@ fn feedback_section(ui: &mut egui::Ui, state: &mut AppState) {
     if state.feedback_sent {
         ui.label(
             RichText::new("Thanks — feedback sent.")
-                .color(theme::TEXT_SECONDARY)
+                .color(theme::ink_soft())
                 .size(11.0),
         );
         return;
@@ -140,7 +140,7 @@ fn feedback_section(ui: &mut egui::Ui, state: &mut AppState) {
     if !state.flywheel.is_enabled() {
         ui.label(
             RichText::new("(Telemetry is off — feedback is not sent.)")
-                .color(theme::TEXT_MUTED)
+                .color(theme::note())
                 .size(10.0),
         );
     }
@@ -152,7 +152,7 @@ fn feedback_section(ui: &mut egui::Ui, state: &mut AppState) {
 fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
     ui.label(
         RichText::new("Privacy")
-            .color(theme::TEXT_PRIMARY)
+            .color(theme::ink())
             .strong()
             .size(12.0),
     );
@@ -163,7 +163,7 @@ fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
              space reclaimed) to help prioritize features. No file names or paths are \
              ever sent. You can turn this off.",
         )
-        .color(theme::TEXT_SECONDARY)
+        .color(theme::ink_soft())
         .size(11.0),
     );
     ui.add_space(4.0);
@@ -181,13 +181,13 @@ fn shortcut(ui: &mut egui::Ui, keys: &str, desc: &str) {
     ui.horizontal(|ui| {
         ui.label(
             RichText::new(format!("{:>6}", keys))
-                .color(theme::ACCENT_LIGHT)
+                .color(theme::highlight())
                 .monospace()
                 .size(11.0),
         );
         ui.label(
             RichText::new(desc)
-                .color(theme::TEXT_SECONDARY)
+                .color(theme::ink_soft())
                 .size(11.0),
         );
     });
@@ -196,7 +196,7 @@ fn shortcut(ui: &mut egui::Ui, keys: &str, desc: &str) {
 fn tip(ui: &mut egui::Ui, text: &str) {
     ui.label(
         RichText::new(text)
-            .color(theme::TEXT_SECONDARY)
+            .color(theme::ink_soft())
             .size(11.0),
     );
 }

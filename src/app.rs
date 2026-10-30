@@ -212,6 +212,15 @@ impl App {
         }
     }
 
+    /// An app around prepared state, with no disk or analytics side
+    /// effects. Used by tests and `examples/screenshots.rs`.
+    pub fn from_state(state: AppState) -> Self {
+        App {
+            state,
+            theme_applied: false,
+        }
+    }
+
     pub fn start_scan(&mut self) {
         // Cheap once-per-scan recheck so the FDA affordance clears after the
         // user grants access and re-scans.
@@ -732,6 +741,7 @@ impl eframe::App for App {
             ui::theme::apply_theme(ctx);
             self.theme_applied = true;
         }
+        ui::theme::sync(ctx);
 
         self.poll_scan();
         self.poll_partial_refresh();
@@ -767,14 +777,14 @@ impl eframe::App for App {
             painter.rect_filled(
                 screen,
                 0.0,
-                egui::Color32::from_rgba_unmultiplied(0, 0, 0, 160),
+                ui::theme::bg_panel().gamma_multiply(0.85),
             );
             painter.text(
                 screen.center(),
                 egui::Align2::CENTER_CENTER,
                 "Drop folder to scan",
                 egui::FontId::proportional(22.0),
-                ui::theme::TEXT_PRIMARY,
+                ui::theme::ink(),
             );
             ctx.request_repaint();
         }
@@ -901,7 +911,7 @@ impl eframe::App for App {
         egui::TopBottomPanel::top("toolbar")
             .frame(
                 egui::Frame::new()
-                    .fill(ui::theme::BG_PANEL)
+                    .fill(ui::theme::bg_panel())
                     .inner_margin(egui::Margin::symmetric(14, 10)),
             )
             .show(ctx, |ui| {
@@ -912,7 +922,7 @@ impl eframe::App for App {
         egui::TopBottomPanel::bottom("status_bar")
             .frame(
                 egui::Frame::new()
-                    .fill(ui::theme::BG_PANEL)
+                    .fill(ui::theme::bg_panel())
                     .inner_margin(egui::Margin::symmetric(14, 6)),
             )
             .show(ctx, |ui| {
@@ -942,7 +952,7 @@ impl eframe::App for App {
                                 errors_str,
                                 freed_str,
                             ))
-                            .color(ui::theme::TEXT_MUTED)
+                            .color(ui::theme::note())
                             .size(11.0),
                         );
                     }
@@ -950,7 +960,7 @@ impl eframe::App for App {
                         ui.spinner();
                         ui.label(
                             egui::RichText::new(format!("Moving {name}: copying and verifying…"))
-                                .color(ui::theme::ACCENT_LIGHT)
+                                .color(ui::theme::highlight())
                                 .size(11.0),
                         );
                         ui.ctx()
@@ -958,7 +968,7 @@ impl eframe::App for App {
                     } else if let Some(msg) = &self.state.relocate_message {
                         ui.label(
                             egui::RichText::new(msg)
-                                .color(ui::theme::ACCENT_LIGHT)
+                                .color(ui::theme::highlight())
                                 .size(11.0),
                         );
                     }
@@ -970,7 +980,7 @@ impl eframe::App for App {
                                 self.state.scan_progress.dirs,
                                 ui::theme::format_size(self.state.scan_progress.bytes),
                             ))
-                            .color(ui::theme::ACCENT_LIGHT)
+                            .color(ui::theme::highlight())
                             .size(11.0),
                         );
                     }
@@ -979,7 +989,7 @@ impl eframe::App for App {
                     if let Some(msg) = &self.state.batch_error_msg {
                         ui.label(
                             egui::RichText::new(format!("⚠ {}", msg))
-                                .color(egui::Color32::from_rgb(248, 113, 113))
+                                .color(ui::theme::warn_text())
                                 .size(11.0),
                         );
                     }
@@ -997,7 +1007,7 @@ impl eframe::App for App {
                                             "Refreshing  {}  …",
                                             path.display(),
                                         ))
-                                        .color(ui::theme::ACCENT_LIGHT)
+                                        .color(ui::theme::highlight())
                                         .size(11.0),
                                     );
                                     ui.ctx().request_repaint();
@@ -1025,7 +1035,7 @@ impl eframe::App for App {
                                         path.display(),
                                         ui::theme::format_size(node.size),
                                     ))
-                                    .color(ui::theme::ACCENT_LIGHT)
+                                    .color(ui::theme::highlight())
                                     .size(11.0),
                                 );
                             }
@@ -1035,7 +1045,7 @@ impl eframe::App for App {
             });
 
         let side_frame = egui::Frame::new()
-            .fill(ui::theme::BG_PANEL)
+            .fill(ui::theme::bg_panel())
             .inner_margin(egui::Margin::symmetric(8, 8));
 
         // Left panel: directory tree
@@ -1190,14 +1200,14 @@ fn confirm_dialog(
             ui.set_max_width(max_width);
             ui.label(
                 egui::RichText::new(title)
-                    .color(ui::theme::TEXT_PRIMARY)
+                    .color(ui::theme::ink())
                     .size(13.0)
                     .strong(),
             );
             ui.add_space(4.0);
             ui.label(
                 egui::RichText::new(detail)
-                    .color(ui::theme::TEXT_SECONDARY)
+                    .color(ui::theme::ink_soft())
                     .size(11.0),
             );
             ui.add_space(12.0);

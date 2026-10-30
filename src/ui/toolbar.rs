@@ -77,7 +77,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         };
         ui.label(
             RichText::new(path_text)
-                .color(theme::TEXT_SECONDARY)
+                .color(theme::ink_soft())
                 .size(12.0),
         );
 
@@ -103,7 +103,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
 
             ui.label(
                 RichText::new("Color by")
-                    .color(theme::TEXT_MUTED)
+                    .color(theme::note())
                     .size(11.0),
             );
         });
