@@ -143,7 +143,7 @@ pub fn fixture_state() -> AppState {
     s.extension_stats = tree.collect_extensions(root);
     s.cleanup_candidates = mac_dir_stat::cleanup::find_candidates(&tree, root);
     s.home = Some(PathBuf::from("/Users/pavol"));
-    s.only_yours = mac_dir_stat::cleanup::find_only_yours(&tree, s.home.as_deref());
+    s.only_yours = mac_dir_stat::cleanup::find_only_yours(&tree, s.home.as_deref(), &s.cleanup_candidates);
     s.view_root = Some(root);
     s.zoom_stack = vec![root];
     s.scan_progress.files = tree.node(root).file_count as usize;

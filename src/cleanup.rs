@@ -66,8 +66,14 @@ pub struct OnlyYours {
 
 /// The usual places personal data lives under `home`, largest first.
 /// Photos libraries are listed on their own and their bytes taken out of
-/// the folder that holds them. Entries under 1 MB are dropped.
-pub fn find_only_yours(tree: &FileTree, home: Option<&Path>) -> Vec<OnlyYours> {
+/// the folder that holds them, and so are rebuildable folders inside (a
+/// `node_modules` under Documents is on the other side of the inventory).
+/// Entries under 1 MB are dropped.
+pub fn find_only_yours(
+    tree: &FileTree,
+    home: Option<&Path>,
+    rebuildable: &[CleanupCandidate],
+) -> Vec<OnlyYours> {
     const PLACES: &[(&str, &str)] = &[
         ("Documents", "Documents"),
         ("Desktop", "Desktop"),
@@ -99,6 +105,14 @@ pub fn find_only_yours(tree: &FileTree, home: Option<&Path>) -> Vec<OnlyYours> {
         }
         let label = if size < tree.node(id).size { format!("{label} (the rest)") } else { label.into() };
         out.push(OnlyYours { node_id: id, path, label, size });
+    }
+    for o in &mut out {
+        let inside: u64 = rebuildable
+            .iter()
+            .filter(|c| c.path.starts_with(&o.path))
+            .map(|c| c.size)
+            .sum();
+        o.size = o.size.saturating_sub(inside);
     }
     out.retain(|o| o.size > 1024 * 1024);
     out.sort_by(|a, b| b.size.cmp(&a.size));

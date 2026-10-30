@@ -13,7 +13,7 @@ All notable changes to MacDirStat are documented here. The format follows
   have these* lists Photos libraries, Documents, Desktop, Pictures, Movies, Music, Mail and Messages
   in your home folder with their sizes; they have no tick boxes and are never offered for deletion.
 - **A closing account** after you move things to the Trash with the Cleanup window open: how much
-  went, how much of it was rebuildable and how much only you had, free space on the disk, and a
+  went, how much of it a tool can rebuild and how much no tool can, free space on the disk, and a
   reminder that the Trash is not emptied, so nothing is gone yet.
 
 ### Changed

@@ -64,6 +64,11 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     });
                 });
         });
+    if !open {
+        // The account is for the visit it closes; the next visit starts
+        // from the inventory.
+        state.closing_account = None;
+    }
     state.cleanup_window_open = open;
 }
 
@@ -233,8 +238,8 @@ fn only_yours_column(ui: &mut Ui, state: &mut AppState) {
     if state.only_yours.is_empty() {
         ui.label(
             RichText::new(
-                "None of your usual folders (Documents, Pictures, Movies, Music, Mail) \
-                 is in this scan.",
+                "None of your usual folders (Documents, Desktop, Pictures, Movies, Music, \
+                 Mail, Messages) is in this scan.",
             )
             .color(theme::note())
             .size(12.0),
@@ -337,7 +342,7 @@ fn closing_account(ui: &mut Ui, state: &mut AppState, a: &Account) {
     let items = if a.items == 1 { "1 item".to_string() } else { format!("{} items", a.items) };
     line(ui, &format!("Moved to Trash ({items})"), theme::format_size(a.moved), 14.0);
     line(ui, "of which can be rebuilt", theme::format_size(a.rebuildable), 13.0);
-    line(ui, "of which only you had", theme::format_size(a.only_yours), 13.0);
+    line(ui, "of which no tool can rebuild", theme::format_size(a.only_yours), 13.0);
     if let Some((free, total)) = a.disk {
         line(
             ui,

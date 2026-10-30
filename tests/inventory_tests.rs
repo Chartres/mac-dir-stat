@@ -24,6 +24,9 @@ fn home_tree() -> FileTree {
     t.add_file(pics, b"scan.png", 5 * MB, Some("png"), t0, 2);
     let docs = t.add_dir(r, b"Documents", false, t0, 1);
     t.add_file(docs, b"tax.pdf", 20 * MB, Some("pdf"), t0, 2);
+    let thesis = t.add_dir(docs, b"thesis", false, t0, 2);
+    let tnm = t.add_dir(thesis, b"node_modules", false, t0, 3);
+    t.add_file(tnm, b"y.js", 4 * MB, Some("js"), t0, 4);
     let music = t.add_dir(r, b"Music", false, t0, 1);
     t.add_file(music, b"tiny.mp3", 1000, Some("mp3"), t0, 2);
     let code = t.add_dir(r, b"code", false, t0, 1);
@@ -43,13 +46,13 @@ fn home_tree() -> FileTree {
 #[test]
 fn only_yours_lists_personal_folders_and_splits_out_photos() {
     let t = home_tree();
-    let rows = find_only_yours(&t, Some(Path::new("/Users/p")));
+    let rows = find_only_yours(&t, Some(Path::new("/Users/p")), &find_candidates(&t, t.root()));
     let got: Vec<(&str, u64)> = rows.iter().map(|r| (r.label.as_str(), r.size)).collect();
     assert_eq!(
         got,
         vec![
             ("Photos Library", 100 * MB),
-            ("Documents", 20 * MB),
+            ("Documents", 20 * MB), // its 4 MB node_modules is on the left
             ("Pictures (the rest)", 5 * MB),
         ],
         "Music is under 1 MB and left out; Photos is not counted twice"
@@ -59,12 +62,12 @@ fn only_yours_lists_personal_folders_and_splits_out_photos() {
 #[test]
 fn only_yours_needs_a_home_and_never_overlaps_the_rebuildable_side() {
     let t = home_tree();
-    assert!(find_only_yours(&t, None).is_empty());
-    let mine = find_only_yours(&t, Some(Path::new("/Users/p")));
     let rebuild = find_candidates(&t, t.root());
+    assert!(find_only_yours(&t, None, &rebuild).is_empty());
+    let mine = find_only_yours(&t, Some(Path::new("/Users/p")), &rebuild);
     for m in &mine {
         assert!(!is_rebuildable(&m.path), "{} offered as rebuildable", m.path.display());
-        assert!(rebuild.iter().all(|c| !c.path.starts_with(&m.path) && !m.path.starts_with(&c.path)));
+        assert!(rebuild.iter().all(|c| !m.path.starts_with(&c.path)));
     }
 }
 
@@ -106,8 +109,8 @@ fn groups_one_row_per_rule_with_the_newest_change() {
     let c = find_candidates(&t, t.root());
     let g = groups(&c);
     assert_eq!(g[0].category, "node_modules");
-    assert_eq!(g[0].items.len(), 2);
-    assert_eq!(g[0].size, 60 * MB);
+    assert_eq!(g[0].items.len(), 3);
+    assert_eq!(g[0].size, 64 * MB);
     let days = SystemTime::now().duration_since(g[0].newest).unwrap().as_secs() / 86_400;
     assert_eq!(days, 3, "newest of the two projects");
     assert_eq!(g[1].category, "Application Caches");
@@ -140,7 +143,7 @@ fn journey_open_inventory_tick_one_rule_confirm() {
     s.request_rescan = false;
     s.home = Some(PathBuf::from("/Users/p"));
     s.cleanup_candidates = find_candidates(&tree, tree.root());
-    s.only_yours = find_only_yours(&tree, s.home.as_deref());
+    s.only_yours = find_only_yours(&tree, s.home.as_deref(), &s.cleanup_candidates);
     s.view_root = Some(tree.root());
     s.tree = Some(tree);
     s.cleanup_window_open = true;
@@ -176,7 +179,7 @@ fn journey_open_inventory_tick_one_rule_confirm() {
             let mut want = ids.clone();
             want.sort();
             assert_eq!(got, want);
-            assert_eq!(*total, 60 * MB);
+            assert_eq!(*total, 64 * MB);
             assert!(items.iter().all(|(_, p)| is_rebuildable(p)));
         }
         other => panic!("expected one batch confirmation, got {}", other.is_some()),

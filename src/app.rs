@@ -311,8 +311,11 @@ impl App {
                 let root = tree.root();
                 self.state.extension_stats = tree.collect_extensions(root);
                 self.state.cleanup_candidates = crate::cleanup::find_candidates(tree, root);
-                self.state.only_yours =
-                    crate::cleanup::find_only_yours(tree, self.state.home.as_deref());
+                self.state.only_yours = crate::cleanup::find_only_yours(
+                    tree,
+                    self.state.home.as_deref(),
+                    &self.state.cleanup_candidates,
+                );
 
                 // Old node IDs under the target are now dead. Sanitize any
                 // state that referenced them.
@@ -374,6 +377,7 @@ impl App {
                             self.state.only_yours = crate::cleanup::find_only_yours(
                                 &tree,
                                 self.state.home.as_deref(),
+                                &self.state.cleanup_candidates,
                             );
                             self.state.view_root = Some(root);
                             self.state.zoom_stack = vec![root];
@@ -714,7 +718,11 @@ impl AppState {
             let tree_ref = &*tree;
             self.cleanup_candidates
                 .retain(|c| tree_ref.is_alive(c.node_id));
-            self.only_yours = crate::cleanup::find_only_yours(tree_ref, self.home.as_deref());
+            self.only_yours = crate::cleanup::find_only_yours(
+                tree_ref,
+                self.home.as_deref(),
+                &self.cleanup_candidates,
+            );
             // If the user trashed the currently-zoomed directory, reset the
             // treemap view to the root so it doesn't go blank.
             self.reset_dead_view_root(root);
