@@ -398,3 +398,24 @@ fn short_path(p: &str, max: usize) -> String {
     let tail: String = p.chars().skip(n - (max - max / 3 - 1)).collect();
     format!("{head}…{tail}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::short_path;
+
+    #[test]
+    fn short_path_multibyte() {
+        // ASCII short path passes through unchanged.
+        assert_eq!(short_path("/usr/local/bin", 48), "/usr/local/bin");
+        // Multibyte chars (Founder Case 2): result is char-correct and within max+1 (the ellipsis).
+        let p = "/Users/用户/Downloads/node_modules/very/long/path";
+        let result = short_path(p, 20);
+        assert!(result.chars().count() <= 21, "result too long: {result}");
+        assert!(result.contains('…'), "missing ellipsis: {result}");
+        // Pure multibyte path: head and tail are chars, not bytes.
+        let p2 = "あ".repeat(30);
+        let result2 = short_path(&p2, 12);
+        assert!(result2.chars().count() <= 13);
+        assert!(result2.contains('…'));
+    }
+}

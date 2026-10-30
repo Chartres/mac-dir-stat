@@ -951,6 +951,7 @@ mod tests {
         for p in [
             "/USERS".to_string(),
             "/applications".to_string(),
+            "/USERS/Shared".to_string(),
             format!("/Users/{user}/library"),
             format!("/Users/{}", user.to_uppercase()),
             format!("/users/{user}"),
