@@ -359,30 +359,31 @@ impl FileTree {
 
     fn collect_extensions_recursive(
         &self,
-        id: NodeId,
+        root: NodeId,
         map: &mut std::collections::HashMap<String, (u64, usize)>,
     ) {
-        let node = &self.nodes[id];
-        if !node.alive {
-            return;
-        }
-        match &node.kind {
-            NodeKind::File { extension } => {
-                let ext = extension
-                    .map(|r| String::from_utf8_lossy(self.strings.get(r)).into_owned())
-                    .unwrap_or_default();
-                // Skip synthetic extensions used for the free-space and
-                // skipped-bytes treemap blocks — they're not real files.
-                if ext.starts_with("__") {
-                    return;
-                }
-                let entry = map.entry(ext).or_insert((0, 0));
-                entry.0 += node.size;
-                entry.1 += 1;
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            let node = &self.nodes[id];
+            if !node.alive {
+                continue;
             }
-            NodeKind::Directory { children, .. } => {
-                for &child in children {
-                    self.collect_extensions_recursive(child, map);
+            match &node.kind {
+                NodeKind::File { extension } => {
+                    let ext = extension
+                        .map(|r| String::from_utf8_lossy(self.strings.get(r)).into_owned())
+                        .unwrap_or_default();
+                    // Skip synthetic extensions used for the free-space and
+                    // skipped-bytes treemap blocks — they're not real files.
+                    if ext.starts_with("__") {
+                        continue;
+                    }
+                    let entry = map.entry(ext).or_insert((0, 0));
+                    entry.0 += node.size;
+                    entry.1 += 1;
+                }
+                NodeKind::Directory { children, .. } => {
+                    stack.extend_from_slice(children);
                 }
             }
         }
