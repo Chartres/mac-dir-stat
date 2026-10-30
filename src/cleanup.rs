@@ -307,34 +307,35 @@ pub fn find_candidates(tree: &FileTree, root: NodeId) -> Vec<CleanupCandidate> {
     candidates
 }
 
-fn walk(tree: &FileTree, id: NodeId, out: &mut Vec<CleanupCandidate>) {
-    if !tree.is_alive(id) {
-        return;
-    }
-    let node = tree.node(id);
-    if !node.is_dir() {
-        return;
-    }
-    let path = tree.full_path(id);
-    if let Some((category, description)) = classify(&path) {
-        let size = node.size;
-        // Threshold: ignore tiny matches — they're noise.
-        if size > 1024 * 1024 {
-            out.push(CleanupCandidate {
-                node_id: id,
-                path,
-                category,
-                description,
-                size,
-                newest: newest(tree, id),
-            });
+fn walk(tree: &FileTree, start: NodeId, out: &mut Vec<CleanupCandidate>) {
+    let mut stack = vec![start];
+    while let Some(id) = stack.pop() {
+        if !tree.is_alive(id) {
+            continue;
         }
-        // Don't recurse into a matched directory — we want the parent
-        // match, not a hundred sub-matches inside Library/Caches.
-        return;
-    }
-    for &child in node.children() {
-        walk(tree, child, out);
+        let node = tree.node(id);
+        if !node.is_dir() {
+            continue;
+        }
+        let path = tree.full_path(id);
+        if let Some((category, description)) = classify(&path) {
+            let size = node.size;
+            // Threshold: ignore tiny matches — they're noise.
+            if size > 1024 * 1024 {
+                out.push(CleanupCandidate {
+                    node_id: id,
+                    path,
+                    category,
+                    description,
+                    size,
+                    newest: newest(tree, id),
+                });
+            }
+            // Don't recurse into a matched directory — we want the parent
+            // match, not a hundred sub-matches inside Library/Caches.
+            continue;
+        }
+        stack.extend_from_slice(node.children());
     }
 }
 
