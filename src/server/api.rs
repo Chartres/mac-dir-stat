@@ -128,10 +128,7 @@ pub fn start_scan(sh: &Arc<Shared>, root: PathBuf) {
 }
 
 pub fn rescan(sh: &Arc<Shared>, root: Option<PathBuf>) -> Result<Value, ApiError> {
-    let root = match root {
-        Some(r) => r,
-        None => lock(&sh.scan).root.clone(),
-    };
+    let root = root.unwrap_or_else(|| lock(&sh.scan).root.clone());
     if !root.is_dir() {
         return Err(err(400, format!("{} is not a folder", root.display())));
     }
