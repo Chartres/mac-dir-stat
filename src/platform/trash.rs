@@ -9,8 +9,12 @@ pub fn move_to_trash(path: &Path) -> Result<(), String> {
 /// server, over ssh) and needs no Automation permission. Finder's "Put Back"
 /// may not be offered for these items; dragging them out of the Trash works.
 pub fn move_to_trash_headless(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
     use trash::macos::{DeleteMethod, TrashContextExtMacos};
+    #[allow(unused_mut)]
     let mut ctx = trash::TrashContext::default();
+    // Other targets only build so the tests can run off a Mac.
+    #[cfg(target_os = "macos")]
     ctx.set_delete_method(DeleteMethod::NsFileManager);
     ctx.delete(path)
         .map_err(|e| format!("Failed to move to trash: {}", e))
