@@ -6,6 +6,16 @@ All notable changes to MacDirStat are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **The inventory.** The Cleanup window now has two columns. *Can be rebuilt* groups the cleanup
+  candidates by rule, one tick per rule (or per folder under "each one"), with a line saying what it
+  takes to get it back (`npm install`, the next Xcode build, …) and when it last changed. *Only you
+  have these* lists Photos libraries, Documents, Desktop, Pictures, Movies, Music, Mail and Messages
+  in your home folder with their sizes; they have no tick boxes and are never offered for deletion.
+- **A closing account** after you move things to the Trash with the Cleanup window open: how much
+  went, how much of it a tool can rebuild and how much no tool can, free space on the disk, and a
+  reminder that the Trash is not emptied, so nothing is gone yet.
+
 ### Changed
 - **New look: the survey register.** Book typography on paper: Source Serif 4 (bundled, SIL Open
   Font License) for all text with a real italic for notes, ink on paper, hairline rules, and one

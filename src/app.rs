@@ -54,6 +54,14 @@ pub struct AppState {
     pub cleanup_window_open: bool,
     pub cleanup_candidates: Vec<crate::cleanup::CleanupCandidate>,
     pub cleanup_selected: std::collections::HashSet<NodeId>,
+    // The other column of the inventory: folders only the user has, never
+    // offered for deletion. Recomputed with the candidates.
+    pub only_yours: Vec<crate::cleanup::OnlyYours>,
+    // The account shown in the Cleanup window after a trash made while it
+    // was open. Cleared by its Close button and by a new scan.
+    pub closing_account: Option<crate::cleanup::Account>,
+    // The user's home folder; where `only_yours` looks.
+    pub home: Option<PathBuf>,
 
     // Help / about window — toggled via toolbar or `?` shortcut.
     pub help_window_open: bool,
@@ -205,6 +213,7 @@ impl App {
         };
         let mut state = AppState::new(scan_root, has_persisted_root, color_mode, flywheel);
         state.has_fda = has_fda;
+        state.home = crate::relocate::home();
         state.show_fda_prompt = show_fda_prompt;
         App {
             state,
@@ -254,6 +263,8 @@ impl App {
         // the old tree and must not reach a Trash confirmation for the new one.
         self.state.cleanup_candidates.clear();
         self.state.cleanup_selected.clear();
+        self.state.only_yours.clear();
+        self.state.closing_account = None;
         crate::scanner::scan(self.state.scan_root.clone(), tx);
     }
 
@@ -300,6 +311,11 @@ impl App {
                 let root = tree.root();
                 self.state.extension_stats = tree.collect_extensions(root);
                 self.state.cleanup_candidates = crate::cleanup::find_candidates(tree, root);
+                self.state.only_yours = crate::cleanup::find_only_yours(
+                    tree,
+                    self.state.home.as_deref(),
+                    &self.state.cleanup_candidates,
+                );
 
                 // Old node IDs under the target are now dead. Sanitize any
                 // state that referenced them.
@@ -358,6 +374,11 @@ impl App {
                             self.state.extension_stats = tree.collect_extensions(root);
                             self.state.cleanup_candidates =
                                 crate::cleanup::find_candidates(&tree, root);
+                            self.state.only_yours = crate::cleanup::find_only_yours(
+                                &tree,
+                                self.state.home.as_deref(),
+                                &self.state.cleanup_candidates,
+                            );
                             self.state.view_root = Some(root);
                             self.state.zoom_stack = vec![root];
                             self.state.tree = Some(tree);
@@ -411,6 +432,7 @@ impl App {
         let mut stale: usize = 0;
         let mut first_error = String::new();
         let mut freed: u64 = 0;
+        let mut moved: Vec<(PathBuf, u64)> = Vec::new();
         for (id, path) in &items {
             let Some(size) = self.state.size_if_at(*id, path) else {
                 stale += 1;
@@ -425,6 +447,7 @@ impl App {
                 continue;
             }
             succeeded.push(*id);
+            moved.push((path.clone(), size));
             freed += size;
         }
         let plural = |n: usize| if n == 1 { "" } else { "s" };
@@ -456,6 +479,7 @@ impl App {
             }));
         }
         self.state.remove_trashed(&succeeded);
+        self.state.record_account(&moved);
     }
 
     /// Move the directory-list selection up or down through the visible rows.
@@ -600,6 +624,7 @@ impl App {
                     "kind": "single",
                 }));
                 self.state.remove_trashed(&[node_id]);
+                self.state.record_account(&[(path.to_path_buf(), size)]);
             }
             Err(e) => {
                 eprintln!("Delete failed: {}", e);
@@ -642,6 +667,9 @@ impl AppState {
             cleanup_window_open: false,
             cleanup_candidates: Vec::new(),
             cleanup_selected: std::collections::HashSet::new(),
+            only_yours: Vec::new(),
+            closing_account: None,
+            home: None,
             help_window_open: false,
             search_active: false,
             search_query: String::new(),
@@ -690,6 +718,11 @@ impl AppState {
             let tree_ref = &*tree;
             self.cleanup_candidates
                 .retain(|c| tree_ref.is_alive(c.node_id));
+            self.only_yours = crate::cleanup::find_only_yours(
+                tree_ref,
+                self.home.as_deref(),
+                &self.cleanup_candidates,
+            );
             // If the user trashed the currently-zoomed directory, reset the
             // treemap view to the root so it doesn't go blank.
             self.reset_dead_view_root(root);
@@ -704,6 +737,17 @@ impl AppState {
             self.cleanup_selected.remove(id);
         }
         self.treemap_dirty = true;
+    }
+
+    /// After a trash made with the Cleanup window open, add it to the
+    /// closing account the window shows next.
+    fn record_account(&mut self, moved: &[(PathBuf, u64)]) {
+        if !self.cleanup_window_open || moved.is_empty() {
+            return;
+        }
+        let account = self.closing_account.get_or_insert_with(Default::default);
+        account.add(moved);
+        account.disk = crate::relocate::fs_info(&self.scan_root).map(|f| (f.free, f.total));
     }
 
     /// If the zoomed-into directory died (trashed or replaced by a graft),
@@ -1393,6 +1437,7 @@ mod tests {
             category: "c",
             description: "d",
             size: 10,
+            newest: SystemTime::UNIX_EPOCH,
         }];
         app.state.cleanup_selected.insert(old_ids[0]);
         app.start_scan();

@@ -33,6 +33,9 @@ fn shots() -> Vec<Shot> {
     vec![
         Shot { name: "main-light", dark: false, setup: |_| {}, pointer: None },
         Shot { name: "main-dark", dark: true, setup: |_| {}, pointer: None },
+        Shot { name: "inventory", dark: false, setup: inventory, pointer: None },
+        Shot { name: "inventory-dark", dark: true, setup: inventory, pointer: None },
+        Shot { name: "closing-account", dark: false, setup: closing_account, pointer: None },
     ]
 }
 
@@ -139,6 +142,8 @@ pub fn fixture_state() -> AppState {
     let root = tree.root();
     s.extension_stats = tree.collect_extensions(root);
     s.cleanup_candidates = mac_dir_stat::cleanup::find_candidates(&tree, root);
+    s.home = Some(PathBuf::from("/Users/pavol"));
+    s.only_yours = mac_dir_stat::cleanup::find_only_yours(&tree, s.home.as_deref(), &s.cleanup_candidates);
     s.view_root = Some(root);
     s.zoom_stack = vec![root];
     s.scan_progress.files = tree.node(root).file_count as usize;
@@ -157,6 +162,32 @@ fn expand(s: &mut AppState, id: NodeId) {
             *expanded = true;
         }
     }
+}
+
+fn inventory(s: &mut AppState) {
+    s.cleanup_window_open = true;
+    // One rule ticked by hand, to show the action bar with a selection.
+    let ids: Vec<NodeId> = s
+        .cleanup_candidates
+        .iter()
+        .filter(|c| c.category == "node_modules")
+        .map(|c| c.node_id)
+        .collect();
+    s.cleanup_selected.extend(ids);
+}
+
+fn closing_account(s: &mut AppState) {
+    s.cleanup_window_open = true;
+    let mut a = mac_dir_stat::cleanup::Account::default();
+    let moved: Vec<(PathBuf, u64)> = s
+        .cleanup_candidates
+        .iter()
+        .filter(|c| c.category == "node_modules" || c.category == "Xcode DerivedData")
+        .map(|c| (c.path.clone(), c.size))
+        .collect();
+    a.add(&moved);
+    a.disk = Some((212 * GB + 600 * MB, 994 * GB));
+    s.closing_account = Some(a);
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────
