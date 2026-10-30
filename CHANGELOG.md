@@ -16,6 +16,12 @@ All notable changes to MacDirStat are documented here. The format follows
   went, how much of it a tool can rebuild and how much no tool can, free space on the disk, and a
   reminder that the Trash is not emptied, so nothing is gone yet.
 
+- **The ledger, in the folder list.** The directory tree is now a ranked ledger of the folder the
+  map shows: each row has its exact size and a length bar scaled to the largest row at its level,
+  and a folder's own files appear as one row ("12 files") so the lengths add up. Hovering a row
+  outlines that folder on the map; hovering the map lights up the row that holds the block. Zooming
+  the map moves the list to that folder.
+
 ### Changed
 - **New look: the survey register.** Book typography on paper: Source Serif 4 (bundled, SIL Open
   Font License) for all text with a real italic for notes, ink on paper, hairline rules, and one

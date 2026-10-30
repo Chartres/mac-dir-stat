@@ -36,6 +36,10 @@ fn shots() -> Vec<Shot> {
         Shot { name: "inventory", dark: false, setup: inventory, pointer: None },
         Shot { name: "inventory-dark", dark: true, setup: inventory, pointer: None },
         Shot { name: "closing-account", dark: false, setup: closing_account, pointer: None },
+        // Pointer over the first folder row: the map outlines that folder.
+        Shot { name: "ledger", dark: false, setup: ledger, pointer: Some(Pos2::new(120.0, 120.0)) },
+        // Pointer on the map, over a Docker block: the list marks Containers.
+        Shot { name: "ledger-dark", dark: true, setup: ledger, pointer: Some(Pos2::new(780.0, 300.0)) },
     ]
 }
 
@@ -174,6 +178,14 @@ fn inventory(s: &mut AppState) {
         .map(|c| c.node_id)
         .collect();
     s.cleanup_selected.extend(ids);
+}
+
+fn ledger(s: &mut AppState) {
+    // Expand Library so the list shows a second level with its loose files.
+    let lib = s.tree.as_ref().and_then(|t| t.find_path(Path::new("/Users/pavol/Library")));
+    if let Some(lib) = lib {
+        expand(s, lib);
+    }
 }
 
 fn closing_account(s: &mut AppState) {

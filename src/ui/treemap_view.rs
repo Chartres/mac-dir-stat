@@ -335,6 +335,23 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         }
     }
 
+    // A row hovered in the folder list (the ledger): outline its region.
+    if let Some(id) = state.ledger_hover {
+        if let Some(dr) = state.dir_rects.iter().find(|d| d.node_id == id) {
+            let rect = Rect::from_min_size(
+                Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
+                Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
+            );
+            painter.rect_filled(rect, 0.0, theme::highlight_alpha(28));
+            painter.rect_stroke(
+                rect,
+                0.0,
+                egui::Stroke::new(2.0, theme::highlight()),
+                StrokeKind::Inside,
+            );
+        }
+    }
+
     // Hovered file highlight
     if let Some(hovered_id) = state.hovered_node {
         for cr in &state.colored_rects {

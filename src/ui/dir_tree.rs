@@ -33,16 +33,18 @@ fn sorted_children(tree: &FileTree, parent: NodeId, sort: crate::app::DirSortMod
 /// Directories in top-to-bottom display order (pre-order, honoring the active
 /// sort and collapsed nodes). Drives keyboard navigation; mirrors what
 /// `show_node` renders.
-pub fn visible_dirs(tree: &FileTree, sort: crate::app::DirSortMode) -> Vec<NodeId> {
+pub fn visible_dirs(tree: &FileTree, root: NodeId, sort: crate::app::DirSortMode) -> Vec<NodeId> {
     fn rec(tree: &FileTree, id: NodeId, sort: crate::app::DirSortMode, out: &mut Vec<NodeId>) {
         if !tree.is_alive(id) || !tree.node(id).is_dir() {
             return;
         }
+        let is_root = out.is_empty();
         out.push(id);
-        let expanded = matches!(
-            &tree.node(id).kind,
-            NodeKind::Directory { expanded: true, .. }
-        );
+        let expanded = is_root
+            || matches!(
+                &tree.node(id).kind,
+                NodeKind::Directory { expanded: true, .. }
+            );
         if expanded {
             for c in sorted_children(tree, id, sort) {
                 if tree.node(c).is_dir() {
@@ -52,14 +54,68 @@ pub fn visible_dirs(tree: &FileTree, sort: crate::app::DirSortMode) -> Vec<NodeI
         }
     }
     let mut out = Vec::new();
-    rec(tree, tree.root(), sort, &mut out);
+    rec(tree, root, sort, &mut out);
     out
+}
+
+/// The folder the list starts from: the one the map shows.
+pub fn list_root(state: &AppState) -> Option<NodeId> {
+    let tree = state.tree.as_ref()?;
+    Some(
+        state
+            .view_root
+            .filter(|&v| tree.is_alive(v) && tree.node(v).is_dir())
+            .unwrap_or_else(|| tree.root()),
+    )
+}
+
+/// Bytes held by `dir`'s own files (not its subfolders) and how many.
+pub fn loose_files(tree: &FileTree, dir: NodeId) -> (u64, usize) {
+    tree.node(dir)
+        .children()
+        .iter()
+        .filter(|&&c| tree.is_alive(c) && !tree.node(c).is_dir())
+        .fold((0, 0), |(b, n), &c| (b + tree.node(c).size, n + 1))
+}
+
+/// The scale for one level of the ledger: its largest row, folder or the
+/// folder's loose files. Bars within a level compare by length.
+pub fn level_max(tree: &FileTree, dir: NodeId) -> u64 {
+    let dirs = tree
+        .node(dir)
+        .children()
+        .iter()
+        .filter(|&&c| tree.is_alive(c) && tree.node(c).is_dir())
+        .map(|&c| tree.node(c).size)
+        .max()
+        .unwrap_or(0);
+    dirs.max(loose_files(tree, dir).0)
+}
+
+/// The row the map's pointer is over: the deepest listed folder that holds
+/// the hovered block. `None` when the pointer is off the map.
+fn map_hover_chain(state: &AppState) -> Vec<NodeId> {
+    let Some(tree) = &state.tree else { return vec![] };
+    let Some(start) = state
+        .hovered_node
+        .or(state.hovered_dir)
+        .filter(|&id| tree.is_alive(id))
+    else {
+        return vec![];
+    };
+    let mut chain = vec![start];
+    let mut cur = tree.node(start).parent;
+    while let Some(p) = cur {
+        chain.push(p);
+        cur = tree.node(p).parent;
+    }
+    chain
 }
 
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
-            widgets::section_header(ui, "Directory tree");
+            widgets::section_header(ui, "Folders");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let label = format!("Sort: {}", state.dir_sort.label());
                 if ui
@@ -83,8 +139,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             }
         };
 
-        let root = tree.root();
-        let root_size = tree.node(root).size;
+        let root = list_root(state).unwrap_or_else(|| tree.root());
+        let root_scale = tree.node(root).size;
+        // Recomputed every frame, so it never holds an id from an old tree.
+        state.ledger_hover = None;
+        let map_chain = map_hover_chain(state);
 
         // Determine which directory to highlight:
         // If selected node is a file, highlight its parent directory
@@ -102,58 +161,65 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 ui.spacing_mut().interact_size.y = 16.0;
-                show_node(ui, state, root, root_size, highlighted_dir);
+                let ctx = Row { highlighted_dir, map_chain: &map_chain, list_root: root };
+                show_node(ui, state, root, root_scale, &ctx);
             });
     });
 }
 
-fn show_node(
-    ui: &mut Ui,
-    state: &mut AppState,
-    id: NodeId,
-    root_size: u64,
+struct Row<'a> {
     highlighted_dir: Option<NodeId>,
-) {
+    /// The hovered map block and its ancestors.
+    map_chain: &'a [NodeId],
+    list_root: NodeId,
+}
+
+/// Width of the ledger's length bar at full scale, in points.
+const BAR_W: f32 = 72.0;
+
+/// One ledger row: name, length bar scaled to the largest row of its level,
+/// exact size. `scale` is that largest row's size.
+fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, scale: u64, ctx: &Row) {
     let tree = match &state.tree {
         Some(t) => t,
         None => return,
     };
-
-    let node = tree.node(id);
     if !tree.is_alive(id) {
         return;
     }
-
+    let node = tree.node(id);
+    let is_root = id == ctx.list_root;
     let (children, expanded) = match &node.kind {
-        NodeKind::Directory { children, expanded } => (children.clone(), *expanded),
+        NodeKind::Directory { children, expanded } => (children.clone(), *expanded || is_root),
         NodeKind::File { .. } => return,
     };
 
-    let is_selected = highlighted_dir == Some(id);
+    let is_selected = ctx.highlighted_dir == Some(id);
+    // The map's pointer is inside this folder, and no deeper listed row
+    // shows it.
+    let map_here = ctx.map_chain.contains(&id)
+        && !(expanded
+            && children
+                .iter()
+                .any(|c| ctx.map_chain.contains(c) && tree.node(*c).is_dir()));
     let name = tree.name(id).to_string();
     let size = node.size;
-    let depth = node.depth;
+    let depth = node.depth.saturating_sub(tree.node(ctx.list_root).depth);
     let items = node.items();
+    let has_children = children.iter().any(|&c| tree.is_alive(c));
 
-    let indent = depth as f32 * 10.0;
-    let has_children = !children.is_empty();
-
-    let frame = if is_selected {
-        egui::Frame::new()
-            .fill(theme::bg_selection())
-            .inner_margin(egui::Margin { left: 3, right: 3, top: 1, bottom: 1 })
-            .corner_radius(theme::RADIUS_SM)
-    } else {
-        egui::Frame::new()
-            .inner_margin(egui::Margin { left: 3, right: 3, top: 1, bottom: 1 })
-    };
+    // The row's fill depends on hover, known only after layout.
+    let bg = ui.painter().add(egui::Shape::Noop);
+    let frame = egui::Frame::new()
+        .inner_margin(egui::Margin { left: 3, right: 3, top: 2, bottom: 2 })
+        .corner_radius(theme::RADIUS_SM);
 
     let frame_response = frame.show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            ui.add_space(indent);
+            ui.add_space(depth as f32 * 10.0);
 
-            if has_children {
+            if has_children && !is_root {
                 let arrow = if expanded { "▼" } else { "▶" };
                 let arrow_resp = ui.add(
                     egui::Label::new(
@@ -177,15 +243,13 @@ fn show_node(
                 ui.add_space(10.0);
             }
 
-            let name_color = if is_selected {
+            let name_color = if is_selected || map_here {
                 theme::ink()
             } else {
                 theme::ink_soft()
             };
-
-            // Truncate name to avoid overflow. Reserve space for the size text
-            // (and bar, when there's room).
-            let avail = (ui.available_width() - 70.0).max(30.0);
+            // Reserve room for size, bar and item count.
+            let avail = (ui.available_width() - (BAR_W + 96.0)).max(30.0);
             let max_chars = (avail / 6.5) as usize;
             let display_name = if name.chars().count() > max_chars && max_chars > 3 {
                 let s: String = name.chars().take(max_chars - 1).collect();
@@ -193,34 +257,16 @@ fn show_node(
             } else {
                 name.clone()
             };
-            ui.label(egui::RichText::new(&display_name).color(name_color).size(12.0));
+            ui.label(egui::RichText::new(&display_name).color(name_color).size(12.5));
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                ui.label(
-                    egui::RichText::new(theme::format_size(size))
-                        .color(theme::note())
-                        .size(10.0),
-                );
-                if root_size > 0 && ui.available_width() > 32.0 {
-                    let fraction = size as f32 / root_size as f32;
-                    let bar_width = 28.0;
-                    let (bar_rect, _) =
-                        ui.allocate_exact_size(Vec2::new(bar_width, 3.0), egui::Sense::hover());
-                    ui.painter().rect_filled(bar_rect, 1.5, theme::bar_bg());
-                    let filled = egui::Rect::from_min_size(
-                        bar_rect.left_top(),
-                        Vec2::new(bar_width * fraction, 3.0),
-                    );
-                    ui.painter().rect_filled(filled, 1.5, theme::highlight());
-                }
-                // Item count (files + subdirs) — WinDirStat's "Items" column,
-                // shown when there's horizontal room.
+                size_and_bar(ui, size, scale, theme::highlight());
                 if ui.available_width() > 48.0 {
                     ui.label(
                         egui::RichText::new(format_count(items))
-                            .color(theme::note())
-                            .size(9.0),
+                            .color(theme::faint())
+                            .size(9.5),
                     );
                 }
             });
@@ -228,36 +274,97 @@ fn show_node(
     });
 
     let row_response = frame_response.response.interact(egui::Sense::click());
+    if row_response.hovered() {
+        state.ledger_hover = Some(id);
+    }
+    let fill = if is_selected {
+        theme::bg_selection()
+    } else if map_here || row_response.hovered() {
+        theme::bg_hover()
+    } else {
+        egui::Color32::TRANSPARENT
+    };
+    ui.painter().set(
+        bg,
+        egui::Shape::rect_filled(row_response.rect, theme::RADIUS_SM, fill),
+    );
     if row_response.clicked() {
         state.selected_node = Some(id);
         state.selected_extension = None;
     }
-    if row_response.double_clicked() {
+    if row_response.double_clicked() && !is_root {
         state.view_root = Some(id);
         state.zoom_stack.push(id);
         state.treemap_dirty = true;
     }
 
-    // Reveal-in-tree: scroll this row into view if the treemap requested it.
     if state.scroll_dir_tree_to == Some(id) {
         row_response.scroll_to_me(Some(egui::Align::Center));
         state.scroll_dir_tree_to = None;
     }
 
-    // Right-click → same context menu as the treemap. id is fixed for the
-    // row, so no sticky capture is needed.
     row_response.context_menu(|ui| {
         crate::ui::context_menu::show(ui, state, id);
     });
 
     if expanded {
-        let order = match &state.tree {
-            Some(t) => sorted_children(t, id, state.dir_sort),
+        let (order, child_scale, loose) = match &state.tree {
+            Some(t) => (
+                sorted_children(t, id, state.dir_sort),
+                level_max(t, id),
+                loose_files(t, id),
+            ),
             None => return,
         };
         for child_id in order {
-            show_node(ui, state, child_id, root_size, highlighted_dir);
+            show_node(ui, state, child_id, child_scale, ctx);
         }
+        if loose.1 > 0 {
+            loose_row(ui, depth + 1, loose, child_scale);
+        }
+    }
+}
+
+/// The folder's own files, as one row, so a level's lengths add up to it.
+fn loose_row(ui: &mut Ui, depth: u16, (bytes, n): (u64, usize), scale: u64) {
+    egui::Frame::new()
+        .inner_margin(egui::Margin { left: 3, right: 3, top: 2, bottom: 2 })
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.add_space(depth as f32 * 10.0 + 10.0);
+                let label = if n == 1 { "1 file".to_string() } else { format!("{n} files") };
+                ui.label(
+                    egui::RichText::new(label)
+                        .family(theme::italic())
+                        .color(theme::note())
+                        .size(12.0),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    size_and_bar(ui, bytes, scale, theme::faint());
+                });
+            });
+        });
+}
+
+fn size_and_bar(ui: &mut Ui, size: u64, scale: u64, color: egui::Color32) {
+    ui.add_sized(
+        Vec2::new(54.0, 14.0),
+        egui::Label::new(
+            egui::RichText::new(theme::format_size(size))
+                .color(theme::ink_soft())
+                .size(10.5),
+        ),
+    );
+    if ui.available_width() > BAR_W + 8.0 {
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(BAR_W, 5.0), egui::Sense::hover());
+        let frac = if scale > 0 { (size as f32 / scale as f32).min(1.0) } else { 0.0 };
+        let filled = egui::Rect::from_min_size(
+            rect.left_top(),
+            Vec2::new((BAR_W * frac).max(if size > 0 { 1.0 } else { 0.0 }), rect.height()),
+        );
+        ui.painter().rect_filled(filled, 0.0, color);
     }
 }
 

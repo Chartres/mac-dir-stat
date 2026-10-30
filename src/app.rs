@@ -40,6 +40,9 @@ pub struct AppState {
     pub hovered_node: Option<NodeId>,
     pub selected_extension: Option<String>,
     pub hovered_dir: Option<NodeId>, // deepest directory region under cursor
+    // Folder row hovered in the list (the ledger); the map outlines it.
+    // Set by dir_tree each frame before the map draws.
+    pub ledger_hover: Option<NodeId>,
 
     // Reveal-in-tree request — set when user clicks a treemap rect, consumed
     // by dir_tree which scrolls and clears.
@@ -485,7 +488,8 @@ impl App {
     /// Move the directory-list selection up or down through the visible rows.
     fn nav_dir_list(&mut self, down: bool) {
         let Some(tree) = &self.state.tree else { return };
-        let order = crate::ui::dir_tree::visible_dirs(tree, self.state.dir_sort);
+        let Some(start) = crate::ui::dir_tree::list_root(&self.state) else { return };
+        let order = crate::ui::dir_tree::visible_dirs(tree, start, self.state.dir_sort);
         if order.is_empty() {
             return;
         }
@@ -661,6 +665,7 @@ impl AppState {
             selected_node: None,
             hovered_node: None,
             hovered_dir: None,
+            ledger_hover: None,
             selected_extension: None,
             scroll_dir_tree_to: None,
             context_menu_target: None,
