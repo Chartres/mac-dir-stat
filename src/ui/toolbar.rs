@@ -60,6 +60,15 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             if resp.clicked() {
                 state.cleanup_window_open = !state.cleanup_window_open;
             }
+            let past = crate::history::for_root(&state.history, &state.scan_root).len();
+            let resp = widgets::ghost_button(ui, "History…").on_hover_text(format!(
+                "This folder over its last {} scans, side by side. \
+                 Summaries stay on this Mac.",
+                past.max(1)
+            ));
+            if resp.clicked() {
+                state.history_window_open = !state.history_window_open;
+            }
         }
 
         ui.add_space(8.0);

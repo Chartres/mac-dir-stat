@@ -69,6 +69,11 @@ pub struct AppState {
     // Help / about window — toggled via toolbar or `?` shortcut.
     pub help_window_open: bool,
 
+    // Summaries of past scans (Move 3B), kept on this Mac only, and the
+    // window that draws them as small multiples.
+    pub history: Vec<crate::history::ScanSummary>,
+    pub history_window_open: bool,
+
     // Search
     pub search_active: bool,
     pub search_query: String,
@@ -217,6 +222,7 @@ impl App {
         let mut state = AppState::new(scan_root, has_persisted_root, color_mode, flywheel);
         state.has_fda = has_fda;
         state.home = crate::relocate::home();
+        state.history = crate::history::load();
         state.show_fda_prompt = show_fda_prompt;
         App {
             state,
@@ -402,6 +408,15 @@ impl App {
                             self.state.context_menu_target = None;
                             self.state.scroll_dir_tree_to = None;
                             crate::state::save(&self.state.scan_root, self.state.color_mode);
+                            if let Some(tree) = &self.state.tree {
+                                let s = crate::history::summarize(
+                                    tree,
+                                    &self.state.scan_root,
+                                    std::time::SystemTime::now(),
+                                );
+                                crate::history::record(&mut self.state.history, s);
+                                crate::history::save(&self.state.history);
+                            }
                         }
                         ScanProgress::Error(msg) => {
                             eprintln!("Scan error: {}", msg);
@@ -683,6 +698,8 @@ impl AppState {
             closing_account: None,
             home: None,
             help_window_open: false,
+            history: Vec::new(),
+            history_window_open: false,
             search_active: false,
             search_query: String::new(),
             pending_action: None,
@@ -924,6 +941,8 @@ impl eframe::App for App {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             if self.state.help_window_open {
                 self.state.help_window_open = false;
+            } else if self.state.history_window_open {
+                self.state.history_window_open = false;
             } else if self.state.cleanup_window_open {
                 self.state.cleanup_window_open = false;
             } else if self.state.search_active {
@@ -1136,6 +1155,7 @@ impl eframe::App for App {
 
         // Cleanup-suggestions window (toggleable from the toolbar)
         ui::cleanup_window::show(ctx, &mut self.state);
+        ui::history_window::show(ctx, &mut self.state);
         // Help / about window (`?` shortcut, also toolbar button)
         ui::help_window::show(ctx, &mut self.state);
         // One-time Full Disk Access prompt (first launch without access)
@@ -1470,5 +1490,19 @@ mod tests {
             app.state.selected_node.is_none(),
             "stale selection survived"
         );
+    }
+
+    #[test]
+    fn a_finished_scan_leaves_one_summary_for_its_folder() {
+        let (tree, _) = tree_under(b"/nonexistent-mds-test-root", &[b"a"]);
+        let mut app = test_app(FileTree::new());
+        app.state.tree = None;
+        let (tx, rx) = crossbeam_channel::unbounded();
+        app.state.scan_receiver = Some(rx);
+        tx.send(ScanProgress::Done(tree)).unwrap();
+        app.poll_scan();
+        let mine = crate::history::for_root(&app.state.history, &app.state.scan_root);
+        assert_eq!(mine.len(), 1);
+        assert_eq!(mine[0].used, 10);
     }
 }

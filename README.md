@@ -9,6 +9,7 @@ Treemap directory-size visualizer for macOS. Rust + [egui](https://github.com/em
 ## Features
 
 - **Treemap rendering** of directory contents — area = file size — with cushioned gradient colors per file type, depth, or modification age.
+- **History, as small multiples.** The History… button shows the scanned folder over its last six scans, side by side: one small treemap per scan, blocks in the same order in every panel, each panel as tall as the space used, so you see what grew.
 - **Folder list with a ledger**, synced to the treemap. Each folder shows its exact size, its **item count**, and a length bar scaled to the largest row at its level, so you compare sizes by length instead of by area. A folder's own files get one row, so a level's bars add up. Hover a row and the map outlines that folder; hover the map and the row lights up. Zoom into a folder and the list starts there. Cycle the sort between **Size · Name · Items · Recent**, and navigate the whole list from the keyboard.
 - **File-type breakdown** showing total bytes, percentage, and **file count** per extension; sort by **Size · Count · Name**; click a row to dim non-matching files.
 - **Cleanup, as an inventory.** Two columns: what a tool can rebuild (Xcode DerivedData / Archives / Simulators / DeviceSupport, `node_modules`, `target`, Application Caches, Docker / Cargo / rustup / Gradle / Maven / Next.js / Turbo, …), each with what it takes to get it back and when it last changed; and what only you have (Photos, Documents, Movies, Music, Mail), shown with sizes and never offered for deletion. Nothing is ticked for you. Tick what you trust, confirm once, and a short account says what went to the Trash, how much of it was rebuildable, and that the Trash is not emptied yet.
@@ -31,6 +32,8 @@ Press `?` at any time for the keyboard shortcut list.
 ### Privacy
 
 Release builds (the GitHub DMG and the Homebrew cask) send **anonymous, cookieless** usage counts: app opens, scans run and space reclaimed, never file names or paths. They are **on unless you turn them off**: press `?` and tick **Don't send anonymous usage data** under **Privacy**, or set `MACDIRSTAT_NO_TELEMETRY=1`. Builds from source send nothing, because they have no analytics endpoint.
+
+**History** keeps a short summary of each finished scan (date, total, the largest top-level folders; never file lists or deeper paths) in `~/Library/Application Support/mac-dir-stat/history.json`, six per scanned folder. It never leaves your Mac and nothing reads it but the History window. Delete the file to forget it.
 
 ## Compared to
 
