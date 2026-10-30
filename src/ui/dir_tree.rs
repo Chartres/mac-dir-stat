@@ -70,17 +70,19 @@ pub fn list_root(state: &AppState) -> Option<NodeId> {
 }
 
 /// Bytes held by `dir`'s own files (not its subfolders) and how many.
+/// The synthetic Free Space and Hidden blocks of a volume scan are not files
+/// and are left out.
 pub fn loose_files(tree: &FileTree, dir: NodeId) -> (u64, usize) {
     tree.node(dir)
         .children()
         .iter()
-        .filter(|&&c| tree.is_alive(c) && !tree.node(c).is_dir())
+        .filter(|&&c| tree.is_trashable(c) && !tree.node(c).is_dir())
         .fold((0, 0), |(b, n), &c| (b + tree.node(c).size, n + 1))
 }
 
 /// The scale for one level of the ledger: its largest row, folder or the
 /// folder's loose files. Bars within a level compare by length.
-pub fn level_max(tree: &FileTree, dir: NodeId) -> u64 {
+pub fn level_max(tree: &FileTree, dir: NodeId, loose_bytes: u64) -> u64 {
     let dirs = tree
         .node(dir)
         .children()
@@ -89,7 +91,7 @@ pub fn level_max(tree: &FileTree, dir: NodeId) -> u64 {
         .map(|&c| tree.node(c).size)
         .max()
         .unwrap_or(0);
-    dirs.max(loose_files(tree, dir).0)
+    dirs.max(loose_bytes)
 }
 
 /// The row the map's pointer is over: the deepest listed folder that holds
@@ -139,6 +141,18 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             }
         };
 
+        // Locate (Cleanup window, refresh) may target a row outside the
+        // zoomed folder; zoom back out so the row exists to scroll to.
+        if let (Some(target), Some(lr)) = (state.scroll_dir_tree_to, list_root(state)) {
+            let inside = tree.is_alive(target)
+                && std::iter::successors(Some(target), |&n| tree.node(n).parent).any(|n| n == lr);
+            if !inside && lr != tree.root() {
+                state.view_root = Some(tree.root());
+                state.zoom_stack = vec![tree.root()];
+                state.treemap_dirty = true;
+            }
+        }
+        let tree = state.tree.as_ref().unwrap();
         let root = list_root(state).unwrap_or_else(|| tree.root());
         let root_scale = tree.node(root).size;
         // Recomputed every frame, so it never holds an id from an old tree.
@@ -175,7 +189,7 @@ struct Row<'a> {
 }
 
 /// Width of the ledger's length bar at full scale, in points.
-const BAR_W: f32 = 72.0;
+const BAR_W: f32 = 64.0;
 
 /// One ledger row: name, length bar scaled to the largest row of its level,
 /// exact size. `scale` is that largest row's size.
@@ -249,7 +263,7 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, scale: u64, ctx: &Ro
                 theme::ink_soft()
             };
             // Reserve room for size, bar and item count.
-            let avail = (ui.available_width() - (BAR_W + 96.0)).max(30.0);
+            let avail = (ui.available_width() - (BAR_W + 84.0)).max(30.0);
             let max_chars = (avail / 6.5) as usize;
             let display_name = if name.chars().count() > max_chars && max_chars > 3 {
                 let s: String = name.chars().take(max_chars - 1).collect();
@@ -309,11 +323,10 @@ fn show_node(ui: &mut Ui, state: &mut AppState, id: NodeId, scale: u64, ctx: &Ro
 
     if expanded {
         let (order, child_scale, loose) = match &state.tree {
-            Some(t) => (
-                sorted_children(t, id, state.dir_sort),
-                level_max(t, id),
-                loose_files(t, id),
-            ),
+            Some(t) => {
+                let loose = loose_files(t, id);
+                (sorted_children(t, id, state.dir_sort), level_max(t, id, loose.0), loose)
+            }
             None => return,
         };
         for child_id in order {

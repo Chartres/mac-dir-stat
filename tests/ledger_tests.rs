@@ -45,9 +45,9 @@ fn app(t: FileTree) -> App {
 fn a_level_scales_to_its_largest_row_including_loose_files() {
     let (t, big, small) = tree();
     assert_eq!(loose_files(&t, t.root()), (25 * MB, 2));
-    assert_eq!(level_max(&t, t.root()), 60 * MB);
-    assert_eq!(level_max(&t, small), 10 * MB, "a folder of only files scales to them");
-    assert_eq!(level_max(&t, big), 60 * MB);
+    assert_eq!(level_max(&t, t.root(), 25 * MB), 60 * MB);
+    assert_eq!(level_max(&t, small, 10 * MB), 10 * MB, "a folder of only files scales to them");
+    assert_eq!(level_max(&t, big, 0), 60 * MB);
 }
 
 #[test]
@@ -111,4 +111,33 @@ fn journey_hovering_a_row_marks_that_folder_for_the_map() {
     assert_eq!(a.state.ledger_hover, Some(small));
     run(&mut a, vec![egui::Event::PointerMoved(egui::pos2(640.0, 400.0))]);
     assert_eq!(a.state.ledger_hover, None);
+}
+
+#[test]
+fn free_space_and_hidden_blocks_are_not_loose_files() {
+    let (mut t, _, _) = tree();
+    let r = t.root();
+    let t0 = SystemTime::UNIX_EPOCH;
+    t.add_file(r, b"<Free Space>", 900 * MB, Some("__free_space__"), t0, 1);
+    t.add_file(r, b"<Hidden>", 50 * MB, Some("__skipped__"), t0, 1);
+    t.compute_sizes();
+    assert_eq!(loose_files(&t, r), (25 * MB, 2));
+}
+
+/// Locate from the Cleanup window while the map is zoomed elsewhere: the
+/// list zooms back out so the row can be shown.
+#[test]
+fn locate_outside_the_zoomed_folder_zooms_out() {
+    let (t, big, small) = tree();
+    let mut a = app(t);
+    a.state.view_root = Some(big);
+    a.state.zoom_stack.push(big);
+    a.state.selected_node = Some(small);
+    a.state.scroll_dir_tree_to = Some(small);
+    let ctx = egui::Context::default();
+    mac_dir_stat::ui::theme::apply_theme(&ctx);
+    let mut frame = eframe::Frame::_new_kittest();
+    let _ = ctx.run(Default::default(), |ctx| eframe::App::update(&mut a, ctx, &mut frame));
+    assert_eq!(a.state.view_root, Some(0));
+    assert_eq!(a.state.zoom_stack, vec![0]);
 }

@@ -262,6 +262,8 @@ impl App {
         self.state.hovered_dir = None;
         self.state.view_root = None;
         self.state.zoom_stack.clear();
+        // dir_tree indexes the tree with it; an old-tree id may be out of range.
+        self.state.scroll_dir_tree_to = None;
         // The Cleanup window stays open during a scan; its NodeIds belong to
         // the old tree and must not reach a Trash confirmation for the new one.
         self.state.cleanup_candidates.clear();
@@ -398,6 +400,7 @@ impl App {
                             self.state.hovered_node = None;
                             self.state.hovered_dir = None;
                             self.state.context_menu_target = None;
+                            self.state.scroll_dir_tree_to = None;
                             crate::state::save(&self.state.scan_root, self.state.color_mode);
                         }
                         ScanProgress::Error(msg) => {
@@ -527,6 +530,10 @@ impl App {
         let Some(sel) = self.state.selected_node else {
             return;
         };
+        // The list's top row is always open and has no parent in the list.
+        if crate::ui::dir_tree::list_root(&self.state) == Some(sel) {
+            return;
+        }
         let Some(tree) = &mut self.state.tree else {
             return;
         };
