@@ -4,7 +4,7 @@
 //! a growing folder reads at a glance.
 
 use crate::app::AppState;
-use crate::history::{self, ScanSummary, OTHER};
+use crate::history::{self, display_name, ScanSummary};
 use crate::treemap::color::extension_color;
 use crate::treemap::squarify::{layout, LayoutItem, Rect as TRect};
 use crate::ui::theme;
@@ -73,15 +73,16 @@ fn multiples(ui: &mut egui::Ui, scans: &[ScanSummary]) {
     let refs: Vec<&ScanSummary> = scans.iter().collect();
     let order = history::layout_order(&refs);
     let max_used = scans.iter().map(|s| s.used).max().unwrap_or(1).max(1);
-    let n = history::KEEP.max(scans.len()) as f32;
+    let n = scans.len().max(3) as f32;
     let width = ((ui.available_width() - GAP * (n - 1.0)) / n).clamp(80.0, 180.0);
-    let (area, _) = ui.allocate_exact_size(
+    let (area, response) = ui.allocate_exact_size(
         Vec2::new(ui.available_width(), PANEL_H + 40.0),
         Sense::hover(),
     );
     let painter = ui.painter_at(area.expand(2.0));
     let newest_year = scans.last().map(|s| ymd(s.when).0);
-    let pointer = ui.ctx().pointer_hover_pos();
+    // Only when no other window covers this one.
+    let pointer = response.hover_pos();
     let mut tip: Option<(String, u64)> = None;
 
     for (i, s) in scans.iter().enumerate() {
@@ -108,8 +109,9 @@ fn multiples(ui: &mut egui::Ui, scans: &[ScanSummary]) {
                 Pos2::new(placed.rect.x as f32, placed.rect.y as f32),
                 Vec2::new(placed.rect.w as f32, placed.rect.h as f32),
             );
-            let name = &order[placed.id];
-            painter.rect_filled(r, 0.0, fill(name));
+            let key = &order[placed.id];
+            let name = display_name(key).to_string();
+            painter.rect_filled(r, 0.0, fill(key));
             painter.rect_stroke(r, 0.0, Stroke::new(1.0, theme::map_gap(255)), StrokeKind::Inside);
             if r.width() > 46.0 && r.height() > 18.0 {
                 let max = ((r.width() - 6.0) / 6.0) as usize;
@@ -127,7 +129,7 @@ fn multiples(ui: &mut egui::Ui, scans: &[ScanSummary]) {
                 );
             }
             if pointer.is_some_and(|p| r.contains(p)) {
-                let size = s.top.iter().find(|(n, _)| n == name).map_or(0, |t| t.1);
+                let size = s.top.iter().find(|(n, _)| n == key).map_or(0, |t| t.1);
                 tip = Some((name.clone(), size));
                 painter.rect_stroke(r, 0.0, Stroke::new(1.5, theme::highlight()), StrokeKind::Inside);
             }
@@ -162,9 +164,9 @@ fn multiples(ui: &mut egui::Ui, scans: &[ScanSummary]) {
     }
 }
 
-/// A folder keeps its tint in every panel; "other" is plain paper-grey.
+/// A folder keeps its tint in every panel; buckets are plain paper-grey.
 fn fill(name: &str) -> egui::Color32 {
-    if name == OTHER {
+    if name.starts_with('/') {
         return theme::bg_raised();
     }
     let (shade, light) = extension_color(name);

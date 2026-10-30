@@ -17,8 +17,23 @@ pub const KEEP: usize = 6;
 pub const TOP: usize = 8;
 /// Scanned folders remembered; the least recently scanned go first.
 pub const ROOTS: usize = 20;
-/// Name used for everything outside the top folders.
-pub const OTHER: &str = "other";
+/// Buckets for what isn't a named folder. A slash can't occur in a file
+/// name, so these never collide with a real folder.
+pub const OTHER: &str = "/other";
+/// Top-level files of the scanned folder, summed: their names are not kept.
+pub const FILES: &str = "/files";
+/// Bytes a volume scan couldn't read (TCC-protected and the like).
+pub const HIDDEN: &str = "/hidden";
+
+/// How a bucket or folder name reads on screen.
+pub fn display_name(name: &str) -> &str {
+    match name {
+        OTHER => "other",
+        FILES => "loose files",
+        HIDDEN => "hidden",
+        n => n,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScanSummary {
@@ -27,45 +42,51 @@ pub struct ScanSummary {
     pub when: u64,
     /// Bytes found by the scan, not counting free space.
     pub used: u64,
-    /// Largest top-level entries, largest first, then "other" if any.
+    /// Largest top-level folders, largest first, then the buckets: loose
+    /// files, hidden, other. Only folder names are kept.
     pub top: Vec<(String, u64)>,
 }
 
 /// Summarise a finished scan of `root`.
 pub fn summarize(tree: &FileTree, root: &Path, when: SystemTime) -> ScanSummary {
     let r = tree.root();
-    let mut kids: Vec<(String, u64)> = tree
-        .node(r)
-        .children()
-        .iter()
-        .filter(|&&c| tree.is_alive(c))
-        .filter(|&&c| tree.extension(c) != Some("__free_space__"))
-        .map(|&c| {
-            let name = if tree.extension(c) == Some("__skipped__") {
-                "hidden".to_string()
-            } else {
-                tree.name(c).into_owned()
-            };
-            (name, tree.node(c).size)
-        })
-        .collect();
-    kids.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    let used: u64 = kids.iter().map(|k| k.1).sum();
-    let rest: u64 = kids.iter().skip(TOP).map(|k| k.1).sum();
-    kids.truncate(TOP);
-    if rest > 0 {
-        kids.push((OTHER.to_string(), rest));
+    let (mut files, mut hidden) = (0u64, 0u64);
+    let mut dirs: Vec<(String, u64)> = Vec::new();
+    for &c in tree.node(r).children() {
+        if !tree.is_alive(c) {
+            continue;
+        }
+        let size = tree.node(c).size;
+        match tree.extension(c) {
+            Some("__free_space__") => {}
+            Some("__skipped__") => hidden += size,
+            _ if tree.node(c).is_dir() => dirs.push((tree.name(c).into_owned(), size)),
+            _ => files += size,
+        }
+    }
+    dirs.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let rest: u64 = dirs.iter().skip(TOP).map(|k| k.1).sum();
+    let used = dirs.iter().map(|k| k.1).sum::<u64>() + files + hidden;
+    dirs.truncate(TOP);
+    for (name, bytes) in [(FILES, files), (HIDDEN, hidden), (OTHER, rest)] {
+        if bytes > 0 {
+            dirs.push((name.to_string(), bytes));
+        }
     }
     ScanSummary {
         root: root.to_path_buf(),
         when: when.duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
         used,
-        top: kids,
+        top: dirs,
     }
 }
 
 /// Add `s`, keeping the newest [`KEEP`] per folder and [`ROOTS`] folders.
-pub fn record(all: &mut Vec<ScanSummary>, s: ScanSummary) {
+pub fn record(all: &mut Vec<ScanSummary>, mut s: ScanSummary) {
+    // The scan just made is the newest, even if the clock was set back.
+    if let Some(latest) = all.iter().map(|o| o.when).max() {
+        s.when = s.when.max(latest + 1);
+    }
     all.push(s);
     all.sort_by_key(|s| s.when);
     let mut seen: Vec<PathBuf> = Vec::new();
@@ -99,18 +120,18 @@ pub fn for_root<'a>(all: &'a [ScanSummary], root: &Path) -> Vec<&'a ScanSummary>
 }
 
 /// One fixed order for every panel: the newest scan's ranking, then names
-/// only older scans had, then "other". A block keeps its place across
+/// only older scans had, then the buckets. A block keeps its place across
 /// panels, so growth reads at a glance.
 pub fn layout_order(scans: &[&ScanSummary]) -> Vec<String> {
     let mut order: Vec<String> = Vec::new();
     for s in scans.iter().rev() {
         for (name, _) in &s.top {
-            if name != OTHER && !order.contains(name) {
+            if !name.starts_with('/') && !order.contains(name) {
                 order.push(name.clone());
             }
         }
     }
-    order.push(OTHER.to_string());
+    order.extend([FILES, HIDDEN, OTHER].map(String::from));
     order
 }
 

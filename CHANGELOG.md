@@ -25,8 +25,8 @@ All notable changes to MacDirStat are documented here. The format follows
 - **History, as small multiples.** A History… button shows the scanned folder over its last six
   scans, side by side: one small treemap per scan with its blocks in the same order in every panel,
   each panel's height proportional to the space used, dated and totalled underneath. Each finished
-  scan stores a short summary (date, total, the eight largest top-level folders and the rest as
-  "other"; no file lists) in `~/Library/Application Support/mac-dir-stat/history.json`, six per
+  scan stores a short summary (date, total, the names and sizes of the eight largest top-level
+  folders, and loose files, hidden space and the rest as unnamed sums; no file names or lists) in `~/Library/Application Support/mac-dir-stat/history.json`, six per
   folder and twenty folders at most. It never leaves the Mac.
 
 ### Changed

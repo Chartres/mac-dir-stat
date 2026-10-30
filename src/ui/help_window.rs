@@ -178,8 +178,8 @@ fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
     ui.add_space(4.0);
     ui.label(
         RichText::new(
-            "History keeps a short summary of each scan (date, total, the largest \
-             top-level folders; never file lists) in ~/Library/Application Support/\
+            "History keeps a short summary of each scan (date, total, the names and \
+             sizes of the largest top-level folders; never file names or lists) in ~/Library/Application Support/\
              mac-dir-stat/history.json, six per folder. It never leaves this Mac. \
              Delete the file to forget it.",
         )

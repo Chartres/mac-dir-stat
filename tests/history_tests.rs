@@ -3,8 +3,8 @@
 
 use mac_dir_stat::app::{App, AppState};
 use mac_dir_stat::history::{
-    for_root, from_json, layout_order, record, summarize, to_json, ScanSummary, KEEP, OTHER,
-    ROOTS, TOP,
+    for_root, from_json, layout_order, record, summarize, to_json, ScanSummary, FILES, HIDDEN,
+    KEEP, OTHER, ROOTS, TOP,
 };
 use mac_dir_stat::scanner::tree::FileTree;
 use mac_dir_stat::treemap::color::ColorMode;
@@ -26,6 +26,9 @@ fn tree() -> FileTree {
     }
     t.add_file(r, b"<Free Space>", 500 * MB, Some("__free_space__"), t0, 1);
     t.add_file(r, b"<Hidden>", 30 * MB, Some("__skipped__"), t0, 1);
+    t.add_file(r, b"divorce-settlement.pdf", 7 * MB, Some("pdf"), t0, 1);
+    let other = t.add_dir(r, b"other", false, t0, 1);
+    t.add_file(other, b"o.bin", 20 * MB, None, t0, 2);
     t.compute_sizes();
     t
 }
@@ -41,17 +44,34 @@ fn summary(root: &str, day: u64) -> ScanSummary {
 #[test]
 fn a_summary_is_totals_and_top_folders_only() {
     let s = summarize(&tree(), Path::new("/"), at(0));
-    // Free space is not used space; the hidden block counts, under a plain name.
-    assert_eq!(s.used, (55 + 30) * MB);
-    assert_eq!(s.top.len(), TOP + 1);
-    assert_eq!(s.top[0], ("hidden".to_string(), 30 * MB));
-    let other = s.top.last().unwrap();
-    assert_eq!(other.0, OTHER);
+    // Free space is not used space; hidden and loose files count, unnamed.
+    assert_eq!(s.used, (55 + 30 + 7 + 20) * MB);
     assert_eq!(s.top.iter().map(|t| t.1).sum::<u64>(), s.used);
-    assert!(s.top.iter().any(|t| t.0 == "hidden"));
-    // Nothing below the top level is written down.
+    assert_eq!(s.top[0], ("other".to_string(), 20 * MB), "a real folder named other");
+    assert_eq!(s.top.iter().filter(|t| !t.0.starts_with('/')).count(), TOP);
+    let bucket = |k: &str| s.top.iter().find(|t| t.0 == k).map(|t| t.1);
+    assert_eq!(bucket(FILES), Some(7 * MB));
+    assert_eq!(bucket(HIDDEN), Some(30 * MB));
+    assert_eq!(bucket(OTHER), Some(6 * MB), "d7 to d9");
+    // Nothing below the top level, and no file names, are written down.
     let json = to_json(&[s]);
-    assert!(!json.contains("secret-project") && !json.contains("diary"), "{json}");
+    for secret in ["secret-project", "diary", "divorce"] {
+        assert!(!json.contains(secret), "{secret} in {json}");
+    }
+}
+
+#[test]
+fn a_new_scan_is_kept_even_if_the_clock_went_back() {
+    let mut all = Vec::new();
+    for day in 10..16 {
+        record(&mut all, summary("/a", day));
+    }
+    let mut late = summary("/a", 0);
+    late.used = 999;
+    record(&mut all, late);
+    let a = for_root(&all, Path::new("/a"));
+    assert_eq!(a.len(), KEEP);
+    assert_eq!(a.last().unwrap().used, 999);
 }
 
 #[test]
@@ -84,7 +104,10 @@ fn every_panel_shares_the_newest_scans_order() {
     old.top = vec![("Movies".into(), 9), ("Code".into(), 5), (OTHER.into(), 1)];
     let mut new = summary("/a", 1);
     new.top = vec![("Code".into(), 20), ("Mail".into(), 8), (OTHER.into(), 1)];
-    assert_eq!(layout_order(&[&old, &new]), vec!["Code", "Mail", "Movies", OTHER]);
+    assert_eq!(
+        layout_order(&[&old, &new]),
+        vec!["Code", "Mail", "Movies", FILES, HIDDEN, OTHER]
+    );
 }
 
 #[test]
