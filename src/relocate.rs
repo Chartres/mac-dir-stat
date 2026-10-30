@@ -116,15 +116,23 @@ pub fn fs_info(path: &Path) -> Option<FsInfo> {
             return None;
         }
         let bsize = s.f_bsize as u64;
-        Some(FsInfo {
-            fs_type: CStr::from_ptr(s.f_fstypename.as_ptr())
+        #[cfg(target_os = "macos")]
+        let (fs_type, mount) = (
+            CStr::from_ptr(s.f_fstypename.as_ptr())
                 .to_string_lossy()
                 .into_owned(),
-            mount: PathBuf::from(std::ffi::OsStr::from_bytes(
+            PathBuf::from(std::ffi::OsStr::from_bytes(
                 CStr::from_ptr(s.f_mntonname.as_ptr()).to_bytes(),
             )),
-            total: s.f_blocks * bsize,
-            free: s.f_bavail * bsize,
+        );
+        // Off a Mac (tests only) statfs has no type name or mount point.
+        #[cfg(not(target_os = "macos"))]
+        let (fs_type, mount) = (String::new(), path.to_path_buf());
+        Some(FsInfo {
+            fs_type,
+            mount,
+            total: s.f_blocks as u64 * bsize,
+            free: s.f_bavail as u64 * bsize,
             block_size: bsize,
         })
     }
@@ -562,11 +570,11 @@ fn ditto(src: &Path, dst: &Path) -> Result<(), String> {
 
 /// F_FULLFSYNC (falls back to fsync) so the copy is on the platters before the original goes.
 fn full_sync(f: &std::fs::File) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
     if unsafe { libc::fcntl(f.as_raw_fd(), libc::F_FULLFSYNC) } == 0 {
-        Ok(())
-    } else {
-        f.sync_all()
+        return Ok(());
     }
+    f.sync_all()
 }
 
 /// Flushes every file under `root` (required) and every folder (best effort).
@@ -646,7 +654,16 @@ fn place(tmp: &Path, dest: &Path) -> Result<(), String> {
     };
     let c = |p: &Path| CString::new(p.as_os_str().as_bytes()).map_err(|e| e.to_string());
     let (ct, cd) = (c(tmp)?, c(dest)?);
-    if unsafe { libc::renamex_np(ct.as_ptr(), cd.as_ptr(), libc::RENAME_EXCL) } != 0 {
+    #[cfg(target_os = "macos")]
+    let renamed = unsafe { libc::renamex_np(ct.as_ptr(), cd.as_ptr(), libc::RENAME_EXCL) } == 0;
+    // Off a Mac (tests only) take the existence-check path below.
+    #[cfg(not(target_os = "macos"))]
+    let renamed = {
+        let _ = (&ct, &cd);
+        unsafe { *libc::__errno_location() = libc::ENOTSUP };
+        false
+    };
+    if !renamed {
         let e = std::io::Error::last_os_error();
         match e.raw_os_error() {
             Some(libc::EEXIST) => return Err(exists()),

@@ -19,6 +19,9 @@ cargo check                  # typecheck
 cargo test                   # unit + integration (tests/) — the CI gate
 # no E2E harness
 ```
+Off a Mac (Linux container), `cargo test` builds through small `cfg(not(target_os = "macos"))`
+shims; six tests depend on macOS behaviour (`ditto`, APFS case folding, `/private` paths) and fail
+there. The macOS CI run is the real gate.
 Gate: typecheck · test · build must pass (CI is `.github/workflows/ci.yml`; gates on `cargo test`).
 `cargo fmt`/`cargo clippy` are not clean repo-wide yet, so CI does not block on them — run them
 locally before touching a file you can leave clean.
