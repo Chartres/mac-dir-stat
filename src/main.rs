@@ -20,6 +20,11 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "mac-dir-stat",
         options,
-        Box::new(|_cc| Ok(Box::new(mac_dir_stat::app::App::new()))),
+        Box::new(|cc| {
+            // Fonts bound now take effect on the first frame; set inside
+            // update() they would only arrive on the second.
+            mac_dir_stat::ui::theme::apply_theme(&cc.egui_ctx);
+            Ok(Box::new(mac_dir_stat::app::App::new()))
+        }),
     )
 }

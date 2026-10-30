@@ -172,6 +172,9 @@ fn render(shot: &Shot, path: &Path) {
     let mut app = App::from_state(state);
     let ctx = egui::Context::default();
     ctx.set_theme(if shot.dark { ThemePreference::Dark } else { ThemePreference::Light });
+    // As main.rs does: fonts must be bound a frame before they are used.
+    mac_dir_stat::ui::theme::apply_theme(&ctx);
+    let _ = ctx.run(Default::default(), |_| {});
     let mut frame = eframe::Frame::_new_kittest();
     let mut textures: HashMap<TextureId, Texture> = HashMap::new();
     let mut prims = Vec::new();

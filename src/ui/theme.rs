@@ -155,6 +155,12 @@ pub fn bar_bg() -> Color32 {
 /// Map fills are tinted plates on paper; in the dark variant they are dimmed
 /// so the page stays dark.
 pub fn map_fill(c: [u8; 4], alpha: u8) -> Color32 {
+    use crate::treemap::color::FREE_SPACE_PAIR;
+    // Free space is bare paper in either variant, not the brightest block.
+    if is_dark() && (c == FREE_SPACE_PAIR.0 || c == FREE_SPACE_PAIR.1) {
+        let r = p().raised;
+        return Color32::from_rgba_unmultiplied(r.r(), r.g(), r.b(), alpha);
+    }
     let k = if is_dark() { 0.62 } else { 1.0 };
     let f = |v: u8| (v as f32 * k) as u8;
     Color32::from_rgba_unmultiplied(f(c[0]), f(c[1]), f(c[2]), alpha)
