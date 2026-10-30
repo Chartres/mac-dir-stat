@@ -175,6 +175,17 @@ fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
         crate::flywheel::set_telemetry_opt_out(opted_out);
         state.flywheel.refresh_enabled();
     }
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new(
+            "History keeps a short summary of each scan (date, total, the largest \
+             top-level folders; never file lists) in ~/Library/Application Support/\
+             mac-dir-stat/history.json, six per folder. It never leaves this Mac. \
+             Delete the file to forget it.",
+        )
+        .color(theme::ink_soft())
+        .size(11.0),
+    );
 }
 
 fn shortcut(ui: &mut egui::Ui, keys: &str, desc: &str) {

@@ -1,6 +1,7 @@
 pub mod app;
 pub mod cleanup;
 pub mod flywheel;
+pub mod history;
 pub mod plan;
 pub mod platform;
 pub mod relocate;

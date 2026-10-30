@@ -36,6 +36,8 @@ fn shots() -> Vec<Shot> {
         Shot { name: "inventory", dark: false, setup: inventory, pointer: None },
         Shot { name: "inventory-dark", dark: true, setup: inventory, pointer: None },
         Shot { name: "closing-account", dark: false, setup: closing_account, pointer: None },
+        Shot { name: "history", dark: false, setup: history, pointer: None },
+        Shot { name: "history-dark", dark: true, setup: history, pointer: None },
         // Pointer over the first folder row: the map outlines that folder.
         Shot { name: "ledger", dark: false, setup: ledger, pointer: Some(Pos2::new(120.0, 120.0)) },
         // Pointer on the map, over a Docker block: the list marks Containers.
@@ -185,6 +187,30 @@ fn ledger(s: &mut AppState) {
     let lib = s.tree.as_ref().and_then(|t| t.find_path(Path::new("/Users/pavol/Library")));
     if let Some(lib) = lib {
         expand(s, lib);
+    }
+}
+
+/// Six scans of the same folder, April to October, the disk slowly filling:
+/// Developer grows fastest, Downloads gets cleared out in September.
+fn history(s: &mut AppState) {
+    use mac_dir_stat::history::{record, summarize};
+    s.history_window_open = true;
+    let now = summarize(s.tree.as_ref().unwrap(), &s.scan_root, SystemTime::now());
+    let months_ago = [6u64, 5, 4, 3, 1, 0];
+    for (i, m) in months_ago.iter().enumerate() {
+        let mut past = now.clone();
+        past.when -= m * 30 * 86_400;
+        let k = 0.72 + 0.056 * i as f64;
+        for (name, bytes) in &mut past.top {
+            let f = match name.as_str() {
+                "Library" => k * k,
+                "Downloads" if *m >= 3 => 1.4,
+                _ => k,
+            };
+            *bytes = (*bytes as f64 * f.min(1.4)) as u64;
+        }
+        past.used = past.top.iter().map(|t| t.1).sum();
+        record(&mut s.history, past);
     }
 }
 
