@@ -4,7 +4,9 @@ All notable changes to MacDirStat are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.7.0] — not yet released
+
+Release notes for the GitHub Release: [`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md).
 
 ### Added
 - **The inventory.** The Cleanup window now has two columns. *Can be rebuilt* groups the cleanup
@@ -15,13 +17,11 @@ All notable changes to MacDirStat are documented here. The format follows
 - **A closing account** after you move things to the Trash with the Cleanup window open: how much
   went, how much of it a tool can rebuild and how much no tool can, free space on the disk, and a
   reminder that the Trash is not emptied, so nothing is gone yet.
-
 - **The ledger, in the folder list.** The directory tree is now a ranked ledger of the folder the
   map shows: each row has its exact size and a length bar scaled to the largest row at its level,
   and a folder's own files appear as one row ("12 files") so the lengths add up. Hovering a row
   outlines that folder on the map; hovering the map lights up the row that holds the block. Zooming
   the map moves the list to that folder.
-
 - **History, as small multiples.** A History… button shows the scanned folder over its last six
   scans, side by side: one small treemap per scan with its blocks in the same order in every panel,
   each panel's height proportional to the space used, dated and totalled underneath. Each finished

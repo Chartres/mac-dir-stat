@@ -8,7 +8,8 @@ rebuilt from what only you have, and states sizes in a way a person can actually
 borrows from the people who first drew treemaps and measured how we read charts, and from older
 writers who took stock of their possessions without panic.
 
-Mock-ups are in [`docs/signature/`](signature/). They are sketches, not specs.
+Mock-ups are in [`docs/signature/`](signature/). They are sketches, not specs; what was built is in
+[`docs/screenshots/`](screenshots/).
 
 ---
 
@@ -51,7 +52,9 @@ What this app will not do, whatever it would do for a metric:
 
 ## 3. Signature moves
 
-Each move has options. **Status for all: `proposed`.**
+Each move has options. **Status (2026-10-30):** 1A, 1B, 1C, 2A, 3B and the visual signature are
+**built** for 0.7.0 (PRs #14–#17); 2B, 2C, 3A and 3C were not picked. Screenshots of what was built,
+rendered from the real app, are in [`docs/screenshots/`](screenshots/) (`cargo run --example screenshots`).
 
 ### Move 1 — The inventory (Cleanup window)
 
