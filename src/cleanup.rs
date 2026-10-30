@@ -298,8 +298,7 @@ pub fn find_candidates(tree: &FileTree, root: NodeId) -> Vec<CleanupCandidate> {
     let mut candidates = Vec::new();
     if tree.is_alive(root) {
         // Skip root itself; walk children directly.
-        let children: Vec<NodeId> = tree.node(root).children().to_vec();
-        for child in children {
+        for &child in tree.node(root).children() {
             walk(tree, child, &mut candidates);
         }
     }
