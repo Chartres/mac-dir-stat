@@ -122,10 +122,6 @@ pub fn start_scan(sh: &Arc<Shared>, root: PathBuf) {
                     s.scanning = false;
                     s.finished = Some(now());
                 }
-                ScanProgress::Error(_) => {
-                    s.scanning = false;
-                    s.finished = Some(now());
-                }
             }
         }
     });

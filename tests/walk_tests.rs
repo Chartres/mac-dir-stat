@@ -12,7 +12,6 @@ fn scan_temp(root: PathBuf) -> mac_dir_stat::scanner::tree::FileTree {
     for msg in rx {
         match msg {
             ScanProgress::Done(tree) => return tree,
-            ScanProgress::Error(e) => panic!("scan error: {}", e),
             ScanProgress::Counting { .. } => {}
         }
     }
