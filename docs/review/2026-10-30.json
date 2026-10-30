@@ -147,7 +147,7 @@
   },
   "next": [
     "Pavol: open the app on a Mac (cargo run --release) and look at the four moves in light and dark; fonts render through macOS here, not the Linux rasteriser.",
-    "Pavol: if happy, tag v0.7.0 (git tag v0.7.0 && git push origin v0.7.0); the workflow signs, notarizes, publishes and bumps the cask.",
+    "Pavol: if happy, tag v0.7.0 (git tag v0.7.0 && git push origin v0.7.0); the workflow signs, notarizes, publishes and bumps the cask. It writes GitHub's generated notes, so afterwards paste docs/release-notes/v0.7.0.md (without its preamble) into the release body, and date the CHANGELOG heading.",
     "After release: update flywheel/data/products/mac-dir-stat.json (stage, links); this session can't reach the flywheel repo.",
     "Proposal 1 (plan validation against the inventory) is the one with a safety payoff; it needs Pavol's yes because it changes what the server accepts.",
     "README comparison table: recheck the DaisyDisk and GrandPerspective cells flagged in SIGNATURE.md's competitive note (not done here)."
