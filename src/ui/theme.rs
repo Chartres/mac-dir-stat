@@ -325,6 +325,27 @@ pub fn highlight_alpha(alpha: u8) -> Color32 {
     Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), alpha)
 }
 
+/// "today", "3 days ago", "5 months ago", "2 years ago".
+pub fn format_age(t: std::time::SystemTime) -> String {
+    let days = std::time::SystemTime::now()
+        .duration_since(t)
+        .map(|d| d.as_secs() / 86_400)
+        .unwrap_or(0);
+    let plural = |n: u64, unit: &str| {
+        if n == 1 {
+            format!("1 {unit} ago")
+        } else {
+            format!("{n} {unit}s ago")
+        }
+    };
+    match days {
+        0 => "today".into(),
+        1..=59 => plural(days, "day"),
+        60..=729 => plural(days / 30, "month"),
+        _ => plural(days / 365, "year"),
+    }
+}
+
 pub fn format_size(bytes: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * KB;

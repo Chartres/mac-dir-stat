@@ -161,3 +161,12 @@ pub fn subtle_divider(ui: &mut Ui) {
     );
     ui.painter().rect_filled(rect, 0.0, theme::rule_faint());
 }
+
+/// Full-strength ink hairline: under a window's title, as in a printed table.
+pub fn ink_rule(ui: &mut Ui) {
+    let (rect, _) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width(), 1.0),
+        egui::Sense::hover(),
+    );
+    ui.painter().rect_filled(rect, 0.0, theme::ink());
+}
