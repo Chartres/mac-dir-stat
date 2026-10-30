@@ -1,7 +1,7 @@
 use crate::app::AppState;
 use crate::treemap::color::extension_color;
 use crate::ui::{theme, widgets};
-use egui::{Color32, CornerRadius, Ui, Vec2};
+use egui::{CornerRadius, Ui, Vec2};
 
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     use crate::app::ExtSortMode;
@@ -48,9 +48,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     let (ext, bytes, count) = &stats[i];
                     let is_selected = state.selected_extension.as_deref() == Some(ext.as_str());
                     let colors = extension_color(if ext.is_empty() { "" } else { ext });
-                    let swatch_color = Color32::from_rgba_premultiplied(
-                        colors.0[0], colors.0[1], colors.0[2], colors.0[3],
-                    );
+                    let swatch_color = theme::map_fill(colors.0, colors.0[3]);
 
                     let ext_id = ui.make_persistent_id(("ext_row", i));
 
@@ -68,9 +66,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                             format!(".{}", ext)
                         };
                         let name_color = if is_selected {
-                            theme::ACCENT_LIGHT
+                            theme::highlight()
                         } else {
-                            theme::TEXT_PRIMARY
+                            theme::ink()
                         };
                         ui.add(
                             egui::Label::new(
@@ -90,19 +88,19 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                                 };
                                 ui.label(
                                     egui::RichText::new(format!("{:.1}%", pct))
-                                        .color(theme::TEXT_MUTED)
+                                        .color(theme::note())
                                         .size(10.0),
                                 );
                                 ui.label(
                                     egui::RichText::new(theme::format_size(*bytes))
-                                        .color(theme::TEXT_SECONDARY)
+                                        .color(theme::ink_soft())
                                         .size(10.0),
                                 );
                                 // File count for this type (WinDirStat "Files").
                                 if ui.available_width() > 36.0 {
                                     ui.label(
                                         egui::RichText::new(format!("{}×", count))
-                                            .color(theme::TEXT_MUTED)
+                                            .color(theme::note())
                                             .size(9.0),
                                     );
                                 }
@@ -133,9 +131,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                             remaining_count,
                             theme::format_size(remaining)
                         ))
-                        .color(theme::TEXT_MUTED)
+                        .color(theme::note())
                         .size(10.0)
-                        .italics(),
+                        .family(theme::italic()),
                     );
                 }
             });

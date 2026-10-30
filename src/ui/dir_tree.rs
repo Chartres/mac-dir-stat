@@ -77,7 +77,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             None => {
                 if state.scan_progress.scanning {
                     ui.spinner();
-                    ui.label(egui::RichText::new("Scanning...").color(theme::TEXT_MUTED));
+                    ui.label(egui::RichText::new("Scanning...").color(theme::note()));
                 }
                 return;
             }
@@ -140,7 +140,7 @@ fn show_node(
 
     let frame = if is_selected {
         egui::Frame::new()
-            .fill(theme::BG_SELECTION)
+            .fill(theme::bg_selection())
             .inner_margin(egui::Margin { left: 3, right: 3, top: 1, bottom: 1 })
             .corner_radius(theme::RADIUS_SM)
     } else {
@@ -157,7 +157,7 @@ fn show_node(
                 let arrow = if expanded { "▼" } else { "▶" };
                 let arrow_resp = ui.add(
                     egui::Label::new(
-                        egui::RichText::new(arrow).color(theme::TEXT_MUTED).size(9.0),
+                        egui::RichText::new(arrow).color(theme::note()).size(9.0),
                     )
                     .sense(egui::Sense::click()),
                 );
@@ -178,9 +178,9 @@ fn show_node(
             }
 
             let name_color = if is_selected {
-                theme::TEXT_PRIMARY
+                theme::ink()
             } else {
-                theme::TEXT_SECONDARY
+                theme::ink_soft()
             };
 
             // Truncate name to avoid overflow. Reserve space for the size text
@@ -199,7 +199,7 @@ fn show_node(
                 ui.spacing_mut().item_spacing.x = 6.0;
                 ui.label(
                     egui::RichText::new(theme::format_size(size))
-                        .color(theme::TEXT_MUTED)
+                        .color(theme::note())
                         .size(10.0),
                 );
                 if root_size > 0 && ui.available_width() > 32.0 {
@@ -207,19 +207,19 @@ fn show_node(
                     let bar_width = 28.0;
                     let (bar_rect, _) =
                         ui.allocate_exact_size(Vec2::new(bar_width, 3.0), egui::Sense::hover());
-                    ui.painter().rect_filled(bar_rect, 1.5, theme::BAR_BG);
+                    ui.painter().rect_filled(bar_rect, 1.5, theme::bar_bg());
                     let filled = egui::Rect::from_min_size(
                         bar_rect.left_top(),
                         Vec2::new(bar_width * fraction, 3.0),
                     );
-                    ui.painter().rect_filled(filled, 1.5, theme::ACCENT_LIGHT);
+                    ui.painter().rect_filled(filled, 1.5, theme::highlight());
                 }
                 // Item count (files + subdirs) — WinDirStat's "Items" column,
                 // shown when there's horizontal room.
                 if ui.available_width() > 48.0 {
                     ui.label(
                         egui::RichText::new(format_count(items))
-                            .color(theme::TEXT_MUTED)
+                            .color(theme::note())
                             .size(9.0),
                     );
                 }

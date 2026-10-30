@@ -15,7 +15,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     if i > 0 {
                         ui.label(
                             egui::RichText::new(" \u{203A} ")
-                                .color(theme::TEXT_MUTED)
+                                .color(theme::note())
                                 .size(11.0),
                         );
                     }
@@ -23,7 +23,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     let label = ui.add(
                         egui::Label::new(
                             egui::RichText::new(&name)
-                                .color(theme::ACCENT_LIGHT)
+                                .color(theme::highlight())
                                 .size(11.0),
                         )
                         .sense(egui::Sense::click()),
@@ -69,7 +69,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         }
     }
 
-    painter.rect_filled(canvas_rect, 0.0, theme::BG_DARK);
+    painter.rect_filled(canvas_rect, 0.0, theme::bg_base());
 
     if state.colored_rects.is_empty() {
         let center = canvas_rect.center();
@@ -86,7 +86,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 egui::Align2::CENTER_CENTER,
                 format!("Scanning{}", dots),
                 egui::FontId::proportional(20.0),
-                theme::ACCENT_LIGHT,
+                theme::highlight(),
             );
             painter.text(
                 Pos2::new(center.x, center.y + 10.0),
@@ -98,7 +98,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     theme::format_size(state.scan_progress.bytes)
                 ),
                 egui::FontId::proportional(14.0),
-                theme::TEXT_SECONDARY,
+                theme::ink_soft(),
             );
             if let Some(p) = &state.scan_progress.current_path {
                 let truncated = if p.chars().count() > 80 {
@@ -113,7 +113,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     egui::Align2::CENTER_CENTER,
                     truncated,
                     egui::FontId::monospace(10.0),
-                    theme::TEXT_MUTED,
+                    theme::note(),
                 );
             }
             let bar_width = 200.0;
@@ -121,7 +121,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 Pos2::new(center.x - bar_width / 2.0, center.y + 35.0),
                 Vec2::new(bar_width, 4.0),
             );
-            painter.rect_filled(bar_rect, 2.0, theme::BAR_BG);
+            painter.rect_filled(bar_rect, 2.0, theme::bar_bg());
             let progress_x = ((time * 0.5).sin() * 0.5 + 0.5) as f32;
             let indicator = Rect::from_min_size(
                 Pos2::new(
@@ -130,7 +130,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 ),
                 Vec2::new(60.0, 4.0),
             );
-            painter.rect_filled(indicator, 2.0, theme::ACCENT);
+            painter.rect_filled(indicator, 2.0, theme::highlight());
             ui.ctx().request_repaint();
         } else if state.tree.is_some() {
             // Scan finished but produced nothing (empty directory or all
@@ -140,14 +140,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 egui::Align2::CENTER_CENTER,
                 format!("Nothing scannable in {}", state.scan_root.display()),
                 egui::FontId::proportional(13.0),
-                theme::TEXT_SECONDARY,
+                theme::ink_soft(),
             );
             painter.text(
                 Pos2::new(center.x, center.y + 12.0),
                 egui::Align2::CENTER_CENTER,
                 "Pick a different folder or drop one here.",
                 egui::FontId::proportional(11.0),
-                theme::TEXT_MUTED,
+                theme::note(),
             );
         } else {
             // Welcome / empty state — no auto-scan on first launch.
@@ -156,21 +156,21 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 egui::Align2::CENTER_CENTER,
                 "MacDirStat",
                 egui::FontId::proportional(24.0),
-                theme::TEXT_PRIMARY,
+                theme::ink(),
             );
             painter.text(
                 Pos2::new(center.x, center.y),
                 egui::Align2::CENTER_CENTER,
                 "Click  Scan Directory…  in the toolbar to begin",
                 egui::FontId::proportional(13.0),
-                theme::TEXT_SECONDARY,
+                theme::ink_soft(),
             );
             painter.text(
                 Pos2::new(center.x, center.y + 22.0),
                 egui::Align2::CENTER_CENTER,
                 "or drop a folder onto this window",
                 egui::FontId::proportional(12.0),
-                theme::TEXT_MUTED,
+                theme::note(),
             );
             if state.has_persisted_root {
                 painter.text(
@@ -181,7 +181,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                         state.scan_root.display()
                     ),
                     egui::FontId::proportional(11.0),
-                    theme::TEXT_DIM,
+                    theme::faint(),
                 );
             }
         }
@@ -249,12 +249,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
 
         let alpha: u8 = if dimmed || search_dimmed { 40 } else { 255 };
 
-        let c_start = Color32::from_rgba_unmultiplied(
-            cr.color_start[0],
-            cr.color_start[1],
-            cr.color_start[2],
-            alpha,
-        );
+        let c_start = theme::map_fill(cr.color_start, alpha);
 
         if !is_large {
             // Tiny rect: 2 triangles, solid color
@@ -268,12 +263,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             continue;
         }
 
-        let c_end = Color32::from_rgba_unmultiplied(
-            cr.color_end[0],
-            cr.color_end[1],
-            cr.color_end[2],
-            alpha,
-        );
+        let c_end = theme::map_fill(cr.color_end, alpha);
         let c_mid = lerp_color(&c_start, &c_end, 0.5);
 
         let base = mesh.vertices.len() as u32;
@@ -297,11 +287,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             Pos2::new(dr.rect.x as f32, dr.rect.y as f32),
             Vec2::new(dr.rect.w as f32, dr.rect.h as f32),
         );
-        let alpha = if dr.depth <= 1 { 40 } else { 20 };
+        let alpha = if dr.depth <= 1 { 230 } else { 140 };
         painter.rect_stroke(
             rect,
             0.0,
-            egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, alpha)),
+            egui::Stroke::new(1.0, theme::map_gap(alpha)),
             StrokeKind::Inside,
         );
     }
@@ -356,7 +346,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 painter.rect_stroke(
                     rect,
                     2.0,
-                    egui::Stroke::new(2.0, Color32::WHITE),
+                    egui::Stroke::new(2.0, theme::map_gap(255)),
                     StrokeKind::Outside,
                 );
                 painter.rect_stroke(
@@ -383,19 +373,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 painter.rect_stroke(
                     rect,
                     0.0,
-                    egui::Stroke::new(2.5, theme::ACCENT),
+                    egui::Stroke::new(2.0, theme::highlight()),
                     StrokeKind::Inside,
                 );
                 // Subtle fill overlay to make the region stand out
                 painter.rect_filled(
                     rect,
                     0.0,
-                    Color32::from_rgba_unmultiplied(
-                        theme::ACCENT.r(),
-                        theme::ACCENT.g(),
-                        theme::ACCENT.b(),
-                        24,
-                    ),
+                    theme::highlight_alpha(18),
                 );
                 found = true;
                 break;
@@ -409,18 +394,18 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                         Pos2::new(cr.rect.x as f32, cr.rect.y as f32),
                         Vec2::new(cr.rect.w as f32, cr.rect.h as f32),
                     );
-                    // Inner white + outer accent ring — readable against any
+                    // Inner paper + outer ink ring — readable against any
                     // treemap color.
                     painter.rect_stroke(
                         rect,
                         2.0,
-                        egui::Stroke::new(2.0, Color32::WHITE),
+                        egui::Stroke::new(2.0, theme::map_gap(255)),
                         StrokeKind::Outside,
                     );
                     painter.rect_stroke(
                         rect.expand(2.0),
                         3.0,
-                        egui::Stroke::new(2.0, theme::ACCENT),
+                        egui::Stroke::new(2.0, theme::highlight()),
                         StrokeKind::Outside,
                     );
                     break;
@@ -451,7 +436,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     egui::Align2::LEFT_TOP,
                     &display_name,
                     egui::FontId::proportional(10.0),
-                    Color32::from_rgba_unmultiplied(255, 255, 255, 220),
+                    theme::on_map(230),
                 );
                 if h > 28.0 {
                     painter.text(
@@ -459,7 +444,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                         egui::Align2::LEFT_TOP,
                         theme::format_size(node.size),
                         egui::FontId::proportional(9.0),
-                        Color32::from_rgba_unmultiplied(255, 255, 255, 150),
+                        theme::on_map(160),
                     );
                 }
             }
@@ -552,12 +537,12 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 ui.label(
                     egui::RichText::new(title)
                         .strong()
-                        .color(theme::TEXT_PRIMARY)
+                        .color(theme::ink())
                         .size(12.5),
                 );
                 ui.label(
                     egui::RichText::new(theme::format_size(size))
-                        .color(theme::ACCENT_LIGHT)
+                        .color(theme::highlight())
                         .size(11.5),
                 );
                 let body = if is_free_space {
@@ -572,7 +557,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 };
                 ui.label(
                     egui::RichText::new(body)
-                        .color(theme::TEXT_MUTED)
+                        .color(theme::note())
                         .size(10.5),
                 );
                 return;
@@ -588,7 +573,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             ui.label(
                 egui::RichText::new(display_name)
                     .strong()
-                    .color(theme::TEXT_PRIMARY)
+                    .color(theme::ink())
                     .size(12.5),
             );
             // Path (truncated middle)
@@ -602,26 +587,26 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             };
             ui.label(
                 egui::RichText::new(path_disp)
-                    .color(theme::TEXT_MUTED)
+                    .color(theme::note())
                     .monospace()
                     .size(10.0),
             );
             ui.label(
                 egui::RichText::new(theme::format_size(size))
-                    .color(theme::ACCENT_LIGHT)
+                    .color(theme::highlight())
                     .size(11.5),
             );
             if is_dir {
                 ui.label(
                     egui::RichText::new("Directory")
-                        .color(theme::TEXT_MUTED)
+                        .color(theme::note())
                         .size(10.0),
                 );
             } else if let Some(e) = &ext {
                 if !e.is_empty() && !e.starts_with("__") {
                     ui.label(
                         egui::RichText::new(format!(".{}", e))
-                            .color(theme::TEXT_MUTED)
+                            .color(theme::note())
                             .size(10.0),
                     );
                 }
@@ -643,7 +628,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 };
                 ui.label(
                     egui::RichText::new(format!("Modified {}", pretty))
-                        .color(theme::TEXT_MUTED)
+                        .color(theme::note())
                         .size(10.0),
                 );
             }

@@ -1,7 +1,6 @@
 use crate::app::{AppState, PendingAction};
 use crate::scanner::tree::NodeId;
 use crate::ui::theme;
-use egui::Color32;
 
 pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
     let (name, size, path) = if let Some(tree) = &state.tree {
@@ -26,13 +25,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
 
     ui.label(
         egui::RichText::new(&display_name)
-            .color(theme::TEXT_PRIMARY)
+            .color(theme::ink())
             .strong()
             .size(12.0),
     );
     ui.label(
         egui::RichText::new(theme::format_size(size))
-            .color(theme::TEXT_MUTED)
+            .color(theme::note())
             .size(11.0),
     );
     ui.separator();
@@ -101,7 +100,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
             ui.close_menu();
         }
         if ui
-            .button(egui::RichText::new("Move to Trash").color(Color32::from_rgb(248, 113, 113)))
+            .button(egui::RichText::new("Move to Trash").color(theme::warn_text()))
             .clicked()
         {
             state.pending_action = Some(PendingAction::ConfirmTrash(node, path.clone(), size));

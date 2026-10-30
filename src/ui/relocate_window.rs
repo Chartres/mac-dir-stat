@@ -4,7 +4,7 @@
 use crate::relocate::{self, Measure, Volume};
 use crate::ui::{theme, widgets};
 use crossbeam_channel::Receiver;
-use egui::{Color32, RichText};
+use egui::RichText;
 use std::path::PathBuf;
 
 pub struct RelocateDialog {
@@ -61,7 +61,7 @@ pub fn show(ctx: &egui::Context, d: &mut RelocateDialog) -> Option<Choice> {
             ui.set_max_width(460.0);
             ui.label(
                 RichText::new("Move to External Disk")
-                    .color(theme::TEXT_PRIMARY)
+                    .color(theme::ink())
                     .size(13.0)
                     .strong(),
             );
@@ -72,7 +72,7 @@ pub fn show(ctx: &egui::Context, d: &mut RelocateDialog) -> Option<Choice> {
                 .map_or("measuring…".into(), |m| theme::format_size(m.bytes));
             ui.label(
                 RichText::new(format!("{}  ·  {}", d.name, size))
-                    .color(theme::TEXT_SECONDARY)
+                    .color(theme::ink_soft())
                     .size(11.0),
             );
             ui.add_space(8.0);
@@ -81,7 +81,7 @@ pub fn show(ctx: &egui::Context, d: &mut RelocateDialog) -> Option<Choice> {
             if d.volumes.is_empty() {
                 ui.label(
                     RichText::new("No external disk is mounted.")
-                        .color(theme::TEXT_SECONDARY)
+                        .color(theme::ink_soft())
                         .size(11.0),
                 );
             } else {
@@ -101,7 +101,7 @@ pub fn show(ctx: &egui::Context, d: &mut RelocateDialog) -> Option<Choice> {
                         "To: {}",
                         relocate::dest_path(&vol.path, &d.path).display()
                     ))
-                    .color(theme::TEXT_MUTED)
+                    .color(theme::note())
                     .size(11.0),
                 );
                 ui.checkbox(
@@ -113,18 +113,18 @@ pub fn show(ctx: &egui::Context, d: &mut RelocateDialog) -> Option<Choice> {
                     match &c {
                         Ok(c) => {
                             for e in &c.errors {
-                                ui.label(RichText::new(e).color(theme::DANGER).size(11.0));
+                                ui.label(RichText::new(e).color(theme::warn_text()).size(11.0));
                             }
                             for w in &c.warnings {
                                 ui.label(
                                     RichText::new(w)
-                                        .color(Color32::from_rgb(0xe2, 0xa4, 0x3b))
+                                        .color(theme::ink_soft()).family(theme::italic())
                                         .size(11.0),
                                 );
                             }
                         }
                         Err(e) => {
-                            ui.label(RichText::new(e).color(theme::DANGER).size(11.0));
+                            ui.label(RichText::new(e).color(theme::warn_text()).size(11.0));
                         }
                     }
                     check = c.ok();
@@ -133,7 +133,7 @@ pub fn show(ctx: &egui::Context, d: &mut RelocateDialog) -> Option<Choice> {
                         ui.spinner();
                         ui.label(
                             RichText::new("Checking…")
-                                .color(theme::TEXT_MUTED)
+                                .color(theme::note())
                                 .size(11.0),
                         );
                     });

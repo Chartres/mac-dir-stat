@@ -22,7 +22,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             // Header
             ui.label(
                 RichText::new("Cleanup Suggestions")
-                    .color(theme::TEXT_PRIMARY)
+                    .color(theme::ink())
                     .strong()
                     .size(15.0),
             );
@@ -39,7 +39,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                             theme::format_size(total_savings),
                         )
                     })
-                    .color(theme::TEXT_SECONDARY)
+                    .color(theme::ink_soft())
                     .size(11.0),
                 );
                 ui.with_layout(
@@ -59,9 +59,9 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                      Each candidate has a description — if you're unsure, click Reveal \
                      to see it in Finder.",
                 )
-                .color(theme::TEXT_MUTED)
+                .color(theme::note())
                 .size(10.5)
-                .italics(),
+                .family(theme::italic()),
             );
             ui.add_space(6.0);
 
@@ -131,7 +131,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                 ui.vertical_centered(|ui| {
                     ui.label(
                         RichText::new("Nothing obvious to clean.")
-                            .color(theme::TEXT_MUTED)
+                            .color(theme::note())
                             .size(12.0),
                     );
                 });
@@ -164,7 +164,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                             ui.horizontal(|ui| {
                                 ui.label(
                                     RichText::new(cand.category)
-                                        .color(theme::TEXT_PRIMARY)
+                                        .color(theme::ink())
                                         .strong()
                                         .size(12.0),
                                 );
@@ -177,7 +177,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                                             .unwrap_or(0);
                                         ui.label(
                                             RichText::new(theme::format_size(total))
-                                                .color(theme::TEXT_SECONDARY)
+                                                .color(theme::ink_soft())
                                                 .size(11.0),
                                         );
                                     },
@@ -185,9 +185,9 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                             });
                             ui.label(
                                 RichText::new(cand.description)
-                                    .color(theme::TEXT_MUTED)
+                                    .color(theme::note())
                                     .size(10.0)
-                                    .italics(),
+                                    .family(theme::italic()),
                             );
                             ui.add_space(2.0);
                         }
@@ -203,9 +203,9 @@ pub fn show(ctx: &Context, state: &mut AppState) {
 fn candidate_row(ui: &mut egui::Ui, state: &mut AppState, cand: &CleanupCandidate) {
     let is_selected = state.cleanup_selected.contains(&cand.node_id);
     let (fill, stroke) = if is_selected {
-        (theme::BG_SELECTION, theme::ACCENT)
+        (theme::bg_selection(), theme::accent())
     } else {
-        (theme::BG_DARK, theme::BORDER_SUBTLE)
+        (theme::bg_base(), theme::rule_faint())
     };
     let frame = egui::Frame::new()
         .fill(fill)
@@ -239,12 +239,12 @@ fn candidate_row(ui: &mut egui::Ui, state: &mut AppState, cand: &CleanupCandidat
                 };
                 ui.label(
                     RichText::new(display_path)
-                        .color(theme::TEXT_PRIMARY)
+                        .color(theme::ink())
                         .size(11.5),
                 );
                 ui.label(
                     RichText::new(theme::format_size(cand.size))
-                        .color(theme::TEXT_MUTED)
+                        .color(theme::note())
                         .size(10.0),
                 );
             });

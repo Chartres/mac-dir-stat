@@ -19,7 +19,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             ui.set_max_width(400.0);
             ui.label(
                 RichText::new("Scan your whole disk")
-                    .color(theme::TEXT_PRIMARY)
+                    .color(theme::ink())
                     .strong()
                     .size(14.0),
             );
@@ -33,7 +33,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                      To include them, add MacDirStat under Full Disk Access, then \
                      re-scan. You'll only be asked this once.",
                 )
-                .color(theme::TEXT_SECONDARY)
+                .color(theme::ink_soft())
                 .size(11.0),
             );
             ui.add_space(12.0);

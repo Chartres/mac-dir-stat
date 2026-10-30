@@ -4,8 +4,8 @@ use egui::{CornerRadius, Margin, Stroke, Ui};
 
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     let frame = egui::Frame::new()
-        .fill(theme::BG_PANEL)
-        .stroke(Stroke::new(1.0, theme::BORDER))
+        .fill(theme::bg_panel())
+        .stroke(Stroke::new(1.0, theme::rule()))
         .corner_radius(CornerRadius::same(theme::RADIUS_MD))
         .inner_margin(Margin::symmetric(10, 6));
 
@@ -13,7 +13,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         ui.horizontal(|ui| {
             ui.label(
                 egui::RichText::new("🔍")
-                    .color(theme::ACCENT_LIGHT)
+                    .color(theme::highlight())
                     .size(13.0),
             );
 
@@ -23,7 +23,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     .desired_width(ui.available_width() - 24.0)
                     .frame(false)
                     .font(egui::FontId::proportional(13.0))
-                    .text_color(theme::TEXT_PRIMARY),
+                    .text_color(theme::ink()),
             );
             response.request_focus();
 
@@ -31,7 +31,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 .add(
                     egui::Label::new(
                         egui::RichText::new("✕")
-                            .color(theme::TEXT_MUTED)
+                            .color(theme::note())
                             .size(13.0),
                     )
                     .sense(egui::Sense::click()),

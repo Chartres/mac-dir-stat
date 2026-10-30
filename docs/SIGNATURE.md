@@ -1,6 +1,6 @@
 # Signature — mac-dir-stat
 
-Status: **proposed** · drafted 2026-10-29 · nothing here is built until Pavol picks.
+Status: **picked** 2026-10-30 (see the decision log in §6) · drafted 2026-10-29.
 
 A disk-space tool sits next to a lot of fear-selling software. The signature this proposal argues
 for is the opposite of that: a calm inventory of what you keep, which separates what can be
@@ -137,7 +137,11 @@ scale bar, names set in the parcel.
 
 | Date | Move | Option chosen | By | Why |
 |---|---|---|---|---|
-| | | | | |
+| 2026-10-30 | 1. Inventory | 1A two columns, 1B cost to get it back, 1C closing account | Pavol | "All three". |
+| 2026-10-30 | 2. Honest scale | 2A ledger beside the map | Pavol | "Merge the ledger with the file/folder list". The ledger lives in the existing directory list beside the treemap, not in a new panel. |
+| 2026-10-30 | 3. The disk over time | 3B small multiples of past scans | Pavol | Store a small summary per scan (totals and top folders, no file lists), show at most 6, and keep scans on the Mac: nothing leaves the machine. |
+| 2026-10-30 | Visual signature | Survey register (serif, paper, oxblood accent) | Pavol | Replaces the violet, dark-first theme. Keep a dark variant that follows the system setting. |
+| 2026-10-30 | All products | A move approved for one product may be reused by another | Pavol | "Dont just blindly copy the pattern though." |
 
 ---
 

@@ -4,6 +4,16 @@ All notable changes to MacDirStat are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **New look: the survey register.** Book typography on paper: Source Serif 4 (bundled, SIL Open
+  Font License) for all text with a real italic for notes, ink on paper, hairline rules, and one
+  oxblood accent for the main action in each window. Treemap fills are muted earth and slate tints.
+  This replaces the violet, dark-first theme.
+- A dark variant inverts the same ink-on-paper contrast and follows the macOS appearance setting.
+- The phone web page (`serve`) uses the same colours and a serif font.
+
 ## [0.6.0] — 2026-10-17
 
 ### Added

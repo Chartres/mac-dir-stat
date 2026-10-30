@@ -10,31 +10,30 @@ pub enum ColorMode {
     Age,
 }
 
-// Curated harmonious palette: even hue spread, ~60-70% lightness,
-// ~50% saturation. No neon, no clashing pairs.
+// Tinted plates on paper (docs/SIGNATURE.md §4): muted earth and slate,
+// each a (shade, light) pair for the cushion gradient. No neon.
 const PALETTE: &[GradientPair] = &[
-    ([76, 134, 196, 255],  [128, 176, 224, 255]),  // Sky blue
-    ([60, 162, 162, 255],  [120, 200, 200, 255]),  // Teal
-    ([84, 174, 132, 255],  [136, 208, 176, 255]),  // Mint
-    ([148, 184, 96, 255],  [188, 216, 144, 255]),  // Lime
-    ([212, 168, 80, 255],  [240, 200, 128, 255]),  // Amber
-    ([218, 138, 84, 255],  [240, 176, 132, 255]),  // Tangerine
-    ([212, 110, 110, 255], [240, 152, 152, 255]),  // Coral
-    ([212, 116, 168, 255], [240, 156, 196, 255]),  // Pink
-    ([170, 132, 212, 255], [204, 172, 232, 255]),  // Lavender
-    ([116, 132, 208, 255], [156, 172, 232, 255]),  // Periwinkle
+    ([184, 174, 150, 255], [212, 204, 184, 255]), // Stone
+    ([150, 164, 146, 255], [184, 196, 178, 255]), // Sage
+    ([168, 146, 120, 255], [200, 182, 158, 255]), // Umber
+    ([138, 150, 164, 255], [176, 186, 198, 255]), // Slate blue
+    ([194, 184, 160, 255], [222, 214, 196, 255]), // Vellum
+    ([162, 150, 140, 255], [194, 184, 176, 255]), // Taupe
+    ([176, 164, 132, 255], [208, 198, 168, 255]), // Ochre
+    ([152, 162, 140, 255], [186, 194, 174, 255]), // Lichen
+    ([170, 140, 132, 255], [202, 176, 168, 255]), // Madder
+    ([144, 156, 150, 255], [180, 190, 184, 255]), // Verdigris
 ];
 
-// Used for files with no extension — neutral cool gray.
-const SLATE_PAIR: GradientPair = ([88, 102, 122, 255], [136, 148, 168, 255]);
+// Used for files with no extension — neutral grey slate.
+const SLATE_PAIR: GradientPair = ([134, 138, 142, 255], [170, 174, 178, 255]);
 
-/// Dark, subtle color for free space — should not draw attention.
-/// Tuned to sit just above the new off-black background (no purple cast).
-pub const FREE_SPACE_PAIR: GradientPair = ([20, 22, 28, 255], [28, 30, 36, 255]);
+/// Free space: the paper itself, barely tinted — it should not draw attention.
+pub const FREE_SPACE_PAIR: GradientPair = ([232, 226, 214, 255], [240, 235, 225, 255]);
 
-/// Skipped / TCC-blocked space — distinct from free; warm muted tone so
+/// Skipped / TCC-blocked space — distinct from free; a darker warm wash so
 /// the user notices "there's something here we couldn't see."
-pub const SKIPPED_PAIR: GradientPair = ([60, 50, 38, 255], [88, 70, 50, 255]);
+pub const SKIPPED_PAIR: GradientPair = ([150, 128, 104, 255], [176, 156, 132, 255]);
 
 pub fn extension_color(ext: &str) -> GradientPair {
     if ext.is_empty() {
@@ -71,10 +70,11 @@ pub fn age_color(modified: SystemTime) -> GradientPair {
         .as_secs();
     let one_year = 365 * 24 * 3600;
     let t = (age_secs as f64 / one_year as f64).min(1.0);
-    let warm_start: [f64; 3] = [219.0, 39.0, 119.0];
-    let warm_end: [f64; 3] = [244.0, 114.0, 182.0];
-    let cool_start: [f64; 3] = [49.0, 46.0, 129.0];
-    let cool_end: [f64; 3] = [79.0, 70.0, 229.0];
+    // Recent: madder and rust; a year or older: slate.
+    let warm_start: [f64; 3] = [176.0, 104.0, 80.0];
+    let warm_end: [f64; 3] = [208.0, 146.0, 120.0];
+    let cool_start: [f64; 3] = [116.0, 130.0, 150.0];
+    let cool_end: [f64; 3] = [158.0, 170.0, 186.0];
     let lerp = |a: f64, b: f64| -> u8 { (a + (b - a) * t).clamp(0.0, 255.0) as u8 };
     let start = [
         lerp(warm_start[0], cool_start[0]),
