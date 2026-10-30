@@ -1,0 +1,166 @@
+{
+  "headline": "All four picks are built and merged on main: the inventory (1A two columns, 1B cost to get it back, 1C closing account), the ledger in the folder list (2A), small multiples of past scans kept on the Mac (3B), and the survey register with a dark variant that follows the system. Release notes for 0.7.0 are ready; nothing is released.",
+  "shipped": [
+    {
+      "title": "Build on Linux for tests (cfg shims; macOS paths unchanged)",
+      "pr": "https://github.com/Chartres/mac-dir-stat/pull/13",
+      "merged": true,
+      "checked": "macOS CI green on head; independent review (subagent): nothing blocking. On Linux 6 tests need macOS (ditto, APFS case folding, /private) and fail there, as documented in AGENTS.md."
+    },
+    {
+      "title": "Visual signature: the survey register (serif, paper, oxblood accent; dark variant follows the system)",
+      "pr": "https://github.com/Chartres/mac-dir-stat/pull/14",
+      "merged": true,
+      "checked": "macOS CI green on head; independent review: nothing blocking; fixed the two it raised (fonts bound before the first frame, which would have panicked the italic face; free space too bright in dark mode). Screenshots rendered from the real app."
+    },
+    {
+      "title": "Move 1, the inventory: rebuildable vs only yours, cost to get it back, closing account",
+      "pr": "https://github.com/Chartres/mac-dir-stat/pull/15",
+      "merged": true,
+      "checked": "macOS CI green on head; independent review: nothing blocking (no path for an only-yours item or a stale id to reach Trash); fixed four it raised. Journey test clicks Move to Trash and checks the one confirmation."
+    },
+    {
+      "title": "Move 2A: the ledger in the folder list",
+      "pr": "https://github.com/Chartres/mac-dir-stat/pull/16",
+      "merged": true,
+      "checked": "macOS CI green on head; independent review: nothing blocking; fixed what it raised (free-space blocks no longer shrink the bars, Locate while zoomed, keyboard on the top row) plus a stale-id index I found while fixing. Journey test hovers rows and checks what the map outlines."
+    },
+    {
+      "title": "Move 3B: small multiples of past scans",
+      "pr": "https://github.com/Chartres/mac-dir-stat/pull/17",
+      "merged": true,
+      "checked": "macOS CI green on head; independent review: nothing blocking (privacy: nothing reaches telemetry or the network; retention fuzzed against a reference); fixed what it raised: only folder names are kept (top-level file names are not), bucket names can't collide, the newest scan survives a clock change."
+    }
+  ],
+  "decisions": [
+    {
+      "question": "How to run tests in a Linux container for a macOS-only crate?",
+      "options": ["cfg shims for the 4 macOS-only calls", "skip macOS-only tests off a Mac", "don't test locally"],
+      "default_taken": "cfg shims; no tests skipped",
+      "why": "Lets 100+ tests run here without touching macOS behaviour; the 6 that need macOS still run in CI."
+    },
+    {
+      "question": "Screenshots without a Mac or GPU?",
+      "options": ["CPU rasteriser over egui's meshes (examples/screenshots.rs)", "update the mock-ups instead"],
+      "default_taken": "CPU rasteriser; the real App::update over a made-up home folder",
+      "why": "Shows what was built, not a sketch. Font hinting differs a little from macOS; check on a Mac before release."
+    },
+    {
+      "question": "Which Source Serif 4 cut?",
+      "options": ["SmText (small-text optical size)", "Text", "Display"],
+      "default_taken": "SmText Regular + Italic, bundled (SIL OFL)",
+      "why": "The UI is set at 10–14 pt, where SmText reads best."
+    },
+    {
+      "question": "Tabular figures for sizes?",
+      "options": ["accept the face's default figures, right-aligned", "bundle a tabular-figures font for numbers"],
+      "default_taken": "default figures, right-aligned",
+      "why": "egui can't switch OpenType features; columns still align on their right edge."
+    },
+    {
+      "question": "Colour of destructive buttons?",
+      "options": ["the oxblood accent", "a separate red"],
+      "default_taken": "oxblood",
+      "why": "Move to Trash is the one action of its window; SIGNATURE.md allows one accent per window."
+    },
+    {
+      "question": "In-app light/dark toggle?",
+      "options": ["follow the system only", "add a toggle"],
+      "default_taken": "follow the system only",
+      "why": "Pavol asked for a dark variant that follows the system setting."
+    },
+    {
+      "question": "How to combine 1A and 1B?",
+      "options": ["1B's line under each left-column row", "a separate 1B table"],
+      "default_taken": "one line under each row: 'To get it back: …. Last changed ….'",
+      "why": "The proposal's recommendation; keeps the two-column look."
+    },
+    {
+      "question": "Time estimates in minutes (mock-up: '~10 min')?",
+      "options": ["plain words per rule", "minute estimates"],
+      "default_taken": "plain words ('about a minute each' only for npm)",
+      "why": "No claim the app can't back (Article VIII)."
+    },
+    {
+      "question": "Label for trashed bytes no rule covers in the closing account?",
+      "options": ["'of which no tool can rebuild'", "'of which only you had' (mock-up)"],
+      "default_taken": "'of which no tool can rebuild'",
+      "why": "An app bundle trashed from the map isn't something only you had; the mock-up wording would misstate it."
+    },
+    {
+      "question": "When does the closing account show?",
+      "options": ["after trashes made while Cleanup is open, until Close", "after every trash"],
+      "default_taken": "while Cleanup is open; closing the window clears it",
+      "why": "No pop-up after a single trash from the map."
+    },
+    {
+      "question": "Ledger row layout?",
+      "options": ["one line with a bar column", "bar under each name (mock-up)"],
+      "default_taken": "one line; bar scaled to the largest row of its level",
+      "why": "Keeps the tree compact and still compares by length."
+    },
+    {
+      "question": "Where does the folder list start when the map is zoomed?",
+      "options": ["at the zoomed folder", "always at the scan root"],
+      "default_taken": "at the zoomed folder; Locate outside it zooms back out",
+      "why": "List and map show the same level, as 2A describes."
+    },
+    {
+      "question": "What does a history summary keep?",
+      "options": ["8 largest top-level folders by name; loose files, hidden and the rest as unnamed sums", "more folders", "deeper levels"],
+      "default_taken": "8 named top-level folders + unnamed sums; 6 per folder, 20 folders",
+      "why": "Pavol: totals and top folders, no file lists. File names are never kept."
+    },
+    {
+      "question": "Do partial refreshes (⇧⌘R) record history?",
+      "options": ["full scans only", "every refresh"],
+      "default_taken": "full scans only",
+      "why": "A partial refresh isn't a new look at the whole folder."
+    },
+    {
+      "question": "Version",
+      "options": ["bump Cargo.toml to 0.7.0 now", "leave at 0.6.0 until release"],
+      "default_taken": "bumped to 0.7.0; CHANGELOG heading says 'not yet released'",
+      "why": "The tag must equal Cargo.toml's version; with the bump done, releasing is one tag push when Pavol decides."
+    }
+  ],
+  "proposals": [
+    {
+      "name": "Use the inventory in the server's plan checks, so a plan proposed over MCP can't include an only-yours folder",
+      "options": ["refuse such plans in validation", "warn in the plan", "leave the server as it is"],
+      "recommendation": "Refuse in validation. Today an AI can propose trashing ~/Documents and only Pavol's approval stops it; the inventory already knows these folders."
+    },
+    {
+      "name": "Bring the landing site (site/) and its screenshot into the survey register",
+      "options": ["update with the 0.7.0 release", "update now", "keep the old look"],
+      "recommendation": "Update with the release: it's outward-facing, so it waits for Pavol's sign-off."
+    },
+    {
+      "name": "A one-line 'since last scan' note (3A) drawn from the stored history",
+      "options": ["add it under the toolbar after a rescan", "leave history to the History window"],
+      "recommendation": "Wait for return-scan data: 3A wasn't picked, and History already shows growth."
+    }
+  ],
+  "release_notes": {
+    "file": "docs/release-notes/v0.7.0.md",
+    "version": "0.7.0"
+  },
+  "next": [
+    "Pavol: open the app on a Mac (cargo run --release) and look at the four moves in light and dark; fonts render through macOS here, not the Linux rasteriser.",
+    "Pavol: if happy, tag v0.7.0 (git tag v0.7.0 && git push origin v0.7.0); the workflow signs, notarizes, publishes and bumps the cask.",
+    "After release: update flywheel/data/products/mac-dir-stat.json (stage, links); this session can't reach the flywheel repo.",
+    "Proposal 1 (plan validation against the inventory) is the one with a safety payoff; it needs Pavol's yes because it changes what the server accepts.",
+    "README comparison table: recheck the DaisyDisk and GrandPerspective cells flagged in SIGNATURE.md's competitive note (not done here)."
+  ],
+  "screenshots": [
+    "docs/screenshots/inventory.png",
+    "docs/screenshots/closing-account.png",
+    "docs/screenshots/ledger.png",
+    "docs/screenshots/ledger-dark.png",
+    "docs/screenshots/history.png",
+    "docs/screenshots/history-dark.png",
+    "docs/screenshots/main-light.png",
+    "docs/screenshots/main-dark.png",
+    "docs/screenshots/inventory-dark.png"
+  ]
+}
