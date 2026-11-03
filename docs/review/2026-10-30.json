@@ -35,91 +35,139 @@
   "decisions": [
     {
       "question": "How to run tests in a Linux container for a macOS-only crate?",
-      "options": ["cfg shims for the 4 macOS-only calls", "skip macOS-only tests off a Mac", "don't test locally"],
+      "options": [
+        "cfg shims for the 4 macOS-only calls",
+        "skip macOS-only tests off a Mac",
+        "don't test locally"
+      ],
       "default_taken": "cfg shims; no tests skipped",
       "why": "Lets 100+ tests run here without touching macOS behaviour; the 6 that need macOS still run in CI."
     },
     {
       "question": "Screenshots without a Mac or GPU?",
-      "options": ["CPU rasteriser over egui's meshes (examples/screenshots.rs)", "update the mock-ups instead"],
+      "options": [
+        "CPU rasteriser over egui's meshes (examples/screenshots.rs)",
+        "update the mock-ups instead"
+      ],
       "default_taken": "CPU rasteriser; the real App::update over a made-up home folder",
       "why": "Shows what was built, not a sketch. Font hinting differs a little from macOS; check on a Mac before release."
     },
     {
       "question": "Which Source Serif 4 cut?",
-      "options": ["SmText (small-text optical size)", "Text", "Display"],
+      "options": [
+        "SmText (small-text optical size)",
+        "Text",
+        "Display"
+      ],
       "default_taken": "SmText Regular + Italic, bundled (SIL OFL)",
       "why": "The UI is set at 10–14 pt, where SmText reads best."
     },
     {
       "question": "Tabular figures for sizes?",
-      "options": ["accept the face's default figures, right-aligned", "bundle a tabular-figures font for numbers"],
+      "options": [
+        "accept the face's default figures, right-aligned",
+        "bundle a tabular-figures font for numbers"
+      ],
       "default_taken": "default figures, right-aligned",
       "why": "egui can't switch OpenType features; columns still align on their right edge."
     },
     {
       "question": "Colour of destructive buttons?",
-      "options": ["the oxblood accent", "a separate red"],
+      "options": [
+        "the oxblood accent",
+        "a separate red"
+      ],
       "default_taken": "oxblood",
       "why": "Move to Trash is the one action of its window; SIGNATURE.md allows one accent per window."
     },
     {
       "question": "In-app light/dark toggle?",
-      "options": ["follow the system only", "add a toggle"],
+      "options": [
+        "follow the system only",
+        "add a toggle"
+      ],
       "default_taken": "follow the system only",
       "why": "Pavol asked for a dark variant that follows the system setting."
     },
     {
       "question": "How to combine 1A and 1B?",
-      "options": ["1B's line under each left-column row", "a separate 1B table"],
+      "options": [
+        "1B's line under each left-column row",
+        "a separate 1B table"
+      ],
       "default_taken": "one line under each row: 'To get it back: …. Last changed ….'",
       "why": "The proposal's recommendation; keeps the two-column look."
     },
     {
       "question": "Time estimates in minutes (mock-up: '~10 min')?",
-      "options": ["plain words per rule", "minute estimates"],
+      "options": [
+        "plain words per rule",
+        "minute estimates"
+      ],
       "default_taken": "plain words ('about a minute each' only for npm)",
       "why": "No claim the app can't back (Article VIII)."
     },
     {
       "question": "Label for trashed bytes no rule covers in the closing account?",
-      "options": ["'of which no tool can rebuild'", "'of which only you had' (mock-up)"],
+      "options": [
+        "'of which no tool can rebuild'",
+        "'of which only you had' (mock-up)"
+      ],
       "default_taken": "'of which no tool can rebuild'",
       "why": "An app bundle trashed from the map isn't something only you had; the mock-up wording would misstate it."
     },
     {
       "question": "When does the closing account show?",
-      "options": ["after trashes made while Cleanup is open, until Close", "after every trash"],
+      "options": [
+        "after trashes made while Cleanup is open, until Close",
+        "after every trash"
+      ],
       "default_taken": "while Cleanup is open; closing the window clears it",
       "why": "No pop-up after a single trash from the map."
     },
     {
       "question": "Ledger row layout?",
-      "options": ["one line with a bar column", "bar under each name (mock-up)"],
+      "options": [
+        "one line with a bar column",
+        "bar under each name (mock-up)"
+      ],
       "default_taken": "one line; bar scaled to the largest row of its level",
       "why": "Keeps the tree compact and still compares by length."
     },
     {
       "question": "Where does the folder list start when the map is zoomed?",
-      "options": ["at the zoomed folder", "always at the scan root"],
+      "options": [
+        "at the zoomed folder",
+        "always at the scan root"
+      ],
       "default_taken": "at the zoomed folder; Locate outside it zooms back out",
       "why": "List and map show the same level, as 2A describes."
     },
     {
       "question": "What does a history summary keep?",
-      "options": ["8 largest top-level folders by name; loose files, hidden and the rest as unnamed sums", "more folders", "deeper levels"],
+      "options": [
+        "8 largest top-level folders by name; loose files, hidden and the rest as unnamed sums",
+        "more folders",
+        "deeper levels"
+      ],
       "default_taken": "8 named top-level folders + unnamed sums; 6 per folder, 20 folders",
       "why": "Pavol: totals and top folders, no file lists. File names are never kept."
     },
     {
       "question": "Do partial refreshes (⇧⌘R) record history?",
-      "options": ["full scans only", "every refresh"],
+      "options": [
+        "full scans only",
+        "every refresh"
+      ],
       "default_taken": "full scans only",
       "why": "A partial refresh isn't a new look at the whole folder."
     },
     {
       "question": "Version",
-      "options": ["bump Cargo.toml to 0.7.0 now", "leave at 0.6.0 until release"],
+      "options": [
+        "bump Cargo.toml to 0.7.0 now",
+        "leave at 0.6.0 until release"
+      ],
       "default_taken": "bumped to 0.7.0; CHANGELOG heading says 'not yet released'",
       "why": "The tag must equal Cargo.toml's version; with the bump done, releasing is one tag push when Pavol decides."
     }
@@ -127,17 +175,28 @@
   "proposals": [
     {
       "name": "Use the inventory in the server's plan checks, so a plan proposed over MCP can't include an only-yours folder",
-      "options": ["refuse such plans in validation", "warn in the plan", "leave the server as it is"],
+      "options": [
+        "refuse such plans in validation",
+        "warn in the plan",
+        "leave the server as it is"
+      ],
       "recommendation": "Refuse in validation. Today an AI can propose trashing ~/Documents and only Pavol's approval stops it; the inventory already knows these folders."
     },
     {
       "name": "Bring the landing site (site/) and its screenshot into the survey register",
-      "options": ["update with the 0.7.0 release", "update now", "keep the old look"],
+      "options": [
+        "update with the 0.7.0 release",
+        "update now",
+        "keep the old look"
+      ],
       "recommendation": "Update with the release: it's outward-facing, so it waits for Pavol's sign-off."
     },
     {
       "name": "A one-line 'since last scan' note (3A) drawn from the stored history",
-      "options": ["add it under the toolbar after a rescan", "leave history to the History window"],
+      "options": [
+        "add it under the toolbar after a rescan",
+        "leave history to the History window"
+      ],
       "recommendation": "Wait for return-scan data: 3A wasn't picked, and History already shows growth."
     }
   ],
@@ -162,5 +221,49 @@
     "docs/screenshots/main-light.png",
     "docs/screenshots/main-dark.png",
     "docs/screenshots/inventory-dark.png"
+  ],
+  "followups": [
+    {
+      "date": "2026-11-03",
+      "title": "Plans refuse to trash your own folders (proposal 1)",
+      "pr": "https://github.com/Chartres/mac-dir-stat/pull/20",
+      "merged": true,
+      "decided_by": "Pavol, 2026-11-03 11:52 UTC on decision card mac-dir-stat.o0: \"Refuse such plans in validation\" (relayed by the orchestrating session; recorded in SIGNATURE.md's decision log)",
+      "what": "Plan validation refuses any trash op that is, is inside, or holds Documents, Desktop, Pictures, Movies, Music, Mail or Messages under home, or a Photos library, naming the folder; the plan can't be approved. Checked by the path as asked and as resolved, and at each folder's real location if it is a link.",
+      "checked": "Tests first (unit, inventory, and an MCP journey proposing ~/Documents and a subfolder, refused, approve 409). macOS CI green on head. Independent review found two blockers (symlink bypass; folder holding a Photos library), both fixed and confirmed closed by a second review.",
+      "decisions": [
+        {
+          "question": "Moves to an external disk of an own folder?",
+          "options": [
+            "allowed (copy verified first)",
+            "refused too"
+          ],
+          "default_taken": "allowed",
+          "why": "Offloading Movies or Pictures is what Move to disk is for; only trash is cleanup."
+        },
+        {
+          "question": "Build output inside an own folder (node_modules under ~/Documents/project)?",
+          "options": [
+            "allowed for project build rules only",
+            "refused"
+          ],
+          "default_taken": "allowed for node_modules, target/, __pycache__, .pytest_cache, .next, .turbo, loose DerivedData; caches, logs, .gradle, .m2 stay refused",
+          "why": "The inventory lists them as rebuildable; refusing would contradict the Cleanup suggestions."
+        },
+        {
+          "question": "Refuse at propose (4xx) or store an invalid plan?",
+          "options": [
+            "invalid plan with the reason",
+            "HTTP error"
+          ],
+          "default_taken": "invalid plan",
+          "why": "Same as protected system paths today; the model sees why."
+        }
+      ],
+      "open": [
+        "A subfolder moved to disk with a link left behind (e.g. ~/Documents/Proj -> ext/Proj) is protected only through the link, not by its real path. Fixing it means remembering what the app moved; not done.",
+        "The Photos-library search is bounded (20k folders, 4 levels); a larger tree is allowed rather than refused. Folding it into relocate::measure would remove the bound."
+      ]
+    }
   ]
 }
