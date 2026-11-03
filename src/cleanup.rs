@@ -143,25 +143,27 @@ fn is_build_output(path: &Path) -> bool {
 /// libraries are packages, usually one or two folders deep). Bounded so a
 /// huge folder can't stall validation; symlinks are not followed.
 pub fn photos_library_within(dir: &Path) -> Option<PathBuf> {
+    // Breadth first, counting folders only: a folder full of files can't
+    // use up the budget before a sibling library is seen.
     let mut budget = 20_000usize;
-    let mut stack = vec![(dir.to_path_buf(), 0u8)];
-    while let Some((d, depth)) = stack.pop() {
+    let mut queue = std::collections::VecDeque::from([(dir.to_path_buf(), 0u8)]);
+    while let Some((d, depth)) = queue.pop_front() {
         let Ok(entries) = std::fs::read_dir(&d) else { continue };
         for e in entries.flatten() {
-            if budget == 0 {
-                return None;
-            }
-            budget -= 1;
             let Ok(ft) = e.file_type() else { continue };
             if !ft.is_dir() {
                 continue;
             }
+            if budget == 0 {
+                return None;
+            }
+            budget -= 1;
             let p = e.path();
             if e.file_name().to_string_lossy().to_lowercase().ends_with(".photoslibrary") {
                 return Some(p);
             }
             if depth < 3 {
-                stack.push((p, depth + 1));
+                queue.push_back((p, depth + 1));
             }
         }
     }
