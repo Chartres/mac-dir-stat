@@ -237,8 +237,11 @@ fn a_plan_may_not_trash_your_own_folders_or_anything_in_them() {
     // A folder that holds one of them is refused too.
     let lib = only_yours_reason(Path::new("/Users/p/Library"), home).expect("holds Mail");
     assert!(lib.contains("Mail"), "{lib}");
-    // Rebuildable things, and look-alike names, are not affected.
+    // Rebuildable things, and look-alike names, are not affected; nor is a
+    // rebuildable folder inside Documents (the inventory's left column).
     for ok in [
+        "/Users/p/Documents/thesis/node_modules",
+        "/Users/p/Documents/thesis/node_modules/x/y.js",
         "/Users/p/code/app/node_modules",
         "/Users/p/Library/Caches",
         "/Users/p/DocumentsOld",

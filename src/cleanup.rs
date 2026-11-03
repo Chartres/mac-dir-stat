@@ -69,7 +69,8 @@ pub const PLACES: &[(&str, &str)] = &[
 /// Why trashing `path` would touch something only the user has, or `None`.
 /// Covers the [`PLACES`] under `home`, anything inside them, a folder that
 /// holds one of them, and any Photos library. Compared case-insensitively,
-/// as APFS does.
+/// as APFS does. Something a cleanup rule can rebuild, inside one of them,
+/// is not refused (it is in the inventory's left column).
 pub fn only_yours_reason(path: &Path, home: Option<&Path>) -> Option<String> {
     let lower = |p: &Path| -> Vec<String> {
         p.components()
@@ -91,6 +92,11 @@ pub fn only_yours_reason(path: &Path, home: Option<&Path>) -> Option<String> {
     for &(rel, label) in PLACES {
         let place = home.join(rel);
         let q = lower(&place);
+        // A rebuildable folder inside one (a project's node_modules under
+        // Documents) is on the other side of the inventory, and may go.
+        if p.len() > q.len() && p.starts_with(&q) && is_rebuildable(path) {
+            continue;
+        }
         if p.starts_with(&q) {
             let what = if p.len() == q.len() {
                 format!("{} is your own {label} folder.", shown(path))
