@@ -82,35 +82,87 @@ pub fn only_yours_reason(path: &Path, home: Option<&Path>) -> Option<String> {
         Some(rel) => format!("~/{}", rel.display()),
         None => p.display().to_string(),
     };
-    let never = "MacDirStat never offers your own files for deletion; remove this from the \
-                 plan, and trash it yourself in Finder if you mean to.";
     let p = lower(path);
     if p.iter().any(|c| c.ends_with(".photoslibrary")) {
-        return Some(format!("{} is in a Photos library, one of your own. {never}", shown(path)));
+        return Some(format!("{} is in a Photos library, one of your own. {NEVER}", shown(path)));
     }
     let home = home?;
     for &(rel, label) in PLACES {
         let place = home.join(rel);
-        let q = lower(&place);
-        // A rebuildable folder inside one (a project's node_modules under
-        // Documents) is on the other side of the inventory, and may go.
-        if p.len() > q.len() && p.starts_with(&q) && is_rebuildable(path) {
-            continue;
+        // Where the folder really lives too: ~/Movies may be a link to an
+        // external disk (Move to disk leaves one), and plans see the target.
+        let real = place.canonicalize().ok().filter(|r| *r != place);
+        for q in std::iter::once(&place).chain(real.as_ref()) {
+            let q = lower(q);
+            // A project's build output inside one (node_modules under
+            // Documents) is on the inventory's rebuildable side, and may go.
+            if p.len() > q.len() && p.starts_with(&q) && is_build_output(path) {
+                continue;
+            }
+            if p.starts_with(&q) {
+                let what = if p.len() == q.len() {
+                    format!("{} is your own {label} folder.", shown(path))
+                } else {
+                    format!("{} is inside {}, your own {label} folder.", shown(path), shown(&place))
+                };
+                return Some(format!("{what} {NEVER}"));
+            }
+            if q.starts_with(&p) {
+                return Some(format!(
+                    "{} holds {}, your own {label} folder. {NEVER}",
+                    shown(path),
+                    shown(&place)
+                ));
+            }
         }
-        if p.starts_with(&q) {
-            let what = if p.len() == q.len() {
-                format!("{} is your own {label} folder.", shown(path))
-            } else {
-                format!("{} is inside {}, your own {label} folder.", shown(path), shown(&place))
-            };
-            return Some(format!("{what} {never}"));
-        }
-        if q.starts_with(&p) {
-            return Some(format!(
-                "{} holds {}, your own {label} folder. {never}",
-                shown(path),
-                shown(&place)
-            ));
+    }
+    None
+}
+
+const NEVER: &str = "MacDirStat never offers your own files for deletion; remove this from the \
+                     plan, and trash it yourself in Finder if you mean to.";
+
+/// Inside a project's build output: the rules a build recreates exactly.
+/// Caches, logs, `.gradle` and `.m2` (which can hold credentials) are left
+/// out, so those stay refused inside your own folders.
+fn is_build_output(path: &Path) -> bool {
+    const BUILD: &[&str] = &[
+        "node_modules",
+        "Rust target/",
+        "Python __pycache__",
+        ".pytest_cache",
+        ".next/",
+        ".turbo/",
+        "DerivedData (loose)",
+    ];
+    path.ancestors()
+        .any(|a| matches!(classify(a), Some((cat, _)) if BUILD.contains(&cat)))
+}
+
+/// A Photos library within `dir`, looked for a few levels down (Photos
+/// libraries are packages, usually one or two folders deep). Bounded so a
+/// huge folder can't stall validation; symlinks are not followed.
+pub fn photos_library_within(dir: &Path) -> Option<PathBuf> {
+    let mut budget = 20_000usize;
+    let mut stack = vec![(dir.to_path_buf(), 0u8)];
+    while let Some((d, depth)) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else { continue };
+        for e in entries.flatten() {
+            if budget == 0 {
+                return None;
+            }
+            budget -= 1;
+            let Ok(ft) = e.file_type() else { continue };
+            if !ft.is_dir() {
+                continue;
+            }
+            let p = e.path();
+            if e.file_name().to_string_lossy().to_lowercase().ends_with(".photoslibrary") {
+                return Some(p);
+            }
+            if depth < 3 {
+                stack.push((p, depth + 1));
+            }
         }
     }
     None

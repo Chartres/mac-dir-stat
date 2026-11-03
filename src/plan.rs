@@ -148,6 +148,7 @@ pub fn validate(op: &Op) -> OpState {
 /// plan can't be approved.
 pub fn validate_with(op: &Op, home: Option<&std::path::Path>) -> OpState {
     let mut op = op.clone();
+    let raw = op.path.clone();
     let normalized = crate::relocate::normalize(&op.path);
     if let Ok(p) = &normalized {
         op.path = p.clone();
@@ -170,8 +171,19 @@ pub fn validate_with(op: &Op, home: Option<&std::path::Path>) -> OpState {
             Ok(p) => {
                 if let Some(r) = crate::relocate::protected_reason(&p, home) {
                     st.errors.push(r);
-                } else if let Some(r) = crate::cleanup::only_yours_reason(&p, home) {
+                } else if let Some(r) = crate::cleanup::only_yours_reason(&p, home)
+                    .or_else(|| crate::cleanup::only_yours_reason(&raw, home))
+                {
+                    // Both the path as asked and as resolved: a link in the
+                    // middle must not carry a path out of your folders.
                     st.errors.push(r);
+                } else if let Some(lib) = crate::cleanup::photos_library_within(&p) {
+                    st.errors.push(format!(
+                        "{} holds a Photos library ({}), one of your own. MacDirStat never \
+                         offers your own files for deletion; remove this from the plan.",
+                        p.display(),
+                        lib.display()
+                    ));
                 } else if std::fs::symlink_metadata(&p).is_err() {
                     st.errors.push(format!("{} does not exist", p.display()));
                 } else {
@@ -479,5 +491,41 @@ mod tests {
         assert!(!s.get(id).unwrap().valid(), "one refused op refuses the plan");
         assert!(s.approve(id).is_err());
         std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    /// ~/Movies moved to another disk with a link left behind: its contents
+    /// are still refused, by the linked path and by the real one. A folder
+    /// holding a Photos library is refused too.
+    #[test]
+    fn validate_follows_links_and_finds_photos_libraries() {
+        let base = std::env::temp_dir().join(format!("mds-plan-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ext = base.join("ext/Movies");
+        std::fs::create_dir_all(ext.join("Holiday")).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        std::os::unix::fs::symlink(&ext, home.join("Movies")).unwrap();
+        std::fs::create_dir_all(base.join("archive/2019/Old.photoslibrary/originals")).unwrap();
+        std::fs::create_dir_all(home.join("Documents/app/node_modules/x")).unwrap();
+        std::fs::create_dir_all(home.join("Documents/app/.cache")).unwrap();
+        let home = home.canonicalize().unwrap();
+        let base = base.canonicalize().unwrap();
+        let check = |p: PathBuf| validate_with(&Op { path: p, action: Action::Trash }, Some(&home));
+
+        for p in [home.join("Movies/Holiday"), base.join("ext/Movies/Holiday")] {
+            let st = check(p.clone());
+            assert!(
+                st.errors.iter().any(|e| e.contains("Movies")),
+                "{}: {:?}",
+                p.display(),
+                st.errors
+            );
+        }
+        let st = check(base.join("archive"));
+        assert!(st.errors.iter().any(|e| e.contains("Photos library")), "{:?}", st.errors);
+        // Build output inside Documents may go; a cache there may not.
+        assert!(check(home.join("Documents/app/node_modules")).errors.is_empty());
+        assert!(!check(home.join("Documents/app/.cache")).errors.is_empty());
+        std::fs::remove_dir_all(&base).unwrap();
     }
 }

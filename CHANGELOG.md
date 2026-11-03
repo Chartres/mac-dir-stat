@@ -31,8 +31,9 @@ Release notes for the GitHub Release: [`docs/release-notes/v0.7.0.md`](docs/rele
 
 - **Plans can't trash your own folders.** A plan proposed over the web page, REST or MCP that
   would trash Documents, Desktop, Pictures, Movies, Music, Mail, Messages, a Photos library,
-  anything inside one, or a folder that holds one is refused with an error naming the folder, and
-  can't be approved. Before, only your approval stopped it.
+  anything inside one (also through a link to another disk), or a folder that holds one is refused
+  with an error naming the folder, and can't be approved. Before, only your approval stopped it.
+  A project's build output inside them (`node_modules`, `target/`, `.next/`, …) may still go.
 
 ### Changed
 - **New look: the survey register.** Book typography on paper: Source Serif 4 (bundled, SIL Open
