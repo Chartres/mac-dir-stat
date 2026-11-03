@@ -215,3 +215,39 @@ fn click(ctx: &egui::Context, app: &mut App, frame: &mut eframe::Frame, pos: egu
         let _ = ctx.run(input, |ctx| eframe::App::update(app, ctx, frame));
     }
 }
+
+// Plans proposed over the server or MCP: an only-yours folder is refused.
+
+#[test]
+fn a_plan_may_not_trash_your_own_folders_or_anything_in_them() {
+    use mac_dir_stat::cleanup::only_yours_reason;
+    let home = Some(Path::new("/Users/p"));
+    let docs = only_yours_reason(Path::new("/Users/p/Documents"), home).expect("Documents");
+    assert!(docs.contains("~/Documents") && docs.contains("your own"), "{docs}");
+    let sub = only_yours_reason(Path::new("/Users/p/Documents/tax/2025.pdf"), home)
+        .expect("inside Documents");
+    assert!(sub.contains("~/Documents/tax/2025.pdf") && sub.contains("Documents"), "{sub}");
+    // APFS is case-insensitive: ~/documents is the same folder.
+    assert!(only_yours_reason(Path::new("/Users/p/documents/x"), home).is_some());
+    assert!(only_yours_reason(Path::new("/Users/p/Library/Mail/V10"), home).is_some());
+    assert!(
+        only_yours_reason(Path::new("/Volumes/Ext/Old.photoslibrary/originals"), home).is_some(),
+        "a Photos library anywhere"
+    );
+    // A folder that holds one of them is refused too.
+    let lib = only_yours_reason(Path::new("/Users/p/Library"), home).expect("holds Mail");
+    assert!(lib.contains("Mail"), "{lib}");
+    // Rebuildable things, and look-alike names, are not affected; nor is a
+    // rebuildable folder inside Documents (the inventory's left column).
+    for ok in [
+        "/Users/p/Documents/thesis/node_modules",
+        "/Users/p/Documents/thesis/node_modules/x/y.js",
+        "/Users/p/code/app/node_modules",
+        "/Users/p/Library/Caches",
+        "/Users/p/DocumentsOld",
+        "/Users/q/Documents",
+    ] {
+        assert_eq!(only_yours_reason(Path::new(ok), home), None, "{ok}");
+    }
+    assert_eq!(only_yours_reason(Path::new("/Users/p/Documents"), None), None);
+}

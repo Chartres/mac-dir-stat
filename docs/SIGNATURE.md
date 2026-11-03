@@ -145,6 +145,7 @@ scale bar, names set in the parcel.
 | 2026-10-30 | 3. The disk over time | 3B small multiples of past scans | Pavol | Store a small summary per scan (totals and top folders, no file lists), show at most 6, and keep scans on the Mac: nothing leaves the machine. |
 | 2026-10-30 | Visual signature | Survey register (serif, paper, oxblood accent) | Pavol | Replaces the violet, dark-first theme. Keep a dark variant that follows the system setting. |
 | 2026-10-30 | All products | A move approved for one product may be reused by another | Pavol | "Dont just blindly copy the pattern though." |
+| 2026-11-03 | Safety: plan checks | Refuse such plans in validation | Pavol | Chosen on the decision page (card mac-dir-stat.o0, "Should the MCP server refuse cleanup plans that include one of your own folders?", 11:52 UTC), no note; relayed by the orchestrating session. Plans that would trash an only-yours folder, anything in it (also through a link) or a folder holding one are refused, naming the folder. Reversible call on top (not Pavol's): a project's build output inside them, such as `node_modules` under Documents, stays allowed, as the inventory lists it on the rebuildable side. |
 
 ---
 

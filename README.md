@@ -126,7 +126,12 @@ file is, so the token stays out of log files. The page works on a phone in light
 disks and free space, the largest folders and files, cleanup groups, and a find box (`node_modules`,
 `.venv`, `*.dmg`, …). Tick items, choose **Move to Trash** or **Move to <disk>**, and create a
 **plan**. The plan lists every item with its size, destination, errors and warnings. Nothing runs
-until you press **Approve**.
+until you press **Approve**. A plan that would trash one of your own folders (Documents, Desktop,
+Pictures, Movies, Music, Mail, Messages, a Photos library), anything inside one (also when the
+folder was moved to another disk and left as a link), or a folder that holds one is refused: the
+error names the folder, and the plan can't be approved. A project's build output inside one, such
+as `node_modules` under Documents, may still go. This is the same
+list as the Cleanup window's *Only you have these* column.
 
 It listens on `127.0.0.1` only, so a phone cannot reach it until you pass `--bind`. Over
 Tailscale, bind to the Mac's Tailscale IP (`--bind 100.x.y.z`; `tailscale ip -4` shows it) and
