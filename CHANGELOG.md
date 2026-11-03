@@ -29,6 +29,11 @@ Release notes for the GitHub Release: [`docs/release-notes/v0.7.0.md`](docs/rele
   folders, and loose files, hidden space and the rest as unnamed sums; no file names or lists) in `~/Library/Application Support/mac-dir-stat/history.json`, six per
   folder and twenty folders at most. It never leaves the Mac.
 
+- **Plans can't trash your own folders.** A plan proposed over the web page, REST or MCP that
+  would trash Documents, Desktop, Pictures, Movies, Music, Mail, Messages, a Photos library,
+  anything inside one, or a folder that holds one is refused with an error naming the folder, and
+  can't be approved. Before, only your approval stopped it.
+
 ### Changed
 - **New look: the survey register.** Book typography on paper: Source Serif 4 (bundled, SIL Open
   Font License) for all text with a real italic for notes, ink on paper, hairline rules, and one

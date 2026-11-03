@@ -54,6 +54,62 @@ pub fn is_rebuildable(path: &Path) -> bool {
     path.ancestors().any(|a| classify(a).is_some())
 }
 
+/// Where personal data lives, relative to the home folder, and its label.
+/// The right-hand column of the inventory, and what plans may not trash.
+pub const PLACES: &[(&str, &str)] = &[
+    ("Documents", "Documents"),
+    ("Desktop", "Desktop"),
+    ("Pictures", "Pictures"),
+    ("Movies", "Movies"),
+    ("Music", "Music"),
+    ("Library/Mail", "Mail"),
+    ("Library/Messages", "Messages"),
+];
+
+/// Why trashing `path` would touch something only the user has, or `None`.
+/// Covers the [`PLACES`] under `home`, anything inside them, a folder that
+/// holds one of them, and any Photos library. Compared case-insensitively,
+/// as APFS does.
+pub fn only_yours_reason(path: &Path, home: Option<&Path>) -> Option<String> {
+    let lower = |p: &Path| -> Vec<String> {
+        p.components()
+            .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+            .collect()
+    };
+    let shown = |p: &Path| match home.and_then(|h| p.strip_prefix(h).ok()) {
+        Some(rel) if rel.as_os_str().is_empty() => "~".to_string(),
+        Some(rel) => format!("~/{}", rel.display()),
+        None => p.display().to_string(),
+    };
+    let never = "MacDirStat never offers your own files for deletion; remove this from the \
+                 plan, and trash it yourself in Finder if you mean to.";
+    let p = lower(path);
+    if p.iter().any(|c| c.ends_with(".photoslibrary")) {
+        return Some(format!("{} is in a Photos library, one of your own. {never}", shown(path)));
+    }
+    let home = home?;
+    for &(rel, label) in PLACES {
+        let place = home.join(rel);
+        let q = lower(&place);
+        if p.starts_with(&q) {
+            let what = if p.len() == q.len() {
+                format!("{} is your own {label} folder.", shown(path))
+            } else {
+                format!("{} is inside {}, your own {label} folder.", shown(path), shown(&place))
+            };
+            return Some(format!("{what} {never}"));
+        }
+        if q.starts_with(&p) {
+            return Some(format!(
+                "{} holds {}, your own {label} folder. {never}",
+                shown(path),
+                shown(&place)
+            ));
+        }
+    }
+    None
+}
+
 /// A folder the app never offers for deletion: it holds things only the
 /// user has. Shown so they know where the space is.
 #[derive(Debug, Clone)]
@@ -74,15 +130,6 @@ pub fn find_only_yours(
     home: Option<&Path>,
     rebuildable: &[CleanupCandidate],
 ) -> Vec<OnlyYours> {
-    const PLACES: &[(&str, &str)] = &[
-        ("Documents", "Documents"),
-        ("Desktop", "Desktop"),
-        ("Pictures", "Pictures"),
-        ("Movies", "Movies"),
-        ("Music", "Music"),
-        ("Library/Mail", "Mail"),
-        ("Library/Messages", "Messages"),
-    ];
     let Some(home) = home else { return Vec::new() };
     let mut out: Vec<OnlyYours> = Vec::new();
     for &(rel, label) in PLACES {

@@ -140,6 +140,13 @@ pub fn parse_ops(v: &Value) -> Result<Vec<Op>, String> {
 /// Checks one op against the filesystem (sizes, rules, free space). The
 /// returned op carries the normalized path: that is what is shown and run.
 pub fn validate(op: &Op) -> OpState {
+    validate_with(op, crate::relocate::home().as_deref())
+}
+
+/// [`validate`] for a given home folder. A trash that touches one of the
+/// user's own folders (`cleanup::only_yours_reason`) is an error, so the
+/// plan can't be approved.
+pub fn validate_with(op: &Op, home: Option<&std::path::Path>) -> OpState {
     let mut op = op.clone();
     let normalized = crate::relocate::normalize(&op.path);
     if let Ok(p) = &normalized {
@@ -155,11 +162,15 @@ pub fn validate(op: &Op) -> OpState {
     };
     match &op.action {
         Action::Trash => match normalized {
-            Err(e) => st.errors.push(e),
+            // Even a path that can't be resolved is refused by name if it
+            // points into one of the user's own folders.
+            Err(e) => st
+                .errors
+                .push(crate::cleanup::only_yours_reason(&op.path, home).unwrap_or(e)),
             Ok(p) => {
-                if let Some(r) =
-                    crate::relocate::protected_reason(&p, crate::relocate::home().as_deref())
-                {
+                if let Some(r) = crate::relocate::protected_reason(&p, home) {
+                    st.errors.push(r);
+                } else if let Some(r) = crate::cleanup::only_yours_reason(&p, home) {
                     st.errors.push(r);
                 } else if std::fs::symlink_metadata(&p).is_err() {
                     st.errors.push(format!("{} does not exist", p.display()));
@@ -437,5 +448,36 @@ mod tests {
         assert_eq!(s.list().len(), 200);
         assert!(s.get(keep).is_some(), "pending plans are never pruned");
         assert_eq!(s.list().last().unwrap().id, 251);
+    }
+
+    /// A model proposing over MCP that ~/Documents, or anything in it, goes
+    /// to the Trash: the plan is refused, naming the folder.
+    #[test]
+    fn validate_refuses_your_own_folders_and_their_contents() {
+        let home = std::env::temp_dir().join(format!("mds-plan-home-{}", std::process::id()));
+        let sub = home.join("Documents/taxes");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("2025.pdf"), b"x").unwrap();
+        std::fs::create_dir_all(home.join("code/node_modules")).unwrap();
+        let home = home.canonicalize().unwrap();
+        let check = |p: PathBuf| validate_with(&Op { path: p, action: Action::Trash }, Some(&home));
+
+        for p in [home.join("Documents"), home.join("Documents/taxes")] {
+            let st = check(p.clone());
+            assert_eq!(st.errors.len(), 1, "{}: {:?}", p.display(), st.errors);
+            assert!(st.errors[0].contains("~/Documents"), "{}", st.errors[0]);
+            assert!(st.errors[0].contains("your own"), "{}", st.errors[0]);
+            assert_eq!(st.size, 0, "nothing measured for a refused path");
+        }
+        let mut s = PlanStore::default();
+        let ops = vec![
+            check(home.join("code/node_modules")),
+            check(home.join("Documents/taxes/2025.pdf")),
+        ];
+        assert!(ops[0].errors.is_empty(), "{:?}", ops[0].errors);
+        let id = s.create(ops, "", "mcp").id;
+        assert!(!s.get(id).unwrap().valid(), "one refused op refuses the plan");
+        assert!(s.approve(id).is_err());
+        std::fs::remove_dir_all(&home).unwrap();
     }
 }

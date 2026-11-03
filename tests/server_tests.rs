@@ -554,3 +554,30 @@ fn a_poisoned_lock_does_not_take_the_server_down() {
     );
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// Journey: a model connected over MCP proposes trashing ~/Documents and a
+/// folder inside it. The plan comes back refused, naming the folder, and
+/// Pavol's approve can't run it. Nothing on disk is touched.
+#[test]
+fn mcp_plan_touching_your_own_folders_is_refused() {
+    let root = fixture("onlyyours");
+    let runs = Arc::new(AtomicUsize::new(0));
+    let h = start(&root, runs.clone());
+    let home = mac_dir_stat::relocate::home().expect("a home folder");
+    for path in [home.join("Documents"), home.join("Documents/Taxes 2025")] {
+        let (_, r) = mcp(
+            &h,
+            json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "propose_plan", "arguments": {"note": "free space", "ops": [{"action": "trash", "path": path}]}}}),
+        );
+        let plan: Value =
+            serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(plan["valid"], false, "{plan}");
+        let msg = plan["ops"][0]["errors"][0].as_str().unwrap_or("");
+        assert!(msg.contains("~/Documents") && msg.contains("your own"), "{msg}");
+        let id = plan["id"].as_u64().unwrap();
+        let (code, _) = call(&h, "POST", &format!("/api/v1/plans/{id}/approve"), None);
+        assert_eq!(code, 409, "an invalid plan can't be approved");
+    }
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert_eq!(runs.load(Ordering::SeqCst), 0);
+}
