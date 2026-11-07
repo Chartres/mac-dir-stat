@@ -1,6 +1,6 @@
 # Signature — mac-dir-stat
 
-Status: **picked** 2026-10-30 (see the decision log in §6) · drafted 2026-10-29.
+Status: **released** in 0.7.0, 2026-11-07 · picked 2026-10-30 (see the decision log in §6) · drafted 2026-10-29.
 
 A disk-space tool sits next to a lot of fear-selling software. The signature this proposal argues
 for is the opposite of that: a calm inventory of what you keep, which separates what can be
@@ -53,7 +53,7 @@ What this app will not do, whatever it would do for a metric:
 ## 3. Signature moves
 
 Each move has options. **Status (2026-10-30):** 1A, 1B, 1C, 2A, 3B and the visual signature are
-**built** for 0.7.0 (PRs #14–#17); 2B, 2C, 3A and 3C were not picked. Screenshots of what was built,
+**built** (PRs #14–#17) and **released in 0.7.0** on 2026-11-07; 2B, 2C, 3A and 3C were not picked. Screenshots of what was built,
 rendered from the real app, are in [`docs/screenshots/`](screenshots/) (`cargo run --example screenshots`).
 
 ### Move 1 — The inventory (Cleanup window)
