@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Renders assets/icon/icon.svg to assets/icon/AppIcon.icns and the 256px window icon.
-# macOS only: qlmanage draws the SVG, sips resizes, iconutil builds the .icns.
+# macOS only: render-svg.swift draws the SVG on a transparent canvas (qlmanage fills
+# white, which squared off the corners), sips resizes, iconutil builds the .icns.
 # The outputs are committed; run this only after editing icon.svg.
 set -euo pipefail
 
@@ -8,9 +9,8 @@ DIR="$(cd "$(dirname "$0")/../assets/icon" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-qlmanage -t -s 1024 -o "$WORK" "$DIR/icon.svg" >/dev/null 2>&1
-BASE="$WORK/icon.svg.png"
-[ -f "$BASE" ] || { echo "qlmanage did not render icon.svg" >&2; exit 1; }
+BASE="$WORK/icon.png"
+swift "$(dirname "$0")/render-svg.swift" "$DIR/icon.svg" "$BASE" 1024
 
 SET="$WORK/AppIcon.iconset"
 mkdir "$SET"
