@@ -107,7 +107,8 @@ pub fn show(ctx: &egui::Context, d: &mut RelocateDialog) -> Option<Choice> {
                 ui.checkbox(
                     &mut d.link,
                     RichText::new("Leave a link behind at the original location").size(12.0),
-                );
+                )
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
                 if let Some(m) = &d.measure {
                     let c = relocate::check_with(&d.path, &vol.path, m);
                     match &c {

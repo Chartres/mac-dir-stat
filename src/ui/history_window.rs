@@ -36,8 +36,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             ui.label(RichText::new(title).color(theme::ink()).size(18.0));
             ui.label(
                 RichText::new(format!(
-                    "{} · same order in every panel; height is space used. \
-                     Kept on this Mac only: totals and top folders, no file lists.",
+                    "{} · panel height is space used",
                     state.scan_root.display()
                 ))
                 .family(theme::italic())
@@ -52,8 +51,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     RichText::new(if scans.is_empty() {
                         "No finished scan of this folder yet."
                     } else {
-                        "One scan so far. Scan this folder again another day and the \
-                         panels appear here, one per scan, up to six."
+                        "One scan so far. Scan again later to compare."
                     })
                     .color(theme::ink_soft())
                     .size(13.0),

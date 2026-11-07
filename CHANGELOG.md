@@ -35,7 +35,33 @@ Release notes for the GitHub Release: [`docs/release-notes/v0.7.0.md`](docs/rele
   with an error naming the folder, and can't be approved. Before, only your approval stopped it.
   A project's build output inside them (`node_modules`, `target/`, `.next/`, …) may still go.
 
+- **Path bar** under the toolbar: the map's folder as clickable segments (current one bold), Back
+  and Up buttons, Backspace / ⌘↑ for the enclosing folder and ⌘[ for Back. It is always shown, not
+  only after zooming. Esc steps up one folder.
+- **Pinned parent rows** in the folder list: while you scroll, the ancestors of the top row (up to
+  four) stay pinned. Clicking one selects it and scrolls the list to it.
+- **Colour legends** for Age and Depth: a gradient bar with labelled ends and ticks (today, 1 mo,
+  1 y, 3 y+; levels 1 to 5+), drawn with the same colour functions as the map, in light and dark.
+- **A new app icon** (`assets/icon/icon.svg`, rendered to `AppIcon.icns` by
+  `scripts/make-icon.sh`), also used as the window icon. The bundle had no icon before.
+- `examples/bench.rs` times a scan and the per-frame UI cost on a real folder.
+
+### Fixed
+- **The folder list's triangle did nothing.** The row's click area was registered after the triangle
+  and took the click, so it selected the row and never toggled it.
+- Hovering the map picks the block drawn on top, not the first one under the pointer.
+
 ### Changed
+- **Faster map and list.** The folder list is virtualised (fixed-height rows, only visible ones laid
+  out) and the map merges blocks smaller than a square point into one, in the colour of the largest
+  file in them. On `~/Library` (275,000 files; 5,200 folders open) a frame went from 46 ms to 0.8 ms
+  and map blocks from 219,000 to 17,000.
+- The pointer is a hand over rows, triangles, map blocks, buttons, checkboxes and path segments.
+- Age colouring is a log scale from today to three years (it ended at one year before), and Depth
+  counts levels from the folder the map shows and ends at level 5 (lighter steps than before).
+- Copy: explanatory sentences removed from Cleanup ("Nothing is ticked until you tick it.", the
+  subtitle under the title and the column notes), History, Full Disk Access, the Help tips, the
+  Privacy text and tooltips.
 - **New look: the survey register.** Book typography on paper: Source Serif 4 (bundled, SIL Open
   Font License) for all text with a real italic for notes, ink on paper, hairline rules, and one
   oxblood accent for the main action in each window. Treemap fills are muted earth and slate tints.

@@ -36,6 +36,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     )
                     .sense(egui::Sense::click()),
                 )
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
                 .clicked()
             {
                 state.search_active = false;

@@ -29,15 +29,6 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     .color(theme::ink())
                     .size(18.0),
             );
-            ui.label(
-                RichText::new(
-                    "Nothing is deleted until you tick items and choose Move to Trash. \
-                     If you are unsure about one, Reveal shows it in Finder.",
-                )
-                .family(theme::italic())
-                .color(theme::note())
-                .size(11.5),
-            );
             ui.add_space(4.0);
             widgets::ink_rule(ui);
             ui.add_space(6.0);
@@ -122,11 +113,11 @@ fn rebuildable_column(ui: &mut Ui, state: &mut AppState) {
     column_head(
         ui,
         "Can be rebuilt",
-        "Tools will make these again. Removing them costs time, not data.",
+        "Tools make these again.",
     );
     if state.cleanup_candidates.is_empty() {
         ui.label(
-            RichText::new("Nothing a tool can rebuild was found in this scan.")
+            RichText::new("Nothing found.")
                 .color(theme::note())
                 .size(12.0),
         );
@@ -209,6 +200,7 @@ fn item_row(ui: &mut Ui, state: &mut AppState, c: &CleanupCandidate) {
         if ui
             .checkbox(&mut on, RichText::new(path).color(theme::ink_soft()).size(11.0))
             .on_hover_text(c.path.display().to_string())
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
             .changed()
         {
             set_selected(state, &[c.node_id], on);
@@ -233,13 +225,12 @@ fn only_yours_column(ui: &mut Ui, state: &mut AppState) {
     column_head(
         ui,
         "Only you have these",
-        "Never suggested for removal. Shown so you know where the space is.",
+        "Never offered for removal.",
     );
     if state.only_yours.is_empty() {
         ui.label(
             RichText::new(
-                "None of your usual folders (Documents, Desktop, Pictures, Movies, Music, \
-                 Mail, Messages) is in this scan.",
+                "None in this scan.",
             )
             .color(theme::note())
             .size(12.0),
@@ -286,7 +277,7 @@ fn action_bar(ui: &mut Ui, state: &mut AppState) {
         let items: Vec<_> = picked.iter().map(|c| (c.node_id, c.path.clone())).collect();
         ui.label(
             RichText::new(if items.is_empty() {
-                "Nothing is ticked until you tick it.".to_string()
+                String::new()
             } else {
                 format!(
                     "{} ticked, {}.",
@@ -354,8 +345,7 @@ fn closing_account(ui: &mut Ui, state: &mut AppState, a: &Account) {
     ui.add_space(4.0);
     ui.label(
         RichText::new(
-            "The Trash is not emptied. Until you empty it, everything above can be taken \
-             back out, and the space is not free yet.",
+            "Trash not emptied. The space frees when you empty it.",
         )
         .family(theme::italic())
         .color(theme::note())

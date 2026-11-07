@@ -5,42 +5,6 @@ use crate::ui::theme;
 use egui::{Color32, Pos2, Rect, StrokeKind, Ui, Vec2};
 
 pub fn show(ui: &mut Ui, state: &mut AppState) {
-    // Breadcrumb bar if zoomed
-    if state.zoom_stack.len() > 1 {
-        let mut breadcrumb_click: Option<(usize, usize)> = None;
-        let zoom_snapshot: Vec<usize> = state.zoom_stack.clone();
-        ui.horizontal(|ui| {
-            if let Some(tree) = &state.tree {
-                for (i, &node_id) in zoom_snapshot.iter().enumerate() {
-                    if i > 0 {
-                        ui.label(
-                            egui::RichText::new(" \u{203A} ")
-                                .color(theme::note())
-                                .size(11.0),
-                        );
-                    }
-                    let name = tree.name(node_id).to_string();
-                    let label = ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(&name)
-                                .color(theme::highlight())
-                                .size(11.0),
-                        )
-                        .sense(egui::Sense::click()),
-                    );
-                    if label.clicked() {
-                        breadcrumb_click = Some((i, node_id));
-                    }
-                }
-            }
-        });
-        if let Some((i, node_id)) = breadcrumb_click {
-            state.view_root = Some(node_id);
-            state.zoom_stack.truncate(i + 1);
-            state.treemap_dirty = true;
-        }
-    }
-
     let (response, painter) =
         ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
     let canvas_rect = response.rect;
@@ -212,11 +176,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
 
         let is_large = w > 3.0 && h > 3.0;
 
-        // Hover detection only for visible-sized rects
-        if is_large && state.hovered_node.is_none() {
-            if pointer_pos.map_or(false, |p| rect.contains(p)) {
-                state.hovered_node = Some(cr.node_id);
-            }
+        // Hover: the last block drawn at the pointer is the topmost.
+        if is_large && pointer_pos.map_or(false, |p| rect.contains(p)) {
+            state.hovered_node = Some(cr.node_id);
         }
 
         // Compute alpha for filtering
@@ -468,6 +430,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         }
     }
 
+    if state.hovered_node.or(state.hovered_dir).is_some() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
     // Click handling — falls back to the deepest directory under the cursor
     // when the file rect is too small to be hover-targeted (the is_large
     // filter above only registers rects > 3px). Without this fallback,
@@ -493,9 +459,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             if let Some(tree) = &state.tree {
                 if let Some(pid) = tree.node(hovered).parent {
                     if tree.node(pid).is_dir() {
-                        state.view_root = Some(pid);
-                        state.zoom_stack.push(pid);
-                        state.treemap_dirty = true;
+                        crate::nav::navigate_to(state, pid);
                     }
                 }
             }
@@ -563,14 +527,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                         .size(11.5),
                 );
                 let body = if is_free_space {
-                    "Available space on this volume according to the \
-                     filesystem (statvfs). Not stored in any file."
+                    "Free space on this volume."
                 } else {
-                    "Bytes the scanner couldn't enumerate: TCC-protected \
-                     paths (Photos library, Mail, Calendar, Reminders, …), \
-                     macOS-internal directories that block readdir, and \
-                     per-file permission errors. Not double-counted — the \
-                     gap between disk total and (scanned + free)."
+                    "Space the scanner could not read: protected folders \
+                     (Photos, Mail, Calendar, …) and permission errors."
                 };
                 ui.label(
                     egui::RichText::new(body)

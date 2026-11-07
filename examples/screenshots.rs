@@ -42,12 +42,23 @@ fn shots() -> Vec<Shot> {
         Shot { name: "ledger", dark: false, setup: ledger, pointer: Some(Pos2::new(120.0, 120.0)) },
         // Pointer on the map, over a Docker block: the list marks Containers.
         Shot { name: "ledger-dark", dark: true, setup: ledger, pointer: Some(Pos2::new(780.0, 300.0)) },
+        // Scrolled deep into the list: the ancestors stay pinned at the top.
+        Shot { name: "sticky-light", dark: false, setup: sticky, pointer: None },
+        Shot { name: "sticky-dark", dark: true, setup: sticky, pointer: None },
+        // Colour by age and by depth, with their legends; the map zoomed so
+        // the path bar shows a path.
+        Shot { name: "age-light", dark: false, setup: age, pointer: None },
+        Shot { name: "age-dark", dark: true, setup: age, pointer: None },
+        Shot { name: "depth-light", dark: false, setup: depth, pointer: None },
+        Shot { name: "depth-dark", dark: true, setup: depth, pointer: None },
     ]
 }
 
 fn main() {
     let only: Vec<String> = std::env::args().skip(1).collect();
-    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/screenshots");
+    let out = std::env::var_os("SHOTS_OUT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/screenshots"));
     std::fs::create_dir_all(&out).unwrap();
     for shot in shots() {
         if !only.is_empty() && !only.iter().any(|o| o == shot.name) {
@@ -180,6 +191,44 @@ fn inventory(s: &mut AppState) {
         .map(|c| c.node_id)
         .collect();
     s.cleanup_selected.extend(ids);
+}
+
+fn expand_all(s: &mut AppState) {
+    let ids: Vec<NodeId> = {
+        let t = s.tree.as_ref().unwrap();
+        let mut out = vec![];
+        let mut stack = vec![t.root()];
+        while let Some(id) = stack.pop() {
+            if t.node(id).is_dir() {
+                out.push(id);
+                stack.extend(t.node(id).children().iter().copied());
+            }
+        }
+        out
+    };
+    for id in ids {
+        expand(s, id);
+    }
+}
+
+fn sticky(s: &mut AppState) {
+    expand_all(s);
+    let t = s.tree.as_ref().unwrap();
+    let devices = t.find_path(Path::new("/Users/pavol/Library/Developer/CoreSimulator/Devices")).unwrap();
+    s.scroll_dir_tree_top = Some(devices);
+}
+
+fn age(s: &mut AppState) {
+    expand_all(s);
+    s.color_mode = ColorMode::Age;
+    let x = s.tree.as_ref().unwrap().find_path(Path::new("/Users/pavol/Library/Developer")).unwrap();
+    mac_dir_stat::nav::navigate_to(s, x);
+}
+
+fn depth(s: &mut AppState) {
+    s.color_mode = ColorMode::Depth;
+    let x = s.tree.as_ref().unwrap().find_path(Path::new("/Users/pavol/Library")).unwrap();
+    mac_dir_stat::nav::navigate_to(s, x);
 }
 
 fn ledger(s: &mut AppState) {
@@ -362,7 +411,7 @@ fn write_png(img: &[[f32; 4]], w: usize, h: usize, path: &Path) {
         }
     }
     let tmp = path.with_extension("ppm");
-    std::fs::write(&tmp, ppm).unwrap();
+    std::fs::write(&tmp, &ppm).unwrap();
     // Downscale to 1x points so the PNGs stay small in the repo.
     let ok = std::process::Command::new("convert")
         .arg(&tmp)
@@ -372,5 +421,66 @@ fn write_png(img: &[[f32; 4]], w: usize, h: usize, path: &Path) {
         .map(|s| s.success())
         .unwrap_or(false);
     let _ = std::fs::remove_file(&tmp);
-    assert!(ok, "ImageMagick `convert` is needed to write PNGs");
+    if !ok {
+        // No ImageMagick: write an uncompressed PNG, then let macOS `sips`
+        // downscale and compress it.
+        std::fs::write(path, raw_png(&ppm[ppm.len() - w * h * 3..], w, h)).unwrap();
+        let ok = std::process::Command::new("sips")
+            .args(["-Z", &((w / 2).to_string())])
+            .arg(path)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        assert!(ok, "needs ImageMagick `convert` or macOS `sips` to write PNGs");
+    }
+}
+
+/// A valid PNG using stored (uncompressed) deflate blocks.
+fn raw_png(rgb: &[u8], w: usize, h: usize) -> Vec<u8> {
+    fn crc(data: &[u8]) -> u32 {
+        let mut c = !0u32;
+        for &b in data {
+            c ^= b as u32;
+            for _ in 0..8 {
+                c = if c & 1 != 0 { (c >> 1) ^ 0xEDB8_8320 } else { c >> 1 };
+            }
+        }
+        !c
+    }
+    fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+        out.extend((data.len() as u32).to_be_bytes());
+        let mut body = kind.to_vec();
+        body.extend(data);
+        out.extend(&body);
+        out.extend(crc(&body).to_be_bytes());
+    }
+    let mut raw = Vec::with_capacity((w * 3 + 1) * h);
+    for row in rgb.chunks(w * 3) {
+        raw.push(0);
+        raw.extend(row);
+    }
+    let mut z = vec![0x78, 0x01];
+    let mut chunks = raw.chunks(65_535).peekable();
+    while let Some(c) = chunks.next() {
+        z.push(chunks.peek().is_none() as u8);
+        z.extend((c.len() as u16).to_le_bytes());
+        z.extend((!(c.len() as u16)).to_le_bytes());
+        z.extend(c);
+    }
+    let (mut a, mut b) = (1u32, 0u32);
+    for &x in &raw {
+        a = (a + x as u32) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    z.extend(((b << 16) | a).to_be_bytes());
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut ihdr = Vec::new();
+    ihdr.extend((w as u32).to_be_bytes());
+    ihdr.extend((h as u32).to_be_bytes());
+    ihdr.extend([8, 2, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &ihdr);
+    chunk(&mut out, b"IDAT", &z);
+    chunk(&mut out, b"IEND", &[]);
+    out
 }

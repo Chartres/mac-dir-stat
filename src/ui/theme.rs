@@ -254,6 +254,7 @@ fn style(c: &Palette, dark: bool) -> egui::Style {
     } else {
         egui::Visuals::light()
     };
+    v.interact_cursor = Some(egui::CursorIcon::PointingHand);
     v.override_text_color = Some(c.ink);
     v.panel_fill = c.panel;
     v.window_fill = c.base;

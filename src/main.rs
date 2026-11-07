@@ -12,7 +12,11 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([800.0, 600.0])
-            .with_title("MacDirStat"),
+            .with_title("MacDirStat")
+            .with_icon(
+                eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon/icon-256.png")[..])
+                    .expect("window icon"),
+            ),
         persist_window: true,
         ..Default::default()
     };
