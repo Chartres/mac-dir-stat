@@ -205,7 +205,7 @@
     "version": "0.7.0"
   },
   "next": [
-    "Done. Done before release (Pavol's polish, #21).",
+    "Superseded: a polish PR (#21) from Pavol's own session landed before the release; this session did not see the app run.",
     "Done. Done 2026-11-07: v0.7.0 tagged and released, notes in the release body, CHANGELOG dated.",
     "After release: update flywheel/data/products/mac-dir-stat.json (stage, links); this session can't reach the flywheel repo.",
     "Done. Done 2026-11-03: #20, after Pavol's yes.",
