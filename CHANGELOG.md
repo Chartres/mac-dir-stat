@@ -4,9 +4,9 @@ All notable changes to MacDirStat are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [semantic versioning](https://semver.org/).
 
-## [0.7.0] — not yet released
+## [0.7.0] — 2026-11-07
 
-Release notes for the GitHub Release: [`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md).
+Release notes: [`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md).
 
 ### Added
 - **The inventory.** The Cleanup window now has two columns. *Can be rebuilt* groups the cleanup
