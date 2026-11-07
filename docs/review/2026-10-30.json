@@ -206,9 +206,9 @@
   },
   "next": [
     "Superseded: a polish PR (#21) from Pavol's own session landed before the release; this session did not see the app run.",
-    "Done. Done 2026-11-07: v0.7.0 tagged and released, notes in the release body, CHANGELOG dated.",
+    "Done 2026-11-07: v0.7.0 tagged and released, notes in the release body, CHANGELOG dated.",
     "After release: update flywheel/data/products/mac-dir-stat.json (stage, links); this session can't reach the flywheel repo.",
-    "Done. Done 2026-11-03: #20, after Pavol's yes.",
+    "Done 2026-11-03: #20, after Pavol's yes.",
     "README comparison table: recheck the DaisyDisk and GrandPerspective cells flagged in SIGNATURE.md's competitive note (not done here)."
   ],
   "screenshots": [
