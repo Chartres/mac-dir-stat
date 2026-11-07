@@ -99,3 +99,20 @@ fn test_empty_input() {
     let rects = layout(&items, &bounds);
     assert!(rects.is_empty());
 }
+
+#[test]
+fn sub_pixel_blocks_are_merged_into_one() {
+    use mac_dir_stat::scanner::tree::FileTree;
+    use mac_dir_stat::treemap::{compute_treemap, color::ColorMode, squarify::Rect};
+    let t0 = std::time::SystemTime::UNIX_EPOCH;
+    let mut t = FileTree::new();
+    let r = t.root();
+    t.add_file(r, b"big.bin", 1_000_000, Some("bin"), t0, 1);
+    for i in 0..500 {
+        t.add_file(r, format!("s{i}.txt").as_bytes(), 10, Some("txt"), t0, 1);
+    }
+    t.compute_sizes();
+    let l = compute_treemap(&t, r, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 }, ColorMode::Extension);
+    assert!(l.file_rects.len() < 20, "got {}", l.file_rects.len());
+    assert!(l.file_rects.iter().any(|c| c.node_id != r && t.name(c.node_id) == "big.bin"));
+}

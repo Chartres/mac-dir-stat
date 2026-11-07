@@ -26,12 +26,9 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             ui.add_space(6.0);
             ui.label(
                 RichText::new(
-                    "macOS hides some folders (Mail, Messages, Photos, and other \
-                     protected data) from apps unless you grant Full Disk Access. \
-                     Without it MacDirStat still scans everything else — those \
-                     areas just show up as “Hidden / Skipped.”\n\n\
-                     To include them, add MacDirStat under Full Disk Access, then \
-                     re-scan. You'll only be asked this once.",
+                    "Without Full Disk Access, macOS hides Mail, Messages, Photos and \
+                     other protected folders; they show as “Hidden / Skipped.” Add \
+                     MacDirStat under Full Disk Access, then re-scan.",
                 )
                 .color(theme::ink_soft())
                 .size(11.0),

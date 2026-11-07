@@ -78,9 +78,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, node: NodeId) {
             ui.close_menu();
         }
         if ui.button("Zoom Into").clicked() {
-            state.view_root = Some(node);
-            state.zoom_stack.push(node);
-            state.treemap_dirty = true;
+            crate::nav::navigate_to(state, node);
             ui.close_menu();
         }
     }

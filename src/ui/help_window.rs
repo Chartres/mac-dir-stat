@@ -33,6 +33,8 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     .size(12.0),
             );
             ui.add_space(4.0);
+            shortcut(ui, "⌫  ⌘↑", "Enclosing folder");
+            shortcut(ui, "⌘[", "Back");
             shortcut(ui, "⌘O", "Pick a directory to scan");
             shortcut(ui, "⌘R", "Re-scan current root");
             shortcut(ui, "⇧⌘R", "Re-scan only the selected subtree");
@@ -44,7 +46,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             shortcut(ui, "→ ←", "Expand / collapse the selected directory");
             shortcut(ui, "⌘⌫", "Move selected node to Trash");
             shortcut(ui, "↩", "Reveal selected node in Finder");
-            shortcut(ui, "Esc", "Close help/cleanup/search · pop zoom · clear selection");
+            shortcut(ui, "Esc", "Close window · up one folder · clear selection");
             shortcut(ui, "?", "Toggle this help");
 
             ui.add_space(10.0);
@@ -58,11 +60,9 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     .size(12.0),
             );
             ui.add_space(4.0);
-            tip(ui, "• Click any treemap rect — even tiny — to select what's there or its containing folder.");
-            tip(ui, "• Right-click for Reveal · Refresh · Zoom · Trash actions.");
+            tip(ui, "• Right-click a block or row for actions.");
+            tip(ui, "• Double-click a folder row to show it as the map.");
             tip(ui, "• Drag a folder onto the window to scan it.");
-            tip(ui, "• The Cleanup button surfaces regenerable directories (caches, build outputs, simulators).");
-            tip(ui, "• Hover any rect for path · size · type · modified-time tooltip.");
 
             ui.add_space(10.0);
             widgets::subtle_divider(ui);
@@ -159,9 +159,8 @@ fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
     ui.add_space(4.0);
     ui.label(
         RichText::new(
-            "MacDirStat sends anonymous, cookieless usage counts (app opens, scans, \
-             space reclaimed) to help prioritize features. No file names or paths are \
-             ever sent. You can turn this off.",
+            "Sends anonymous, cookieless usage counts (app opens, scans, space \
+             reclaimed). Never file names or paths.",
         )
         .color(theme::ink_soft())
         .size(11.0),
@@ -170,6 +169,7 @@ fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
     let mut opted_out = crate::flywheel::telemetry_opted_out();
     if ui
         .checkbox(&mut opted_out, "Don't send anonymous usage data")
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
         .changed()
     {
         crate::flywheel::set_telemetry_opt_out(opted_out);
@@ -178,10 +178,9 @@ fn privacy_section(ui: &mut egui::Ui, state: &mut AppState) {
     ui.add_space(4.0);
     ui.label(
         RichText::new(
-            "History keeps a short summary of each scan (date, total, the names and \
-             sizes of the largest top-level folders; never file names or lists) in ~/Library/Application Support/\
-             mac-dir-stat/history.json, six per folder. It never leaves this Mac. \
-             Delete the file to forget it.",
+            "History keeps date, total and the largest top-level folders of each scan \
+             in ~/Library/Application Support/mac-dir-stat/history.json, six per \
+             folder. It stays on this Mac.",
         )
         .color(theme::ink_soft())
         .size(11.0),

@@ -109,7 +109,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                     });
 
                     let row_rect = response.response.rect;
-                    let row_sense = ui.interact(row_rect, ext_id, egui::Sense::click());
+                    let row_sense = ui
+                        .interact(row_rect, ext_id, egui::Sense::click())
+                        .on_hover_cursor(egui::CursorIcon::PointingHand);
                     if row_sense.clicked() {
                         if is_selected {
                             state.selected_extension = None;

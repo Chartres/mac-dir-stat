@@ -21,6 +21,7 @@ lipo -create -output "$APP/Contents/MacOS/$BIN_NAME" \
     "$ROOT/target/x86_64-apple-darwin/release/$BIN_NAME" \
     "$ROOT/target/aarch64-apple-darwin/release/$BIN_NAME"
 
+cp "$ROOT/assets/icon/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 sed "s/@VERSION@/$VERSION/g" "$ROOT/macos/Info.plist.in" > "$APP/Contents/Info.plist"
 
 # Code-sign with a Developer ID + hardened runtime when an identity is provided

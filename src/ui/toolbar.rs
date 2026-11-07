@@ -33,10 +33,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         if !state.has_fda {
             let resp = widgets::ghost_button(ui, "⚠  Grant Full Disk Access")
                 .on_hover_text(
-                    "macOS asks permission for each protected folder it scans \
-                     (Downloads, Desktop, Photos, removable drives…). Grant Full \
-                     Disk Access once to stop all of those prompts. Opens System \
-                     Settings — add MacDirStat, then re-scan.",
+                    "Stops the per-folder permission prompts. Opens System \
+                     Settings: add MacDirStat, then re-scan.",
                 );
             if resp.clicked() {
                 crate::platform::fda::open_settings();
@@ -53,17 +51,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             };
             let resp = widgets::ghost_button(ui, &label);
             let resp = resp.on_hover_text(
-                "Opens a review window listing safe-to-delete folders \
-                 (caches, Xcode build artifacts, node_modules, simulators, …). \
-                 Nothing is deleted until you tick items and confirm a Trash action.",
+                "Caches, build output, node_modules, simulators: folders a tool rebuilds.",
             );
             if resp.clicked() {
                 state.cleanup_window_open = !state.cleanup_window_open;
             }
             let past = crate::history::for_root(&state.history, &state.scan_root).len();
             let resp = widgets::ghost_button(ui, "History…").on_hover_text(format!(
-                "This folder over its last {} scans, side by side. \
-                 Summaries stay on this Mac.",
+                "This folder over its last {} scans",
                 past.max(1)
             ));
             if resp.clicked() {

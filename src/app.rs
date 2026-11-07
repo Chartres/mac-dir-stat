@@ -34,6 +34,10 @@ pub struct AppState {
     pub color_mode: ColorMode,
     pub view_root: Option<NodeId>,
     pub zoom_stack: Vec<NodeId>,
+    /// Folders shown before the last jumps; Back (Cmd+[) pops.
+    pub nav_back: Vec<NodeId>,
+    /// Arrow hit boxes of the rows drawn last frame; the tree test clicks them.
+    pub ledger_arrows: Vec<(NodeId, egui::Rect)>,
 
     // Selection
     pub selected_node: Option<NodeId>,
@@ -47,6 +51,8 @@ pub struct AppState {
     // Reveal-in-tree request — set when user clicks a treemap rect, consumed
     // by dir_tree which scrolls and clears.
     pub scroll_dir_tree_to: Option<NodeId>,
+    /// Same, but the folder goes to the top of the list (a pinned row was clicked).
+    pub scroll_dir_tree_top: Option<NodeId>,
 
     // Captured at right-click time so the context menu always operates on the
     // node that was under the pointer when opened, not whatever happens to be
@@ -268,6 +274,7 @@ impl App {
         self.state.hovered_dir = None;
         self.state.view_root = None;
         self.state.zoom_stack.clear();
+        self.state.nav_back.clear();
         // dir_tree indexes the tree with it; an old-tree id may be out of range.
         self.state.scroll_dir_tree_to = None;
         // The Cleanup window stays open during a scan; its NodeIds belong to
@@ -392,6 +399,7 @@ impl App {
                             );
                             self.state.view_root = Some(root);
                             self.state.zoom_stack = vec![root];
+                            self.state.nav_back.clear();
                             self.state.tree = Some(tree);
                             self.state.scan_progress.scanning = false;
                             self.state.treemap_dirty = true;
@@ -684,12 +692,15 @@ impl AppState {
             color_mode,
             view_root: None,
             zoom_stack: vec![],
+            nav_back: vec![],
+            ledger_arrows: vec![],
             selected_node: None,
             hovered_node: None,
             hovered_dir: None,
             ledger_hover: None,
             selected_extension: None,
             scroll_dir_tree_to: None,
+            scroll_dir_tree_top: None,
             context_menu_target: None,
             cleanup_window_open: false,
             cleanup_candidates: Vec::new(),
@@ -938,6 +949,21 @@ impl eframe::App for App {
                 }
             }
         }
+        // Up the hierarchy: Backspace or Cmd+Up; Cmd+[ goes back.
+        if !ctx.wants_keyboard_input() && self.state.pending_action.is_none() {
+            let (up, back) = ctx.input(|i| {
+                (
+                    (i.key_pressed(egui::Key::Backspace) && i.modifiers.is_none())
+                        || (i.key_pressed(egui::Key::ArrowUp) && i.modifiers.command),
+                    i.key_pressed(egui::Key::OpenBracket) && i.modifiers.command,
+                )
+            });
+            if up {
+                crate::nav::go_up(&mut self.state);
+            } else if back {
+                crate::nav::go_back(&mut self.state);
+            }
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             if self.state.help_window_open {
                 self.state.help_window_open = false;
@@ -948,10 +974,7 @@ impl eframe::App for App {
             } else if self.state.search_active {
                 self.state.search_active = false;
                 self.state.search_query.clear();
-            } else if self.state.zoom_stack.len() > 1 {
-                self.state.zoom_stack.pop();
-                self.state.view_root = self.state.zoom_stack.last().copied();
-                self.state.treemap_dirty = true;
+            } else if crate::nav::go_up(&mut self.state) {
             } else {
                 self.state.selected_node = None;
                 self.state.selected_extension = None;
@@ -965,8 +988,8 @@ impl eframe::App for App {
         // Arrow-key navigation of the directory list (WinDirStat parity).
         // Gated so it never steals keys from the search field or other input.
         if !ctx.wants_keyboard_input() && self.state.tree.is_some() && !self.state.search_active {
-            let up = ctx.input(|i| i.key_pressed(egui::Key::ArrowUp));
-            let down = ctx.input(|i| i.key_pressed(egui::Key::ArrowDown));
+            let up = ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) && !i.modifiers.command);
+            let down = ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) && !i.modifiers.command);
             let left = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft));
             let right = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight));
             if up || down {
@@ -992,6 +1015,19 @@ impl eframe::App for App {
             .show(ctx, |ui| {
                 ui::toolbar::show(ui, &mut self.state);
             });
+
+        // Path bar: where you are, how to go up, what the colours mean
+        if self.state.tree.is_some() {
+            egui::TopBottomPanel::top("path_bar")
+                .frame(
+                    egui::Frame::new()
+                        .fill(ui::theme::bg_panel())
+                        .inner_margin(egui::Margin::symmetric(14, 4)),
+                )
+                .show(ctx, |ui| {
+                    ui::pathbar::show(ui, &mut self.state);
+                });
+        }
 
         // Bottom status bar
         egui::TopBottomPanel::bottom("status_bar")
