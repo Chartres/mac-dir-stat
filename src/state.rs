@@ -10,7 +10,8 @@ pub struct PersistedState {
     pub color_mode: Option<ColorMode>,
 }
 
-fn state_dir() -> Option<PathBuf> {
+/// `~/Library/Application Support/mac-dir-stat` — shared by every module that persists files.
+pub fn state_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|h| {
         PathBuf::from(h).join("Library/Application Support/mac-dir-stat")
     })

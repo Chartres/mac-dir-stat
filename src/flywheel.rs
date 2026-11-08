@@ -17,7 +17,7 @@
 //! Opt-out: `MACDIRSTAT_NO_TELEMETRY=1` in the environment, or the user toggle
 //! persisted in `telemetry.txt`. With no config baked, the SDK ships dark.
 
-use std::path::PathBuf;
+use crate::state::state_dir;
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -44,11 +44,6 @@ pub struct Flywheel {
     key: String,
     visitor_id: String,
     session_id: String,
-}
-
-fn state_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join("Library/Application Support/mac-dir-stat"))
 }
 
 /// Resolve `(url, publishable_key)` from runtime env first, then a compile-time bake.

@@ -177,9 +177,7 @@ pub fn from_json(text: &str) -> Vec<ScanSummary> {
 }
 
 fn file() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(|h| {
-        PathBuf::from(h).join("Library/Application Support/mac-dir-stat/history.json")
-    })
+    crate::state::state_dir().map(|d| d.join("history.json"))
 }
 
 pub fn load() -> Vec<ScanSummary> {
