@@ -214,9 +214,13 @@ pub fn find_only_yours(
         out.push(OnlyYours { node_id: id, path, label, size });
     }
     for o in &mut out {
+        // Only subtract candidates that are actual build output (node_modules,
+        // target/, __pycache__, .next, etc.). .gradle, .m2, and .cache are
+        // cleanup candidates but may hold credentials — they belong to the
+        // "only yours" column, not the rebuildable column.
         let inside: u64 = rebuildable
             .iter()
-            .filter(|c| c.path.starts_with(&o.path))
+            .filter(|c| c.path.starts_with(&o.path) && is_build_output(&c.path))
             .map(|c| c.size)
             .sum();
         o.size = o.size.saturating_sub(inside);
