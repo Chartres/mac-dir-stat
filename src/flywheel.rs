@@ -22,7 +22,8 @@ use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// The shared event taxonomy (mirrors `TAXONOMY` in flywheel-client.ts).
+/// The shared event taxonomy (mirrors `TAXONOMY` in flywheel-client.ts) plus
+/// app-specific events fired by this binary.
 pub const TAXONOMY: &[&str] = &[
     "page_view",
     "signup_started",
@@ -31,6 +32,8 @@ pub const TAXONOMY: &[&str] = &[
     "key_action",
     "feedback_given",
     "error",
+    "app_open",
+    "scan_completed",
 ];
 
 #[derive(Clone)]
@@ -394,6 +397,8 @@ mod tests {
         assert!(TAXONOMY.contains(&"conversion"));
         assert!(TAXONOMY.contains(&"feedback_given"));
         assert!(TAXONOMY.contains(&"error"));
-        assert_eq!(TAXONOMY.len(), 7);
+        assert!(TAXONOMY.contains(&"app_open"));
+        assert!(TAXONOMY.contains(&"scan_completed"));
+        assert_eq!(TAXONOMY.len(), 9);
     }
 }
