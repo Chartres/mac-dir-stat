@@ -616,6 +616,11 @@ impl App {
                 if let Some((id, size)) = moved {
                     self.state.freed_this_session =
                         self.state.freed_this_session.saturating_add(size);
+                    self.state.flywheel.conversion(serde_json::json!({
+                        "freed_bytes": size,
+                        "items": 1,
+                        "kind": "move_to_disk",
+                    }));
                     self.state.remove_trashed(&[id]);
                 }
             }
