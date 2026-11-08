@@ -963,6 +963,9 @@ mod tests {
             format!("/Users/{user}/library"),
             format!("/Users/{}", user.to_uppercase()),
             format!("/users/{user}"),
+            // Founder case 6: /USERS/Shared and a /Volumes/<name> in wrong case.
+            "/USERS/Shared".to_string(),
+            "/VOLUMES/SomeDisk".to_string(),
         ] {
             let n = normalize(Path::new(&p)).unwrap();
             assert!(
