@@ -470,12 +470,7 @@ fn row_ui(
     }
     let name = tree.name(row.id);
     let max_chars = (((text_right - name_x) - 6.0) / 6.5).max(0.0) as usize;
-    let shown = if name.chars().count() > max_chars && max_chars > 3 {
-        let s: String = name.chars().take(max_chars - 1).collect();
-        format!("{s}…")
-    } else {
-        name.to_string()
-    };
+    let shown = truncate_label(&name, max_chars);
     painter.text(
         Pos2::new(name_x, rect.center().y),
         egui::Align2::LEFT_CENTER,
@@ -522,6 +517,17 @@ fn size_and_bar(painter: &egui::Painter, rect: Rect, size: u64, scale: u64, colo
     x
 }
 
+/// Truncate `name` to `max_chars` characters, appending `…` if truncated.
+/// Uses char boundaries so multi-byte Unicode names never panic or split.
+fn truncate_label(name: &str, max_chars: usize) -> String {
+    if name.chars().count() > max_chars && max_chars > 3 {
+        let s: String = name.chars().take(max_chars - 1).collect();
+        format!("{s}…")
+    } else {
+        name.to_string()
+    }
+}
+
 /// Compact item-count formatting: 1234 → "1.2k", 12 → "12".
 fn format_count(n: u64) -> String {
     if n >= 1_000_000 {
@@ -530,5 +536,23 @@ fn format_count(n: u64) -> String {
         format!("{:.1}k", n as f64 / 1_000.0)
     } else {
         n.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_label_non_ascii_cuts_on_char_boundary() {
+        // Founder case 2: a non-ASCII name must truncate on a char boundary
+        // without panicking and must produce valid UTF-8.
+        let result = truncate_label("Příliš.pdf", 5);
+        assert!(result.ends_with('…'), "expected ellipsis: {result}");
+        assert!(std::str::from_utf8(result.as_bytes()).is_ok());
+        // No truncation when name fits.
+        assert_eq!(truncate_label("short", 10), "short");
+        // No truncation when max_chars <= 3 (guard against tiny boxes).
+        assert_eq!(truncate_label("Příliš.pdf", 3), "Příliš.pdf");
     }
 }
