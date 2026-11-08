@@ -302,7 +302,6 @@ impl App {
 
     fn poll_partial_refresh(&mut self) {
         let mut completed: Option<(NodeId, crate::scanner::tree::FileTree)> = None;
-        let mut error_occurred = false;
         if let Some((target_id, rx)) = self.state.partial_refresh_receiver.as_ref() {
             let target_id = *target_id;
             while let Ok(msg) = rx.try_recv() {
@@ -312,16 +311,8 @@ impl App {
                         completed = Some((target_id, new_subtree));
                         break;
                     }
-                    ScanProgress::Error(e) => {
-                        eprintln!("Partial refresh error: {}", e);
-                        error_occurred = true;
-                        break;
-                    }
                 }
             }
-        }
-        if error_occurred {
-            self.state.partial_refresh_receiver = None;
         }
         if let Some((target_id, new_subtree)) = completed {
             if let Some(tree) = &mut self.state.tree {
@@ -357,6 +348,7 @@ impl App {
 
     fn poll_scan(&mut self) {
         let mut disconnected = false;
+        let mut done = false;
         if let Some(rx) = &self.state.scan_receiver {
             loop {
                 match rx.try_recv() {
@@ -425,13 +417,8 @@ impl App {
                                 crate::history::record(&mut self.state.history, s);
                                 crate::history::save(&self.state.history);
                             }
-                        }
-                        ScanProgress::Error(msg) => {
-                            eprintln!("Scan error: {}", msg);
-                            self.state
-                                .flywheel
-                                .log_error(&msg, serde_json::json!({ "where": "scan" }));
-                            self.state.scan_progress.scanning = false;
+                            done = true;
+                            break;
                         }
                     },
                     Err(crossbeam_channel::TryRecvError::Empty) => break,
@@ -446,7 +433,7 @@ impl App {
                 }
             }
         }
-        if disconnected {
+        if disconnected || done {
             self.state.scan_receiver = None;
         }
     }
@@ -629,6 +616,11 @@ impl App {
                 if let Some((id, size)) = moved {
                     self.state.freed_this_session =
                         self.state.freed_this_session.saturating_add(size);
+                    self.state.flywheel.conversion(serde_json::json!({
+                        "freed_bytes": size,
+                        "items": 1,
+                        "kind": "move_to_disk",
+                    }));
                     self.state.remove_trashed(&[id]);
                 }
             }

@@ -134,7 +134,7 @@ fn feedback_section(ui: &mut egui::Ui, state: &mut AppState) {
             None,
             if text.is_empty() { None } else { Some(text) },
         );
-        state.feedback_sent = true;
+        state.feedback_sent = state.flywheel.is_enabled();
         state.feedback_text.clear();
     }
     if !state.flywheel.is_enabled() {

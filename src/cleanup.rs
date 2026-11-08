@@ -214,9 +214,13 @@ pub fn find_only_yours(
         out.push(OnlyYours { node_id: id, path, label, size });
     }
     for o in &mut out {
+        // Only subtract candidates that are actual build output (node_modules,
+        // target/, __pycache__, .next, etc.). .gradle, .m2, and .cache are
+        // cleanup candidates but may hold credentials — they belong to the
+        // "only yours" column, not the rebuildable column.
         let inside: u64 = rebuildable
             .iter()
-            .filter(|c| c.path.starts_with(&o.path))
+            .filter(|c| c.path.starts_with(&o.path) && is_build_output(&c.path))
             .map(|c| c.size)
             .sum();
         o.size = o.size.saturating_sub(inside);
@@ -423,6 +427,10 @@ fn walk(tree: &FileTree, id: NodeId, out: &mut Vec<CleanupCandidate>) {
         return;
     }
     let path = tree.full_path(id);
+    // Don't enter Trash dirs — candidates inside would be already-trashed items.
+    if matches!(path.file_name().and_then(|n| n.to_str()), Some(".Trash") | Some(".Trashes")) {
+        return;
+    }
     if let Some((category, description)) = classify(&path) {
         let size = node.size;
         // Threshold: ignore tiny matches — they're noise.
