@@ -31,31 +31,14 @@ fn sorted_children(tree: &FileTree, parent: NodeId, sort: crate::app::DirSortMod
 }
 
 /// Directories in top-to-bottom display order (pre-order, honoring the active
-/// sort and collapsed nodes). Drives keyboard navigation; mirrors what
-/// `show_node` renders.
+/// sort and collapsed nodes). Drives keyboard navigation; the folder rows of
+/// `flatten`, so it always matches what the list renders.
 pub fn visible_dirs(tree: &FileTree, root: NodeId, sort: crate::app::DirSortMode) -> Vec<NodeId> {
-    fn rec(tree: &FileTree, id: NodeId, sort: crate::app::DirSortMode, out: &mut Vec<NodeId>) {
-        if !tree.is_alive(id) || !tree.node(id).is_dir() {
-            return;
-        }
-        let is_root = out.is_empty();
-        out.push(id);
-        let expanded = is_root
-            || matches!(
-                &tree.node(id).kind,
-                NodeKind::Directory { expanded: true, .. }
-            );
-        if expanded {
-            for c in sorted_children(tree, id, sort) {
-                if tree.node(c).is_dir() {
-                    rec(tree, c, sort, out);
-                }
-            }
-        }
-    }
-    let mut out = Vec::new();
-    rec(tree, root, sort, &mut out);
-    out
+    flatten(tree, root, sort)
+        .into_iter()
+        .filter(|r| r.kind == RowKind::Dir)
+        .map(|r| r.id)
+        .collect()
 }
 
 /// The folder the list starts from: the one the map shows.
