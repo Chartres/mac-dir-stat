@@ -423,6 +423,10 @@ fn walk(tree: &FileTree, id: NodeId, out: &mut Vec<CleanupCandidate>) {
         return;
     }
     let path = tree.full_path(id);
+    // Don't enter Trash dirs — candidates inside would be already-trashed items.
+    if matches!(path.file_name().and_then(|n| n.to_str()), Some(".Trash") | Some(".Trashes")) {
+        return;
+    }
     if let Some((category, description)) = classify(&path) {
         let size = node.size;
         // Threshold: ignore tiny matches — they're noise.
