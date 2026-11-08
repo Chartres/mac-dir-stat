@@ -88,6 +88,15 @@ pub fn protected_reason(path: &Path, home: Option<&Path>) -> Option<String> {
         if path == home.join("Library") {
             return Some("refusing to move ~/Library itself; pick something inside it".into());
         }
+        if path == home.join(".Trash") {
+            return Some("refusing to touch ~/.Trash; use Empty Trash in Finder".into());
+        }
+    }
+    // /Volumes/<name>/.Trashes — trashing it nests Trash inside itself.
+    if path.file_name().and_then(|n| n.to_str()) == Some(".Trashes")
+        && path.parent().map_or(false, |p| p.starts_with("/Volumes"))
+    {
+        return Some("refusing to touch .Trashes on a volume; use Empty Trash in Finder".into());
     }
     None
 }
