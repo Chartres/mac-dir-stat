@@ -239,9 +239,7 @@ pub struct PlanStore {
 impl PlanStore {
     pub fn create(&mut self, ops: Vec<OpState>, note: &str, origin: &str) -> &Plan {
         self.next_id += 1;
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs());
+        let created = crate::server::now();
         self.plans.push(Plan {
             id: self.next_id,
             note: note.into(),
