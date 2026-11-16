@@ -41,7 +41,8 @@ pub fn route(
         .ok_or_else(|| err(404, "not found"))?;
     let ok = |v: Value| Ok((200, v));
     match (method, rest) {
-        ("GET", "/openapi.json") => ok(serde_json::from_str(include_str!("openapi.json")).unwrap()),
+        ("GET", "/openapi.json") => ok(serde_json::from_str(include_str!("openapi.json"))
+            .map_err(|e| err(500, format!("openapi.json malformed: {e}")))?),
         ("GET", "/volumes") => ok(volumes()),
         ("GET", "/scan") => ok(scan_status(sh)),
         ("POST", "/scan") => {
