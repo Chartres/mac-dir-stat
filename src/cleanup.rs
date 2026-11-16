@@ -154,14 +154,14 @@ pub fn photos_library_within(dir: &Path) -> Option<PathBuf> {
             if !ft.is_dir() {
                 continue;
             }
-            if budget == 0 {
-                return None;
-            }
-            budget -= 1;
             let p = e.path();
             if e.file_name().to_string_lossy().to_lowercase().ends_with(".photoslibrary") {
                 return Some(p);
             }
+            if budget == 0 {
+                return None;
+            }
+            budget -= 1;
             if depth < 3 {
                 queue.push_back((p, depth + 1));
             }
