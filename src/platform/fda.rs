@@ -9,11 +9,6 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-fn state_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join("Library/Application Support/mac-dir-stat"))
-}
-
 /// Open System Settings → Privacy & Security → Full Disk Access.
 pub fn open_settings() {
     let _ = Command::new("open")
@@ -53,14 +48,14 @@ pub fn has_full_disk_access() -> bool {
 
 /// Whether we've already shown the one-time FDA prompt.
 pub fn already_prompted() -> bool {
-    state_dir()
+    crate::state::state_dir()
         .map(|d| d.join("fda_prompted").exists())
         .unwrap_or(false)
 }
 
 /// Record that the one-time FDA prompt has been shown.
 pub fn mark_prompted() {
-    let Some(dir) = state_dir() else { return };
+    let Some(dir) = crate::state::state_dir() else { return };
     if std::fs::create_dir_all(&dir).is_ok() {
         let _ = std::fs::write(dir.join("fda_prompted"), "1");
     }
