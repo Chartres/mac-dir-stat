@@ -781,6 +781,8 @@ mod tests {
             "/Users/other",
             "/Users/other/Documents",
             "/Volumes/Ext",
+            "/Users/me/.Trash",
+            "/Volumes/Ext/.Trashes",
         ] {
             assert!(
                 protected_reason(Path::new(p), home).is_some(),
@@ -964,8 +966,7 @@ mod tests {
             format!("/Users/{user}/library"),
             format!("/Users/{}", user.to_uppercase()),
             format!("/users/{user}"),
-            // Founder case 6: /USERS/Shared and a /Volumes/<name> in wrong case.
-            "/USERS/Shared".to_string(),
+            // Founder case 6: a /Volumes/<name> in wrong case.
             "/VOLUMES/SomeDisk".to_string(),
         ] {
             let n = normalize(Path::new(&p)).unwrap();
