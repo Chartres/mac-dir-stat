@@ -143,9 +143,12 @@ fn is_build_output(path: &Path) -> bool {
 /// libraries are packages, usually one or two folders deep). Bounded so a
 /// huge folder can't stall validation; symlinks are not followed.
 pub fn photos_library_within(dir: &Path) -> Option<PathBuf> {
+    photos_library_within_budget(dir, 20_000)
+}
+
+fn photos_library_within_budget(dir: &Path, mut budget: usize) -> Option<PathBuf> {
     // Breadth first, counting folders only: a folder full of files can't
     // use up the budget before a sibling library is seen.
-    let mut budget = 20_000usize;
     let mut queue = std::collections::VecDeque::from([(dir.to_path_buf(), 0u8)]);
     while let Some((d, depth)) = queue.pop_front() {
         let Ok(entries) = std::fs::read_dir(&d) else { continue };
@@ -154,14 +157,14 @@ pub fn photos_library_within(dir: &Path) -> Option<PathBuf> {
             if !ft.is_dir() {
                 continue;
             }
-            if budget == 0 {
-                return None;
-            }
-            budget -= 1;
             let p = e.path();
             if e.file_name().to_string_lossy().to_lowercase().ends_with(".photoslibrary") {
                 return Some(p);
             }
+            if budget == 0 {
+                return None;
+            }
+            budget -= 1;
             if depth < 3 {
                 queue.push_back((p, depth + 1));
             }
@@ -457,4 +460,20 @@ fn newest(tree: &FileTree, id: NodeId) -> SystemTime {
         }
     }
     t
+}
+
+#[cfg(test)]
+mod tests {
+    use super::photos_library_within_budget;
+
+    #[test]
+    fn photos_library_found_when_budget_runs_out_on_it() {
+        // The library is the folder that spends the last of the budget: it
+        // must still be seen, so a plan does not trash it unwarned.
+        let d = std::env::temp_dir().join(format!("mds-photos-budget-{}", std::process::id()));
+        let lib = d.join("Old.photoslibrary");
+        std::fs::create_dir_all(&lib).unwrap();
+        assert_eq!(photos_library_within_budget(&d, 0), Some(lib));
+        std::fs::remove_dir_all(&d).unwrap();
+    }
 }

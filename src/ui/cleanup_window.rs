@@ -408,4 +408,20 @@ mod tests {
         assert!(result2.chars().count() <= 13);
         assert!(result2.contains('…'));
     }
+
+    // FOUNDER-CASE #2: non-ASCII names must not panic and must be cut on a char boundary.
+    #[test]
+    fn short_path_non_ascii_no_panic() {
+        // "Příliš" contains multi-byte UTF-8 chars; truncation must stay on char boundaries.
+        let name = "/Users/p/Documents/Příliš dlouhý název souboru pro zobrazení.pdf";
+        let result = short_path(name, 20);
+        // Confirm it's valid UTF-8 (would panic on bad boundary) and shorter than input.
+        assert!(result.chars().count() <= 21); // max + ellipsis char
+        assert!(result.is_char_boundary(0));
+    }
+
+    #[test]
+    fn short_path_short_input_unchanged() {
+        assert_eq!(short_path("abc.pdf", 20), "abc.pdf");
+    }
 }

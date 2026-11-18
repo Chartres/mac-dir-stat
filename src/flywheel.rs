@@ -17,7 +17,6 @@
 //! Opt-out: `MACDIRSTAT_NO_TELEMETRY=1` in the environment, or the user toggle
 //! persisted in `telemetry.txt`. With no config baked, the SDK ships dark.
 
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -43,10 +42,6 @@ pub struct Flywheel {
     session_id: String,
 }
 
-fn state_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join("Library/Application Support/mac-dir-stat"))
-}
 
 /// Resolve `(url, publishable_key)` from runtime env first, then a compile-time bake.
 /// Returns `None` when neither is present — the ships-dark default.
@@ -72,7 +67,7 @@ pub fn telemetry_opted_out() -> bool {
     ) {
         return true;
     }
-    state_dir()
+    crate::state::state_dir()
         .map(|d| d.join("telemetry.txt"))
         .and_then(|p| std::fs::read_to_string(p).ok())
         .map(|s| s.trim() == "disabled")
@@ -81,7 +76,7 @@ pub fn telemetry_opted_out() -> bool {
 
 /// Persist the user's telemetry choice so it survives restarts.
 pub fn set_telemetry_opt_out(opted_out: bool) {
-    let Some(dir) = state_dir() else { return };
+    let Some(dir) = crate::state::state_dir() else { return };
     if std::fs::create_dir_all(&dir).is_err() {
         return;
     }
@@ -125,7 +120,7 @@ fn uuid_v4() -> String {
 
 /// Stable anonymous per-install id, persisted next to the app's other state.
 fn load_or_create_visitor_id() -> String {
-    let Some(dir) = state_dir() else {
+    let Some(dir) = crate::state::state_dir() else {
         return uuid_v4();
     };
     let path = dir.join("visitor_id");
