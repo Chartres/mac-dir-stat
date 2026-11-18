@@ -15,8 +15,7 @@ fn main() {
     let tree = loop {
         match rx.recv().unwrap() {
             ScanProgress::Done(t) => break t,
-            ScanProgress::Error(e) => panic!("{e}"),
-            _ => {}
+            ScanProgress::Counting { .. } => {}
         }
     };
     let scan = t0.elapsed();
