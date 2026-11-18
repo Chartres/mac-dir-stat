@@ -348,6 +348,7 @@ impl App {
 
     fn poll_scan(&mut self) {
         let mut disconnected = false;
+        let mut done = false;
         if let Some(rx) = &self.state.scan_receiver {
             loop {
                 match rx.try_recv() {
@@ -416,6 +417,8 @@ impl App {
                                 crate::history::record(&mut self.state.history, s);
                                 crate::history::save(&self.state.history);
                             }
+                            done = true;
+                            break;
                         }
                     },
                     Err(crossbeam_channel::TryRecvError::Empty) => break,
@@ -430,7 +433,7 @@ impl App {
                 }
             }
         }
-        if disconnected {
+        if disconnected || done {
             self.state.scan_receiver = None;
         }
     }
@@ -613,6 +616,11 @@ impl App {
                 if let Some((id, size)) = moved {
                     self.state.freed_this_session =
                         self.state.freed_this_session.saturating_add(size);
+                    self.state.flywheel.conversion(serde_json::json!({
+                        "freed_bytes": size,
+                        "items": 1,
+                        "kind": "move_to_disk",
+                    }));
                     self.state.remove_trashed(&[id]);
                 }
             }

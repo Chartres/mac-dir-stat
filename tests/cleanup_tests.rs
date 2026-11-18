@@ -88,3 +88,19 @@ fn find_candidates_excludes_trash_includes_node_modules() {
         ".Trash must not appear as a candidate"
     );
 }
+
+/// Founder case 4: a node_modules already in the Trash is not offered again.
+#[test]
+fn find_candidates_skips_items_inside_trash() {
+    let mut tree = FileTree::new();
+    let root = tree.root();
+    for trash_name in [&b".Trash"[..], &b".Trashes"[..]] {
+        let trash = tree.add_dir(root, trash_name, false, SystemTime::UNIX_EPOCH, 1);
+        let nm = tree.add_dir(trash, b"node_modules", false, SystemTime::UNIX_EPOCH, 1);
+        tree.add_file(nm, b"big.js", 2 * 1024 * 1024, Some("js"), SystemTime::UNIX_EPOCH, 2);
+    }
+    tree.compute_sizes();
+    let candidates = find_candidates(&tree, root);
+    assert!(candidates.is_empty(), "trashed items offered again: {:?}",
+        candidates.iter().map(|c| &c.path).collect::<Vec<_>>());
+}

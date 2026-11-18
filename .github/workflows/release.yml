@@ -66,6 +66,9 @@ jobs:
           echo "signed=true" >> "$GITHUB_OUTPUT"
           rm -f "$RUNNER_TEMP/cert.p12"
 
+      - name: Run tests
+        run: cargo test
+
       - name: Build .app
         env:
           # Sign when an identity was imported above.
