@@ -75,8 +75,7 @@ fn worst_aspect_ratio(row: &[&LayoutItem], row_area: f64, short_side: f64) -> f6
         return f64::MAX;
     }
     let s2 = short_side * short_side;
-    let mut worst = 0.0_f64;
-    for item in row {
+    row.iter().fold(0.0_f64, |worst, item| {
         let r = if item.size > 0.0 {
             let a = (s2 * item.size) / (row_area * row_area);
             let b = (row_area * row_area) / (s2 * item.size);
@@ -84,9 +83,8 @@ fn worst_aspect_ratio(row: &[&LayoutItem], row_area: f64, short_side: f64) -> f6
         } else {
             f64::MAX
         };
-        worst = worst.max(r);
-    }
-    worst
+        worst.max(r)
+    })
 }
 
 fn layout_row(

@@ -14,7 +14,6 @@ pub enum ScanProgress {
         current_path: Option<String>,
     },
     Done(FileTree),
-    Error(String),
 }
 
 pub fn scan(root: PathBuf, tx: Sender<ScanProgress>) {
